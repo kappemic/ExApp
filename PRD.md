@@ -29,7 +29,8 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
   - Admin může vygenerovat unikátní registrační kód s **exspirací 10 minut**.
   - Po úspěšné registraci se uživatelská data automaticky uloží do databáze.
 - **Admin mód:**
-  - Role jsou rozděleny na `Uživatel` a `Admin`.
+  - Role jsou rozděleny na `Uživatel`, `Aktivní člen`a `Admin`.
+  - Aktivní člen má možnost vytvářet výpravy a upravovat je.
   - Admin má přístup k rozšiřujícím ovládacím prvkům napříč celou aplikací.
 
 ### 2.2 Správa výprav & Přihlašování
