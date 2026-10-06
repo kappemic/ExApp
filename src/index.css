@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  /* ——— Deníkové tokeny (jediný zdroj pravdy pro karty) ——— */
+  --color-papir: #fbf8f1;
+  --color-inkoust: #1a2e22;
+  --color-smrk: #2d6a4f;
+  --color-linka: #dce7de;
+  --color-jantar: #a05e0c;
+  --color-mech: #5c6b60;
+
+  /* stíny: plochý „papírový“ offset — karta / razítko */
+  --shadow-denik: 3px 3px 0 rgba(26, 46, 34, 0.12);
+  --shadow-razitko: 2px 2px 0 rgba(26, 46, 34, 0.9);
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-papir);
+    color: var(--color-inkoust);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-smrk);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
