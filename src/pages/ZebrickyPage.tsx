@@ -1,10 +1,14 @@
 import type { JSX } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 export default function ZebrickyPage(): JSX.Element {
+  const { user, isLoading } = useAuth();
+  const odhlasen = !isLoading && user === null;
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Oddílový deník · podzim 2026</p>
+        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
           Žebříčky
         </h1>
@@ -48,9 +52,37 @@ export default function ZebrickyPage(): JSX.Element {
             aria-hidden="true"
             className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70"
           >
-            oddílový deník · žebříčky se chystají
+            exapp · žebříčky se chystají
           </p>
         </div>
+        {odhlasen && (
+          <section
+            aria-labelledby="zebricky-prihlaseni"
+            className="mt-5 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik"
+          >
+            <h2 id="zebricky-prihlaseni" className="text-base font-bold tracking-tight">
+              Chceš být v žebříčku?
+            </h2>
+            <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
+              Přihlas se, nebo se zaregistruj s kódem od vedoucí — pak se ti
+              započítá účast na výpravách.
+            </p>
+            <div className="mt-3 flex flex-col justify-center gap-2 sm:flex-row">
+              <Link
+                to="/login"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
+              >
+                Přihlásit se
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka"
+              >
+                Registrace s kódem
+              </Link>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

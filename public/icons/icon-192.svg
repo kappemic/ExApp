@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="ExApp">
+  <rect width="192" height="192" rx="42" fill="#1A2E22"/>
+  <rect x="16" y="16" width="160" height="160" rx="30" fill="none" stroke="#FBF8F1" stroke-opacity="0.28" stroke-width="4"/>
+  <text x="96" y="130" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif" font-size="108" font-weight="800" fill="#FBF8F1" text-anchor="middle">E</text>
+  <rect x="54" y="140" width="84" height="8" rx="4" fill="#A05E0C"/>
+</svg>

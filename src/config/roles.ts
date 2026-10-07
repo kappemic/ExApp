@@ -65,7 +65,7 @@ const JANTAR = "#A05E0C";
 const MECH = "#5C6B60";
 
 /**
- * Vrátí barvy badge pro danou roli z deníkových tokenů.
+ * Vrátí barvy badge pro danou roli z exapp tokenů.
  * Neznámou (budoucí vlastní) roli neshazuje — vrací neutrální styl.
  */
 export function getRoleStyle(role: Role): RoleStyle {

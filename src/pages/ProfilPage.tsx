@@ -12,17 +12,17 @@ const PANEL_OBSAH: Record<ProfilTab, { nadpis: string; text: string; paticka: st
   prehled: {
     nadpis: "Zatím prázdný přehled",
     text: "Tvoje účast, odznaky a poslední záznamy se tu objeví po přihlášení a prvních výpravách.",
-    paticka: "oddílový deník · přehled se chystá",
+    paticka: "exapp · přehled se chystá",
   },
   statistiky: {
     nadpis: "Zatím bez kilometrů",
     text: "Kilometry, převýšení a počet výprav doplníme ve Fázi 4 po napojení Stravy.",
-    paticka: "oddílový deník · statistiky se chystají",
+    paticka: "exapp · statistiky se chystají",
   },
   heatmapa: {
     nadpis: "Mapa je zatím čistá",
     text: "Prošlé trasy a heatmapa výprav se vykreslí, jakmile spárujeme první aktivity.",
-    paticka: "oddílový deník · mapa se chystá",
+    paticka: "exapp · mapa se chystá",
   },
 };
 
@@ -49,7 +49,7 @@ export default function ProfilPage(): JSX.Element {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Oddílový deník · podzim 2026</p>
+        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
           Profil
         </h1>

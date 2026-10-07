@@ -25,7 +25,7 @@ interface AdminTabyProps {
 }
 
 /**
- * Záložky seznamu členů — deníkový „rejstřík" s počty.
+ * Záložky seznamu členů — exapp „rejstřík" s počty.
  * Scrollovatelné na mobilu, min. 44px touch target, plná klávesnice
  * (šipky / Home / End), viditelný focus řeší globální :focus-visible.
  */

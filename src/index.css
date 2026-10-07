@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* ——— Deníkové tokeny (jediný zdroj pravdy pro karty) ——— */
+  /* ——— ExApp tokeny (jediný zdroj pravdy pro karty) ——— */
   --color-papir: #fbf8f1;
   --color-inkoust: #1a2e22;
   --color-smrk: #2d6a4f;

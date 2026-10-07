@@ -1,7 +1,6 @@
 import type { JSX, ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { useAdminFlag } from "../../hooks/useAdminFlag";
-import AdminDemoPrepinac from "../AdminDemoPrepinac";
+import { useAuth } from "../../hooks/useAuth";
 
 type IkonaProps = {
   className?: string;
@@ -90,6 +89,15 @@ function IkonaClenove(props: IkonaProps): JSX.Element {
   );
 }
 
+function IkonaKody(props: IkonaProps): JSX.Element {
+  return (
+    <ZakladIkony {...props}>
+      <path d="M4 8.5V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a2.5 2.5 0 0 0 0 5V15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5a2.5 2.5 0 0 0 0-5Z" />
+      <path d="M13.5 7v10" strokeDasharray="2 2" />
+    </ZakladIkony>
+  );
+}
+
 type PolozkaNavigace = {
   to: string;
   popisek: string;
@@ -118,8 +126,26 @@ const ADMIN_POLOZKA: PolozkaNavigace = {
   Ikona: IkonaClenove,
 };
 
+const KODY_POLOZKA: PolozkaNavigace = {
+  to: "/admin/kody",
+  popisek: "Kódy",
+  Ikona: IkonaKody,
+};
+
 /** Počet nepřečtených zpráv – pouze statické UI, žádný fetch. */
 const NEPRECTENYCH_ZPRAV = 3;
+
+/**
+ * Jediný zdroj pro viditelnost admin položek v navigaci.
+ * Jen role ADMIN ze session (useAuth).
+ */
+function useVidetAdmin(): boolean {
+  const { isAdmin } = useAuth();
+  return isAdmin;
+}
+
+/** Bez session vidí odhlášený nic — varianta A: Navbar se vůbec nerenderuje (viz default Navbar). */
+/** Filtr podle session odstraněn: odhlášený Navbar nikdy neuvidí, přihlášený vidí vše. */
 
 function tridyDesktopOdkazu(aktivni: boolean): string {
   const zaklad =
@@ -151,10 +177,11 @@ function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
 }
 
 export function TopBar(): JSX.Element {
-  const [jeAdmin] = useAdminFlag();
-  const polozky: PolozkaNavigace[] = jeAdmin
-    ? [...DESKTOP_POLOZKY, ADMIN_POLOZKA]
-    : DESKTOP_POLOZKY;
+  const videtAdmin = useVidetAdmin();
+  const polozky: PolozkaNavigace[] = [
+    ...DESKTOP_POLOZKY,
+    ...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : []),
+  ];
 
   return (
     <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex">
@@ -181,10 +208,11 @@ export function TopBar(): JSX.Element {
 }
 
 export function MobileBar(): JSX.Element {
-  const [jeAdmin] = useAdminFlag();
-  const polozky: PolozkaNavigace[] = jeAdmin
-    ? [...MOBIL_POLOZKY, ADMIN_POLOZKA]
-    : MOBIL_POLOZKY;
+  const videtAdmin = useVidetAdmin();
+  const polozky: PolozkaNavigace[] = [
+    ...MOBIL_POLOZKY,
+    ...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : []),
+  ];
 
   return (
     <nav
@@ -192,9 +220,8 @@ export function MobileBar(): JSX.Element {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-linka bg-papir lg:hidden"
     >
       <ul
-        className={`mx-auto grid w-full max-w-6xl gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-1 ${
-          jeAdmin ? "grid-cols-5" : "grid-cols-4"
-        }`}
+        style={{ gridTemplateColumns: `repeat(${polozky.length}, minmax(0, 1fr))` }}
+        className="mx-auto grid w-full max-w-6xl gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-1"
       >
         {polozky.map(({ to, popisek, end, Ikona }) => (
           <li key={to} className="min-w-0">
@@ -218,24 +245,55 @@ export function MobileBar(): JSX.Element {
   );
 }
 
+/** Stav přihlášení v hlavičce — obdoba GET /me. Renderuje se jen pro přihlášené (Navbar pro odhlášené vrací null). */
+function AuthCluster(): JSX.Element | null {
+  const { user, isLoading, odhlasit } = useAuth();
+
+  if (isLoading) {
+    return (
+      <span aria-hidden="true" className="hidden h-8 w-20 animate-pulse rounded-md bg-linka sm:block" />
+    );
+  }
+
+  if (user === null) {
+    // Nedosažitelné: Navbar se pro odhlášené vůbec nerenderuje (varianta A).
+    return null;
+  }
+
+  // Jediná interaktivní cesta na /profil vede přes položku „Profil" v menu
+  // (TopBar / MobileBar s IkonaProfil). Hlavička ukazuje jen Odhlásit — žádné jméno/čip.
+  return (
+    <button
+      type="button"
+      onClick={odhlasit}
+      title="Odhlásit se"
+      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2.5 py-2 text-xs font-bold text-mech transition-colors hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
+    >
+      Odhlásit
+    </button>
+  );
+}
+
 export function AppHeader(): JSX.Element {
+  const { user } = useAuth();
+  const prihlasen = user !== null;
   return (
     <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
           to="/"
           className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1"
-          aria-label="Oddílový deník – domů"
+          aria-label="ExApp – domů"
         >
           <span
             aria-hidden="true"
             className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-inkoust bg-smrk text-lg font-extrabold text-papir shadow-denik"
           >
-            D
+            E
           </span>
           <span className="flex flex-col leading-tight">
             <span className="text-sm font-extrabold tracking-tight text-inkoust">
-              Oddílový deník
+              ExApp
             </span>
             <span className="text-[11px] font-medium text-mech">
               Klubové výpravy
@@ -246,34 +304,41 @@ export function AppHeader(): JSX.Element {
         <TopBar />
 
         <div className="flex items-center gap-1">
-          <AdminDemoPrepinac id="admin-demo-hlavicka" />
-          <span aria-hidden="true" className="mx-1 h-6 w-px bg-linka" />
-          <NavLink
-            to="/chat"
-            aria-label={`Chat, ${NEPRECTENYCH_ZPRAV} nepřečtené zprávy`}
-            className={({ isActive }: { isActive: boolean }) =>
-              `relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2.5 transition-colors lg:hidden ${
-                isActive
-                  ? "font-bold text-smrk"
-                  : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
-              }`
-            }
-          >
-            <IkonaChat />
-            <span
-              aria-hidden="true"
-              className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-jantar px-1 text-[10px] font-bold leading-none text-papir"
-            >
-              {NEPRECTENYCH_ZPRAV}
-            </span>
-          </NavLink>
+          <AuthCluster />
+          {prihlasen && (
+            <NavLink
+                to="/chat"
+                aria-label={`Chat, ${NEPRECTENYCH_ZPRAV} nepřečtené zprávy`}
+                className={({ isActive }: { isActive: boolean }) =>
+                  `relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2.5 transition-colors lg:hidden ${
+                    isActive
+                      ? "font-bold text-smrk"
+                      : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
+                  }`
+                }
+              >
+                <IkonaChat />
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-jantar px-1 text-[10px] font-bold leading-none text-papir"
+                >
+                  {NEPRECTENYCH_ZPRAV}
+                </span>
+              </NavLink>
+          )}
         </div>
       </div>
     </header>
   );
 }
 
-export default function Navbar(): JSX.Element {
+export default function Navbar(): JSX.Element | null {
+  const { user, isLoading } = useAuth();
+  // Varianta A: odhlášený nevidí vůbec nic — ani logo, ani TopBar/MobileBar.
+  // Během načítání session (isLoading) taky nic nerenderujeme, ať neproblikne navigace.
+  if (isLoading || user === null) {
+    return null;
+  }
   return (
     <>
       <AppHeader />

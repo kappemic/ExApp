@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 import { Link } from "react-router-dom";
-import AdminDemoPrepinac from "../components/AdminDemoPrepinac";
-import { useAdminFlag } from "../hooks/useAdminFlag";
+import { useAuth } from "../hooks/useAuth";
 import { mockExpeditions } from "../lib/mock-expeditions";
 import { formatCelyDatum } from "../lib/expedition-utils";
 
@@ -14,17 +13,18 @@ function nejblizsiVyprava() {
 
 export default function DomuPage(): JSX.Element {
   const nejblizsi = nejblizsiVyprava();
-  const [jeAdmin] = useAdminFlag();
+  const { user, isLoading, isAdmin } = useAuth();
+  const odhlasen = !isLoading && user === null;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Oddílový deník · podzim 2026</p>
+        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
           Domů
         </h1>
         <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Nástěnka oddílového deníku. Nejbližší výprava a rychlé odkazy na chat
+          Nástěnka ExApp. Nejbližší výprava a rychlé odkazy na chat
           a žebříčky.
         </p>
       </header>
@@ -105,32 +105,58 @@ export default function DomuPage(): JSX.Element {
         </nav>
       </div>
 
-      <section
-        aria-labelledby="admin-demo-nadpis"
-        className="mt-5 flex flex-col gap-3 rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-5 py-4 shadow-denik sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <h2 id="admin-demo-nadpis" className="text-sm font-bold">
-            Demo admin režim
+      {odhlasen && (
+        <section
+          aria-labelledby="prihlaseni-vyzva"
+          className="mt-5 rounded-lg border-2 border-inkoust bg-white/60 p-5 shadow-denik"
+        >
+          <h2 id="prihlaseni-vyzva" className="text-base font-bold tracking-tight">
+            Přidej se k výpravám
           </h2>
-          <p className="mt-0.5 text-sm text-inkoust/70">
-            {jeAdmin
-              ? "Zapnuto — můžeš otevřít správu členů."
-              : "Vypnuto — zapni pro náhled stránky Členové."}
+          <p className="mt-1 text-sm leading-relaxed text-inkoust/70">
+            Bez přihlášení vidíš jen tuhle nástěnku a žebříčky. Přihlas se,
+            nebo se zaregistruj s kódem od vedoucí.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <AdminDemoPrepinac id="admin-demo-domu" />
-          {jeAdmin && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Link
+              to="/login"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
+            >
+              Přihlásit se
+            </Link>
+            <Link
+              to="/register"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka"
+            >
+              Registrace s kódem
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {isAdmin && (
+        <section
+          aria-labelledby="spravcovsky-nadpis"
+          className="mt-5 flex flex-col gap-3 rounded-lg border-2 border-inkoust bg-white/60 px-5 py-4 shadow-denik sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <h2 id="spravcovsky-nadpis" className="text-sm font-bold">
+              Správa oddílu
+            </h2>
+            <p className="mt-0.5 text-sm text-inkoust/70">
+              Jsi vedoucí — můžeš otevřít správu členů.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               to="/admin/clenove"
-              className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
             >
               Otevřít Členy <span aria-hidden="true">→</span>
             </Link>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       <div
         role="status"

@@ -80,3 +80,22 @@ Aditivně, nemazat existující ID:
    `aktivni-clen` (stejně jako `clen-rady` / `vedeni`).
 5. Volitelně: mock data, tab / filtr, badge text. Validaci nech na hranici.
 6. Výhledově: správa rolí v admin UI bez zásahu do kódu.
+
+## Mapování na auth (binární `USER` / `ADMIN`)
+
+Auth je binární (dle `AGENTS.md:15`): `jeAdmin(role)` → `ADMIN`, jinak `USER`.
+Hodnostní model (`role[]`) se tím nemění — zůstává zdrojem pravdy pro UI.
+
+| Hodnost (`Role`) | Auth role | Poznámka |
+|------------------|-----------|----------|
+| `admin` | `ADMIN` | Přístup k rozšiřujícím ovládacím prvkům napříč aplikací. |
+| `clen` | `USER` | Čtení (výpravy, kalendář, statistiky); bez správy výprav. |
+| `aktivni-clen` | `USER` | Čtení + dle `PRD.md:32-33` může vytvářet a upravovat výpravy. |
+| `clen-rady` | `USER` | Čtení + podíl na rozhodování oddílu; auth se nemění. |
+| `vedeni` | `USER` | Nejvyšší hodnost v UI; v auth stále `USER` (není `ADMIN`). |
+
+Pravidla:
+
+- Kombinace s `admin` (např. `["aktivni-clen", "vedeni", "admin"]`) → `ADMIN`.
+- Vše ostatní (jakákoliv validní kombinace bez `admin`) → `USER`.
+- Demo flag `?admin=1` zůstává do `Fáze1-auth` (pouze pro lokální demo, nenahrazuje auth).

@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { useSearchParams } from "react-router-dom";
 import ExpeditionList from "../components/expeditions/ExpeditionList";
-import { mockExpeditions } from "../lib/mock-expeditions";
+import { getExpeditionsSync } from "../lib/expeditions-api";
 
 type Zobrazeni = "seznam" | "kalendar";
 
@@ -80,6 +80,9 @@ function KalendarPlaceholder(): JSX.Element {
 export default function VypravyPage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
+  // Tenká read vrstva (Krok 5): build-time snapshot, jinak mock fallback.
+  // Vzhled beze změny – ExpeditionList / ExpeditionEmpty / skeleton flow untouched.
+  const { data: expedice } = getExpeditionsSync();
 
   function zmenZobrazeni(nove: Zobrazeni): void {
     setSearchParams((prev) => {
@@ -93,13 +96,13 @@ export default function VypravyPage(): JSX.Element {
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
         <p className="text-sm font-medium text-mech">
-          Oddílový deník · podzim 2026
+          ExApp · podzim 2026
         </p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
           Výpravy
         </h1>
         <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Přehled {mockExpeditions.length} plánovaných i proběhlých akcí.
+          Přehled {expedice.length} plánovaných i proběhlých akcí.
           Detail a přihlašování přibude v dalším kroku.
         </p>
 
@@ -131,7 +134,7 @@ export default function VypravyPage(): JSX.Element {
 
       <div className="pt-6">
         {zobrazeni === "seznam" ? (
-          <ExpeditionList expedice={mockExpeditions} />
+          <ExpeditionList expedice={expedice} />
         ) : (
           <KalendarPlaceholder />
         )}

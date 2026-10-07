@@ -29,14 +29,14 @@ export default function ExpeditionEmpty(): JSX.Element {
         Žádné nadcházející výpravy
       </h2>
       <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
-        Deník je zatím prázdný — vedoucí sem brzy připíše první záznam.
+        Seznam je zatím prázdný — vedoucí sem brzy připíše první záznam.
         Zkuste to prosím později.
       </p>
       <p
         aria-hidden="true"
         className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70"
       >
-        oddílový deník · archiv prázdný
+        exapp · archiv prázdný
       </p>
     </div>
   );

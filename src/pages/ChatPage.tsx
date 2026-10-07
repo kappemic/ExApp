@@ -4,7 +4,7 @@ export default function ChatPage(): JSX.Element {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Oddílový deník · podzim 2026</p>
+        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
             Chat
@@ -53,7 +53,7 @@ export default function ChatPage(): JSX.Element {
             aria-hidden="true"
             className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70"
           >
-            oddílový deník · ticho před poradou
+            exapp · ticho před poradou
           </p>
         </div>
       </div>

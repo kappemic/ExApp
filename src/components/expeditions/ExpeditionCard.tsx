@@ -63,7 +63,7 @@ function PlaceholderFoto({ probehla }: { probehla: boolean }): JSX.Element {
         probehla ? "bg-linka/60" : "bg-linka/70"
       }`}
     >
-      {/* linkovaný deníkový podklad */}
+      {/* linkovaný exapp podklad */}
       <div
         className="absolute inset-0"
         style={{
@@ -98,7 +98,7 @@ function PlaceholderFoto({ probehla }: { probehla: boolean }): JSX.Element {
         <circle cx="322" cy="38" r="14" fill="none" stroke="currentColor" className="text-jantar" strokeOpacity="0.55" strokeWidth="2.5" />
       </svg>
       <span className="absolute bottom-2 right-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70">
-        {probehla ? "archiv · deník" : "oddílový deník"}
+        {probehla ? "archiv · exapp" : "exapp"}
       </span>
     </div>
   );

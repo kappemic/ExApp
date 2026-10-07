@@ -1,7 +1,8 @@
 import { useMemo, useState, type JSX } from "react";
-import { MOCK_CLENOVE } from "../data/mockClenove";
+import { MOCK_CLENOVE, type MockClen } from "../data/mockClenove";
 import { jeAktivniClen, jeClen, jeVeVedeni, jeVRade } from "../config/roles";
 import AdminTaby, { type ClenoveTabId, type PoctyTabu } from "../components/Admin/AdminTaby";
+import ClenDetailModal from "../components/Admin/ClenDetailModal";
 import ClenoveTable from "../components/Admin/ClenoveTable";
 
 const POPISKY_PANELU: Record<ClenoveTabId, string> = {
@@ -24,33 +25,50 @@ const POPISKY_PANELU: Record<ClenoveTabId, string> = {
  */
 export default function AdminClenovePage(): JSX.Element {
   const [aktivniTab, setAktivniTab] = useState<ClenoveTabId>("vsichni");
+  const [vybranyId, setVybranyId] = useState<string | null>(null);
+  /** Krok 4b: lokální stav nad mockem — onSave z modalu přepíše člena. */
+  const [clenove, setClenove] = useState<MockClen[]>(() => [...MOCK_CLENOVE]);
+
+  function naUlozitClena(aktualizovany: MockClen): void {
+    setClenove((predchozi: MockClen[]) =>
+      predchozi.map((clen: MockClen) =>
+        clen.id === aktualizovany.id ? aktualizovany : clen,
+      ),
+    );
+  }
 
   const pocty: PoctyTabu = useMemo(
     () => ({
-      vsichni: MOCK_CLENOVE.length,
-      aktivni: MOCK_CLENOVE.filter((c) => jeAktivniClen(c.role)).length,
-      rada: MOCK_CLENOVE.filter((c) => jeVRade(c.role)).length,
-      vedeni: MOCK_CLENOVE.filter((c) => jeVeVedeni(c.role)).length,
-      clenove: MOCK_CLENOVE.filter((c) => jeClen(c.role)).length,
+      vsichni: clenove.length,
+      aktivni: clenove.filter((c) => jeAktivniClen(c.role)).length,
+      rada: clenove.filter((c) => jeVRade(c.role)).length,
+      vedeni: clenove.filter((c) => jeVeVedeni(c.role)).length,
+      clenove: clenove.filter((c) => jeClen(c.role)).length,
     }),
-    [],
+    [clenove],
   );
 
   const filtrovani = useMemo(() => {
     switch (aktivniTab) {
       case "aktivni":
-        return MOCK_CLENOVE.filter((c) => jeAktivniClen(c.role));
+        return clenove.filter((c) => jeAktivniClen(c.role));
       case "rada":
-        return MOCK_CLENOVE.filter((c) => jeVRade(c.role));
+        return clenove.filter((c) => jeVRade(c.role));
       case "vedeni":
-        return MOCK_CLENOVE.filter((c) => jeVeVedeni(c.role));
+        return clenove.filter((c) => jeVeVedeni(c.role));
       case "clenove":
-        return MOCK_CLENOVE.filter((c) => jeClen(c.role));
+        return clenove.filter((c) => jeClen(c.role));
       case "vsichni":
       default:
-        return MOCK_CLENOVE;
+        return clenove;
     }
-  }, [aktivniTab]);
+  }, [aktivniTab, clenove]);
+
+  /** Vybraný člen napříč taby — dialog zůstane otevřený i po přepnutí tabu. */
+  const vybrany: MockClen | null = useMemo(
+    () => clenove.find((c) => c.id === vybranyId) ?? null,
+    [clenove, vybranyId],
+  );
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
@@ -84,11 +102,19 @@ export default function AdminClenovePage(): JSX.Element {
           <div className="mt-3">
             <ClenoveTable
               clenove={[...filtrovani]}
+              vybranyId={vybranyId}
+              onVyber={(clen) => setVybranyId(clen.id)}
               popisek={`Seznam členů — ${POPISKY_PANELU[aktivniTab]}`}
             />
           </div>
         </div>
       </div>
+
+      <ClenDetailModal
+        clen={vybrany}
+        onZavrit={() => setVybranyId(null)}
+        onSave={naUlozitClena}
+      />
     </main>
   );
 }

@@ -5,14 +5,15 @@ import {
   jeVeVedeni,
   type RoleSet,
 } from "../../config/roles";
+import { celeJmeno, type MockClen } from "../../data/mockClenove";
 import RoleBadge from "./RoleBadge";
 
 interface ClenoveTableProps {
-  clenove: ReadonlyArray<{
-    readonly id: string;
-    readonly jmeno: string;
-    readonly role: RoleSet;
-  }>;
+  clenove: ReadonlyArray<MockClen>;
+  /** Id právě otevřeného člena — zvýrazní řádek, jehož detail je v dialogu. */
+  vybranyId?: string | null;
+  /** Klik / Enter na řádek — stránka otevře ClenDetailModal. */
+  onVyber: (clen: MockClen) => void;
   popisek?: string;
 }
 
@@ -57,8 +58,15 @@ function Stav({ role }: { role: RoleSet }): JSX.Element {
  * Jedna znovupoužitelná tabulka pro všechny 4 taby.
  * Na mobilu horizontálně scrolluje (min-w), layout se neláme.
  * Nativní <table> = role=table zdarma, prázdný stav má role=status.
+ * Řádek je klikací tlačítko (min-h 44px, aria-haspopup="dialog") —
+ * klik / Enter otevře ClenDetailModal (stav drží AdminClenovePage).
  */
-export default function ClenoveTable({ clenove, popisek }: ClenoveTableProps): JSX.Element {
+export default function ClenoveTable({
+  clenove,
+  vybranyId,
+  onVyber,
+  popisek,
+}: ClenoveTableProps): JSX.Element {
   if (clenove.length === 0) {
     return (
       <div
@@ -96,31 +104,51 @@ export default function ClenoveTable({ clenove, popisek }: ClenoveTableProps): J
           </tr>
         </thead>
         <tbody>
-          {clenove.map((clen) => (
-            <tr
-              key={clen.id}
-              className="border-b border-linka align-middle last:border-b-0 motion-safe:transition-colors motion-safe:hover:bg-linka/30"
-            >
-              <th scope="row" className="min-w-0 px-4 py-3 text-sm font-bold leading-snug">
-                <span className="block max-w-[220px] truncate sm:max-w-none sm:whitespace-normal">
-                  {clen.jmeno}
-                </span>
-              </th>
-              <td className="px-4 py-3">
-                <span className="inline-flex max-w-[280px] flex-wrap gap-1.5">
-                  {clen.role.map((r) => (
-                    <RoleBadge key={r} role={r} />
-                  ))}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <Stav role={clen.role} />
-              </td>
-              <td className="px-4 py-3">
-                <Zarazeni role={clen.role} />
-              </td>
-            </tr>
-          ))}
+          {clenove.map((clen) => {
+            const vybran: boolean = vybranyId === clen.id;
+            const jmeno: string = celeJmeno(clen);
+            return (
+              <tr
+                key={clen.id}
+                className={`border-b border-linka align-middle last:border-b-0 motion-safe:transition-colors motion-safe:hover:bg-linka/30 ${
+                  vybran ? "bg-linka/50" : ""
+                }`}
+              >
+                <th scope="row" className="min-w-0 p-1.5 sm:p-2">
+                  <button
+                    type="button"
+                    onClick={() => onVyber(clen)}
+                    aria-haspopup="dialog"
+                    aria-label={`${jmeno} — otevřít detail člena`}
+                    className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm font-bold leading-snug"
+                  >
+                    <span className="block max-w-[220px] truncate sm:max-w-none sm:whitespace-normal">
+                      {jmeno}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="shrink-0 text-xs font-extrabold text-mech"
+                    >
+                      Detail ›
+                    </span>
+                  </button>
+                </th>
+                <td className="px-4 py-3">
+                  <span className="inline-flex max-w-[280px] flex-wrap gap-1.5">
+                    {clen.role.map((r) => (
+                      <RoleBadge key={r} role={r} />
+                    ))}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <Stav role={clen.role} />
+                </td>
+                <td className="px-4 py-3">
+                  <Zarazeni role={clen.role} />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
