@@ -14,8 +14,12 @@ export default defineConfig({
       includeAssets: ["favicon.svg", "manifest.webmanifest", "icons/*.svg"],
       manifest: false,
       workbox: {
-        globPatterns: [],
-        cleanupOutdatedCaches: false,
+        globPatterns: ["**/*.{js,css,html,svg,webmanifest}"],
+        cleanupOutdatedCaches: true,
+        // SPA fallback: navigace (/, /vypravy, ...) servíruj index.html.
+        // index.html MUSÍ být v precache, jinak workbox padá na
+        // "Resource was not cached" / "Content unavailable".
+        navigateFallback: "index.html",
       },
       devOptions: { enabled: false },
     }),
