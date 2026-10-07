@@ -1,26 +1,20 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @theme {
-  /* ——— ExApp · Nature Morte galerijní tokeny ——— */
-  /* kostěný papír galerie, teplý inkoust, mechová zeleň, rezavá oranž */
-  --color-papir: #f1ebdd;
-  --color-kost: #f1ebdd;
-  --color-karta: #fbf8ef;
-  --color-inkoust: #211d14;
-  --color-smrk: #2e4438;
-  --color-linka: #d9d1be;
-  --color-jantar: #e4571d;
-  --color-ember: #e4571d;
-  --color-mech: #7a7668;
-  --color-oliva: #6b6a58;
+  /* ——— ExApp tokeny (jediný zdroj pravdy pro karty) ——— */
+  --color-papir: #fbf8f1;
+  --color-inkoust: #1a2e22;
+  --color-smrk: #2d6a4f;
+  --color-linka: #dce7de;
+  --color-jantar: #a05e0c;
+  --color-mech: #5c6b60;
 
-  --shadow-denik: 4px 4px 0 rgba(33, 29, 20, 0.14);
-  --shadow-razitko: 2px 2px 0 rgba(33, 29, 20, 0.9);
-  --shadow-oblouk: 0 24px 48px -24px rgba(33, 29, 20, 0.35);
+  /* stíny: plochý „papírový“ offset — karta / razítko */
+  --shadow-denik: 3px 3px 0 rgba(26, 46, 34, 0.12);
+  --shadow-razitko: 2px 2px 0 rgba(26, 46, 34, 0.9);
 
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
 }
 
 @layer base {
@@ -29,23 +23,12 @@
     color: var(--color-inkoust);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    /* jemné papírové zrno přes celou appku */
-    background-image: radial-gradient(
-      rgba(33, 29, 20, 0.055) 1px,
-      transparent 1px
-    );
-    background-size: 22px 22px;
   }
 
   :focus-visible {
-    outline: 3px solid var(--color-jantar);
+    outline: 3px solid var(--color-smrk);
     outline-offset: 2px;
     border-radius: 2px;
-  }
-
-  ::selection {
-    background: var(--color-inkoust);
-    color: var(--color-papir);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -55,79 +38,5 @@
       animation: none !important;
       transition: none !important;
     }
-  }
-}
-
-@layer components {
-  /* Serif display — galerijní titulek */
-  .font-galerie {
-    font-family: var(--font-display);
-    font-optical-sizing: auto;
-    letter-spacing: -0.02em;
-    line-height: 0.95;
-  }
-
-  /* Obloukové rámy obrazů — signatura Nature Morte */
-  .oblouk {
-    border-radius: 999px 999px 18px 18px;
-  }
-  .oblouk-maly {
-    border-radius: 999px 999px 12px 12px;
-  }
-  .pilulka {
-    border-radius: 999px;
-  }
-
-  /* Dvouřádkový titulek s vloženým obrázkem v řádku */
-  .titulek-obrazek {
-    display: inline-block;
-    height: 0.82em;
-    width: 1.7em;
-    vertical-align: baseline;
-    transform: translateY(0.08em);
-    overflow: hidden;
-    border: 1.5px solid var(--color-inkoust);
-  }
-
-  /* Tenounká muzejní linka */
-  .muzejni-linka {
-    border-color: rgba(33, 29, 20, 0.22);
-  }
-
-  /* Pomalý marquee pro statistický pás */
-  @keyframes galerie-marquee {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-  .marquee-stop {
-    animation: galerie-marquee 28s linear infinite;
-  }
-
-  /* Jemný reveal hero oblouků */
-  @keyframes oblouk-rust {
-    from {
-      opacity: 0;
-      transform: translateY(26px) scale(0.985);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  .oblouk-rust {
-    animation: oblouk-rust 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .oblouk-rust-1 {
-    animation-delay: 0.05s;
-  }
-  .oblouk-rust-2 {
-    animation-delay: 0.18s;
-  }
-  .oblouk-rust-3 {
-    animation-delay: 0.31s;
   }
 }

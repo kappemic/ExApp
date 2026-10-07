@@ -29,7 +29,6 @@ import type {
   UpravitExpediciRequest,
   VytvoritExpediciRequest,
 } from "../../shared/api-types";
-import Obraz, { variantaObrazu } from "../gallery/Obraz";
 import ExpeditionForm, {
   type ChybyExpedice,
   type ExpeditionFormVychozi,
@@ -108,7 +107,6 @@ export default function ExpeditionModal({
   const probehla: boolean = jeProbehla(expedice);
   const procenta: number = obsazenostProcenta(expedice);
   const volna: number = volnaMista(expedice);
-  const varianta: number = variantaObrazu(expedice.id);
 
   const nacistiUcastniky = useCallback(async (idVypravy: string): Promise<void> => {
     setUcastStav("nacitani");
@@ -303,19 +301,53 @@ export default function ExpeditionModal({
         aria-modal="true"
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-inkoust bg-karta shadow-denik"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border-2 border-inkoust bg-papir shadow-denik"
       >
-        <div className="relative">
-          <Obraz
-            varianta={varianta}
-            nazev={expedice.nazev}
-            className={`h-36 w-full object-cover ${probehla ? "saturate-50" : ""}`}
-          />
+        <div className="relative border-b-2 border-inkoust bg-linka/70">
+          <div
+            aria-hidden="true"
+            className="relative h-36 w-full overflow-hidden"
+          >
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)",
+              }}
+            />
+            <svg
+              viewBox="0 0 400 180"
+              preserveAspectRatio="xMidYMax slice"
+              className={`absolute inset-x-0 bottom-0 h-full w-full text-inkoust ${probehla ? "opacity-50 grayscale" : ""}`}
+            >
+              <path
+                d="M0 150 L90 70 L150 130 L220 45 L300 130 L350 85 L400 130 L400 180 L0 180 Z"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.35"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M0 165 L110 100 L190 155 L270 90 L340 155 L400 120 L400 180 L0 180 Z"
+                fill="currentColor"
+                fillOpacity="0.16"
+                stroke="currentColor"
+                className="text-smrk"
+                strokeOpacity="0.45"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="absolute bottom-2 right-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70">
+              {probehla ? "archiv · exapp" : "exapp"}
+            </span>
+          </div>
           <div className="absolute left-4 top-4">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-inkoust/25 bg-papir/90 px-3 py-1 text-[11px] font-bold backdrop-blur">
               <span
                 aria-hidden="true"
-                className={`h-2 w-2 rounded-full ${probehla ? "bg-mech" : "bg-jantar"}`}
+                className={`h-2 w-2 rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
               />
               {expedice.stav}
             </span>
@@ -335,7 +367,7 @@ export default function ExpeditionModal({
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
             {nadpisRezim}
           </p>
-          <h2 id={nadpisId} className="font-galerie mt-1 text-3xl leading-tight">
+          <h2 id={nadpisId} className="mt-1 text-xl font-bold tracking-tight">
             {expedice.nazev}
           </h2>
           <p id={popisId} className="mt-1 text-sm text-inkoust/70">
@@ -376,7 +408,7 @@ export default function ExpeditionModal({
                 >
                   <div
                     aria-hidden="true"
-                    className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-jantar"}`}
+                    className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
                     style={{ width: `${procenta}%` }}
                   />
                 </div>

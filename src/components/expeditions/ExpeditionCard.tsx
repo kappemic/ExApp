@@ -8,19 +8,17 @@ import {
   obsazenostProcenta,
   volnaMista,
 } from "../../lib/expedition-utils";
-import Obraz, { variantaObrazu } from "../gallery/Obraz";
 
 export interface ExpeditionCardProps {
   expedice: Expedition;
-  katalogoveCislo?: number;
-  /** Otevře modal detailu (Krok 5). Bez handleru je tlačítko skryté. */
+  /** Otevře modal detailu (Fáze 2). Bez handleru je tlačítko skryté. */
   onDetail?: (expedice: Expedition) => void;
 }
 
 const badgeStyly: Record<ExpeditionStatus, string> = {
-  volno: "border-inkoust/25 bg-papir/90",
-  "skoro plno": "border-jantar/60 bg-papir/90",
-  "proběhlá": "border-inkoust/20 bg-papir/80",
+  volno: "border-smrk/30 bg-papir",
+  "skoro plno": "border-jantar/40 bg-papir",
+  "proběhlá": "border-mech/30 bg-papir",
 };
 
 const teckaStyly: Record<ExpeditionStatus, string> = {
@@ -32,7 +30,7 @@ const teckaStyly: Record<ExpeditionStatus, string> = {
 function StavBadge({ stav }: { stav: ExpeditionStatus }): JSX.Element {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold tracking-wide text-inkoust backdrop-blur ${badgeStyly[stav]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold tracking-wide text-inkoust ${badgeStyly[stav]}`}
     >
       <span
         aria-hidden="true"
@@ -43,81 +41,123 @@ function StavBadge({ stav }: { stav: ExpeditionStatus }): JSX.Element {
   );
 }
 
+function RazitkoData({ isoDatum }: { isoDatum: string }): JSX.Element {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex w-14 shrink-0 -rotate-3 flex-col items-center rounded-[4px] border-2 border-inkoust/80 bg-papir px-1 py-1.5 shadow-razitko"
+    >
+      <span className="text-xl font-extrabold leading-none tabular-nums">
+        {formatDen(isoDatum)}
+      </span>
+      <span className="mt-1 text-[11px] font-bold lowercase leading-none tracking-widest">
+        {formatMesicZkratka(isoDatum)}
+      </span>
+    </div>
+  );
+}
+
+function PlaceholderFoto({ probehla }: { probehla: boolean }): JSX.Element {
+  return (
+    <div
+      aria-hidden="true"
+      className={`relative aspect-[16/9] w-full overflow-hidden border-b-2 border-inkoust ${
+        probehla ? "bg-linka/60" : "bg-linka/70"
+      }`}
+    >
+      {/* linkovaný deníkový podklad */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)",
+        }}
+      />
+      {/* stylizované hory */}
+      <svg
+        viewBox="0 0 400 180"
+        preserveAspectRatio="xMidYMax slice"
+        className={`absolute inset-x-0 bottom-0 h-full w-full text-inkoust ${probehla ? "opacity-50 grayscale" : ""}`}
+      >
+        <path
+          d="M0 150 L90 70 L150 130 L220 45 L300 130 L350 85 L400 130 L400 180 L0 180 Z"
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.35"
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M0 165 L110 100 L190 155 L270 90 L340 155 L400 120 L400 180 L0 180 Z"
+          fill="currentColor"
+          fillOpacity="0.16"
+          stroke="currentColor"
+          className="text-smrk"
+          strokeOpacity="0.45"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <circle cx="322" cy="38" r="14" fill="none" stroke="currentColor" className="text-jantar" strokeOpacity="0.55" strokeWidth="2.5" />
+      </svg>
+      <span className="absolute bottom-2 right-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70">
+        {probehla ? "archiv · exapp" : "exapp"}
+      </span>
+    </div>
+  );
+}
+
 export default function ExpeditionCard({
   expedice,
-  katalogoveCislo,
   onDetail,
 }: ExpeditionCardProps): JSX.Element {
   const probehla = jeProbehla(expedice);
   const procenta = obsazenostProcenta(expedice);
   const volna = volnaMista(expedice);
-  const varianta = variantaObrazu(expedice.id);
 
   return (
     <article
-      className={`group flex h-full flex-col overflow-hidden rounded-3xl border-2 border-inkoust bg-karta shadow-denik transition-transform motion-safe:group-hover:-translate-y-1 ${
-        probehla ? "opacity-95" : ""
+      className={`group flex h-full flex-col overflow-hidden rounded-lg border-2 border-inkoust bg-white/60 shadow-denik transition-transform motion-safe:group-hover:-translate-y-0.5 ${
+        probehla ? "opacity-90" : ""
       }`}
     >
-      <div className="relative p-3 pb-0">
-        <div className="oblouk relative overflow-hidden border-2 border-inkoust">
-          <Obraz
-            varianta={varianta}
-            nazev={expedice.nazev}
-            className={`aspect-[4/5] w-full ${probehla ? "saturate-50" : ""}`}
-          />
-          <div className="absolute left-3 top-3">
-            <span className="inline-flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl border-2 border-inkoust bg-papir px-2 py-1 shadow-razitko">
-              <span className="font-galerie text-xl italic leading-none tabular-nums">
-                {formatDen(expedice.datum)}
-              </span>
-              <span className="mt-0.5 text-[10px] font-bold lowercase tracking-[0.18em]">
-                {formatMesicZkratka(expedice.datum)}
-              </span>
-            </span>
-          </div>
-          <div className="absolute right-3 top-3">
-            <StavBadge stav={expedice.stav} />
-          </div>
+      <div className="relative">
+        <PlaceholderFoto probehla={probehla} />
+        <div className="absolute left-3 top-3">
+          <RazitkoData isoDatum={expedice.datum} />
         </div>
-        {katalogoveCislo !== undefined && (
-          <span
-            aria-hidden="true"
-            className="absolute -bottom-1 left-6 rounded-full border-2 border-inkoust bg-jantar px-3 py-0.5 text-[11px] font-bold tabular-nums text-papir"
-          >
-            č. {String(katalogoveCislo).padStart(2, "0")}
-          </span>
-        )}
+        <div className="absolute right-3 top-3">
+          <StavBadge stav={expedice.stav} />
+        </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-5 pt-4">
-        <h2 className="font-galerie text-[1.55rem] leading-[1.05]">
+      <div className="flex flex-1 flex-col p-4">
+        <h2 className="text-[1.05rem] font-bold leading-snug tracking-tight">
           {expedice.nazev}
         </h2>
-        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-inkoust/70">
+        <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-inkoust/80">
           {expedice.popis}
         </p>
 
-        <dl className="mt-4 space-y-1.5 border-t muzejni-linka pt-3 text-[13px]">
+        <dl className="mt-3 space-y-1 border-t border-dashed border-linka pt-3 text-sm">
           <div className="flex gap-2">
-            <dt className="w-14 shrink-0 text-inkoust/55">Datum</dt>
-            <dd className="font-medium">
+            <dt className="shrink-0 font-semibold">Datum:</dt>
+            <dd>
               <time dateTime={expedice.datum}>{formatCelyDatum(expedice.datum)}</time>
             </dd>
           </div>
           <div className="flex gap-2">
-            <dt className="w-14 shrink-0 text-inkoust/55">Sraz</dt>
+            <dt className="shrink-0 font-semibold">Sraz:</dt>
             <dd className="min-w-0">{expedice.sraz}</dd>
           </div>
         </dl>
 
         <div className="mt-3">
-          <div className="flex items-baseline justify-between gap-3 text-[13px]">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="font-semibold tabular-nums">
               {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
-              <span className="font-normal text-inkoust/60"> přihlášeno</span>
+              <span className="font-normal text-inkoust/65"> přihlášeno</span>
             </span>
-            <span className="shrink-0 text-[12px] text-inkoust/60">
+            <span className="shrink-0 text-[13px] text-inkoust/65">
               {probehla ? "výprava proběhla" : volna === 0 ? "plně obsazeno" : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
             </span>
           </div>
@@ -127,27 +167,27 @@ export default function ExpeditionCard({
             aria-valuenow={expedice.kapacita.prihlaseno}
             aria-valuemin={0}
             aria-valuemax={expedice.kapacita.celkem}
-            className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
+            className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-linka"
           >
             <div
               aria-hidden="true"
-              className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-jantar"}`}
+              className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
               style={{ width: `${procenta}%` }}
             />
           </div>
         </div>
 
         <div className="mt-4 flex-1" />
-        <div className="flex items-center justify-between gap-3 border-t muzejni-linka pt-4">
-          <span className="font-galerie text-sm italic text-inkoust/55">
-            {probehla ? "archiv galerie" : "otevřená galerie"}
+        <div className="flex items-center justify-between gap-3 border-t border-linka pt-3">
+          <span className="text-[13px] text-inkoust/60">
+            {probehla ? "Fotky v archivu" : "Detail a přihlášení"}
           </span>
           {onDetail !== undefined && (
             <button
               type="button"
               onClick={() => onDetail(expedice)}
               aria-label={`Detail výpravy ${expedice.nazev}`}
-              className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-full border-2 border-inkoust bg-inkoust px-5 py-2 text-[13px] font-bold text-papir transition-colors hover:bg-smrk"
+              className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-md border-2 border-inkoust bg-smrk px-4 py-1.5 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
             >
               Detail
               <span aria-hidden="true">→</span>

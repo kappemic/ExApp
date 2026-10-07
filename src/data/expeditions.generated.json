@@ -1,7 +1,7 @@
 {
   "_meta": {
     "zdroj": "db-snapshot",
-    "generatedAt": "2026-10-07T15:54:30.145Z",
+    "generatedAt": "2026-10-07T16:08:24.096Z",
     "poznamka": "Build-time snapshot z Neon DB (scripts/sync-readmodel.ts). Bez secretů, pouze veřejná read data."
   },
   "expedice": [

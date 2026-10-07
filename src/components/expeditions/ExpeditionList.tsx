@@ -16,11 +16,11 @@ export default function ExpeditionList({ expedice, onDetail }: ExpeditionListPro
   return (
     <ul
       role="list"
-      className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3"
+      className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
     >
-      {expedice.map((exp, index) => (
+      {expedice.map((exp) => (
         <li key={exp.id} className="min-w-0">
-          <ExpeditionCard expedice={exp} katalogoveCislo={index + 1} onDetail={onDetail} />
+          <ExpeditionCard expedice={exp} onDetail={onDetail} />
         </li>
       ))}
     </ul>
