@@ -149,28 +149,28 @@ function useVidetAdmin(): boolean {
 
 function tridyDesktopOdkazu(aktivni: boolean): string {
   const zaklad =
-    "flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] transition-colors motion-reduce:transition-none";
   if (aktivni) {
-    return `${zaklad} font-bold text-smrk`;
+    return `${zaklad} border-inkoust bg-inkoust font-semibold text-papir`;
   }
-  return `${zaklad} font-medium text-mech hover:bg-smrk/[0.08] hover:text-inkoust`;
+  return `${zaklad} border-transparent font-medium text-inkoust/70 hover:border-inkoust/30 hover:text-inkoust`;
 }
 
 function tridyMobilOdkazu(aktivni: boolean): string {
   const zaklad =
-    "flex min-h-[48px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "flex min-h-[52px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 text-[11px] leading-none transition-colors motion-reduce:transition-none";
   if (aktivni) {
-    return `${zaklad} font-bold text-smrk`;
+    return `${zaklad} font-bold text-inkoust`;
   }
-  return `${zaklad} font-medium text-mech hover:bg-smrk/[0.08] hover:text-inkoust`;
+  return `${zaklad} font-medium text-inkoust/55 hover:text-inkoust`;
 }
 
-function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
+function Tecka({ aktivni }: { aktivni: boolean }): JSX.Element {
   return (
     <span
       aria-hidden="true"
-      className={`h-[3px] w-8 rounded-full transition-colors ${
-        aktivni ? "bg-smrk" : "bg-transparent"
+      className={`h-1.5 w-1.5 rounded-full transition-colors ${
+        aktivni ? "bg-jantar" : "bg-inkoust/20"
       }`}
     />
   );
@@ -185,22 +185,17 @@ export function TopBar(): JSX.Element {
 
   return (
     <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex">
-      {polozky.map(({ to, popisek, end, Ikona }) => (
+      {polozky.map(({ to, popisek, end }, index) => (
         <NavLink
           key={to}
           to={to}
           end={end}
           className={({ isActive }) => tridyDesktopOdkazu(isActive)}
         >
-          {({ isActive }) => (
-            <span className="flex flex-col items-center gap-1">
-              <span className="flex items-center gap-2">
-                <Ikona />
-                <span>{popisek}</span>
-              </span>
-              <Indikátor aktivni={isActive} />
-            </span>
-          )}
+          <span aria-hidden="true" className="text-[11px] tabular-nums opacity-50">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span>{popisek}</span>
         </NavLink>
       ))}
     </nav>
@@ -217,11 +212,11 @@ export function MobileBar(): JSX.Element {
   return (
     <nav
       aria-label="Spodní navigace"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-linka bg-papir lg:hidden"
+      className="fixed inset-x-3 bottom-3 z-40 rounded-3xl border-2 border-inkoust bg-karta/95 shadow-denik backdrop-blur lg:hidden"
     >
       <ul
         style={{ gridTemplateColumns: `repeat(${polozky.length}, minmax(0, 1fr))` }}
-        className="mx-auto grid w-full max-w-6xl gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-1"
+        className="mx-auto grid w-full max-w-6xl gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-2"
       >
         {polozky.map(({ to, popisek, end, Ikona }) => (
           <li key={to} className="min-w-0">
@@ -232,9 +227,9 @@ export function MobileBar(): JSX.Element {
             >
               {({ isActive }) => (
                 <>
-                  <Ikona />
+                  <Ikona className={isActive ? "h-5 w-5" : "h-5 w-5"} />
                   <span>{popisek}</span>
-                  <Indikátor aktivni={isActive} />
+                  <Tecka aktivni={isActive} />
                 </>
               )}
             </NavLink>
@@ -251,7 +246,7 @@ function AuthCluster(): JSX.Element | null {
 
   if (isLoading) {
     return (
-      <span aria-hidden="true" className="hidden h-8 w-20 animate-pulse rounded-md bg-linka sm:block" />
+      <span aria-hidden="true" className="hidden h-8 w-20 animate-pulse rounded-full bg-linka sm:block" />
     );
   }
 
@@ -267,7 +262,7 @@ function AuthCluster(): JSX.Element | null {
       type="button"
       onClick={odhlasit}
       title="Odhlásit se"
-      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2.5 py-2 text-xs font-bold text-mech transition-colors hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
+      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-inkoust/25 px-4 py-2 text-xs font-semibold text-inkoust/75 transition-colors hover:border-inkoust hover:text-inkoust motion-reduce:transition-none"
     >
       Odhlásit
     </button>
@@ -278,25 +273,36 @@ export function AppHeader(): JSX.Element {
   const { user } = useAuth();
   const prihlasen = user !== null;
   return (
-    <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-b-2 border-inkoust bg-papir/95 backdrop-blur">
+      {/* muzejní páska */}
+      <div className="border-b muzejni-linka">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-1.5 text-[11px] font-medium tracking-wide text-inkoust/60 sm:px-6">
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className="tabular-nums">00</span>
+            <span className="hidden sm:inline">Kronika oddílu</span>
+            <span className="sm:hidden">Kronika</span>
+          </span>
+          <span className="tabular-nums">podzim 2026 · galerie výprav</span>
+        </div>
+      </div>
+      <div className="mx-auto flex h-[72px] w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
           to="/"
-          className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1"
+          className="flex min-h-[44px] min-w-[44px] items-center gap-3 rounded-md px-1 py-1"
           aria-label="ExApp – domů"
         >
           <span
             aria-hidden="true"
-            className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-inkoust bg-smrk text-lg font-extrabold text-papir shadow-denik"
+            className="oblouk-maly flex h-11 w-9 items-center justify-center border-2 border-inkoust bg-smrk font-galerie text-xl italic text-papir"
           >
             E
           </span>
-          <span className="flex flex-col leading-tight">
-            <span className="text-sm font-extrabold tracking-tight text-inkoust">
+          <span className="flex flex-col leading-none">
+            <span className="font-galerie text-[26px] italic text-inkoust">
               ExApp
             </span>
-            <span className="text-[11px] font-medium text-mech">
-              Klubové výpravy
+            <span className="mt-1 text-[11px] font-medium tracking-wide text-inkoust/60">
+              galerie výprav
             </span>
           </span>
         </Link>
@@ -307,24 +313,24 @@ export function AppHeader(): JSX.Element {
           <AuthCluster />
           {prihlasen && (
             <NavLink
-                to="/chat"
-                aria-label={`Chat, ${NEPRECTENYCH_ZPRAV} nepřečtené zprávy`}
-                className={({ isActive }: { isActive: boolean }) =>
-                  `relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2.5 transition-colors lg:hidden ${
-                    isActive
-                      ? "font-bold text-smrk"
-                      : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
-                  }`
-                }
+              to="/chat"
+              aria-label={`Chat, ${NEPRECTENYCH_ZPRAV} nepřečtené zprávy`}
+              className={({ isActive }: { isActive: boolean }) =>
+                `relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border p-2.5 transition-colors lg:hidden ${
+                  isActive
+                    ? "border-inkoust bg-inkoust text-papir"
+                    : "border-inkoust/25 text-inkoust hover:border-inkoust"
+                }`
+              }
+            >
+              <IkonaChat className="h-5 w-5" />
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-inkoust bg-jantar px-1 text-[10px] font-bold leading-none text-papir"
               >
-                <IkonaChat />
-                <span
-                  aria-hidden="true"
-                  className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-jantar px-1 text-[10px] font-bold leading-none text-papir"
-                >
-                  {NEPRECTENYCH_ZPRAV}
-                </span>
-              </NavLink>
+                {NEPRECTENYCH_ZPRAV}
+              </span>
+            </NavLink>
           )}
         </div>
       </div>

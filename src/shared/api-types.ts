@@ -75,8 +75,9 @@ export interface ApiUser {
  * - 401 NEPRIHLASEN — bez session; KOD_NEPLATNY — kód nenalezen;
  *   SPATNE_HESLO — špatný e-mail / heslo (záměrně nerozlišeno)
  * - 403 ZAKAZANO — přihlášen, ale bez práva (není ADMIN)
- * - 404 NENALEZENO — uživatel / člen / API cesta nenalezena
- * - 409 EMAIL_OBSAZEN — e-mail obsazen
+ * - 404 NENALEZENO — uživatel / člen / výprava / API cesta nenalezena
+ * - 409 EMAIL_OBSAZEN — e-mail obsazen; UZ_PRIHLASEN — duplicitní přihláška;
+ *   KAPACITA_PLNA — výprava je plná; VYPRAVA_UZAVRENA — akce na proběhlé výpravě
  * - 410 KOD_EXPIROVANY — kód expiroval (vypršel čas 10 min)
  * - 422 VALIDATION_ERROR — vstup neprošel validací na hranici
  * - 500 VNITRNI_CHYBA — neočekávaná chyba (bez interních detailů)
@@ -91,6 +92,9 @@ export type ApiErrorCode =
   | "KOD_NEPLATNY"
   | "KOD_EXPIROVANY"
   | "SPATNE_HESLO"
+  | "UZ_PRIHLASEN"
+  | "KAPACITA_PLNA"
+  | "VYPRAVA_UZAVRENA"
   | "VNITRNI_CHYBA";
 
 export interface ApiErrorBody {
@@ -283,6 +287,16 @@ export interface ApiExpedice {
 
 export interface ExpediceListResponse {
   expedice: ApiExpedice[];
+  /** Stránkování pro historii (Krok 2, aditivně optional). Bez něj = vše. */
+  pagination?: Strankovani;
+}
+
+/** Stránkování list endpointů (skill: paginuj od začátku). */
+export interface Strankovani {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,6 +342,13 @@ export const VALIDACE = {
   hesloMaxDelka: 128,
   kodDelka: 8,
   poznamkaMaxDelka: 120,
+  expediceNazevMinDelka: 3,
+  expediceNazevMaxDelka: 120,
+  expediceSrazMinDelka: 3,
+  expediceSrazMaxDelka: 120,
+  expedicePopisMaxDelka: 2000,
+  expediceKapacitaMin: 1,
+  expediceKapacitaMax: 100,
 } as const;
 
 /** České hlášky validace pro sdílení mezi API a formuláři. */
@@ -347,6 +368,18 @@ export const VALIDACNI_ZPRAVY = {
   hesloDlouhe: "Heslo může mít nejvýš 128 znaků.",
   kodPovinny: "Zadej pozvánkový kód.",
   kodNeplatnyTvar: "Kód musí mít 8 znaků (bez 0, O, 1, I).",
+  expediceNazevPovinny: "Zadej název výpravy.",
+  expediceNazevKratky: "Název výpravy musí mít aspoň 3 znaky.",
+  expediceNazevDlouhy: "Název výpravy může mít nejvýš 120 znaků.",
+  expediceDatumPovinne: "Zadej datum výpravy.",
+  expediceDatumNeplatne: "Datum musí být ve tvaru RRRR-MM-DD.",
+  expediceSrazPovinny: "Zadej místo a čas srazu.",
+  expediceSrazKratky: "Sraz musí mít aspoň 3 znaky.",
+  expediceSrazDlouhy: "Sraz může mít nejvýš 120 znaků.",
+  expedicePopisDlouhy: "Popis může mít nejvýš 2000 znaků.",
+  expediceKapacitaNeplatna: "Kapacita musí být číslo od 1 do 100.",
+  dochazkaPrazdna: "Vyber aspoň jednoho účastníka docházky.",
+  dochazkaNeznamyUcastnik: "Docházka obsahuje neznámého účastníka.",
 } as const;
 
 /**
@@ -390,11 +423,200 @@ export const HTTP_STATUS_PRO_KOD: Record<ApiErrorCode, number> = {
   KOD_NEPLATNY: 401,
   KOD_EXPIROVANY: 410,
   SPATNE_HESLO: 401,
+  UZ_PRIHLASEN: 409,
+  KAPACITA_PLNA: 409,
+  VYPRAVA_UZAVRENA: 409,
   VNITRNI_CHYBA: 500,
 } as const;
 
 /* ------------------------------------------------------------------ */
+/* 8) Krok 2 — Expedice CRUD + účast + uzavření (NÁVRH, neimplementováno) */
+/* Kontrakt před implementací. Server (server/src/index.ts) se zatím    */
+/* NEMĚNÍ — routy níže neexistují, dokud je Krok 3+ nezavede 1:1.       */
+/* Rozhodnutí k rolím (AGENTS Fáze 2): vytvářet / upravovat / mazat /    */
+/* uzavírat smí jen ADMIN; přihlásit / odhlásit smí přihlášený USER;     */
+/* docházku zapisuje ADMIN. Nesrovnalost PRD 2.1 (aktivní člen vytváří)  */
+/* je odložena jako follow-up — kontrakt ji nezavazuje.                 */
+/*                                                                       */
+/* REST poznámka (skill §5): akční sufixy /prihlasit, /odhlasit,         */
+/* /uzavrit jsou vědomá výjimka z „bez sloves v URL" — jde o BFF akce    */
+/* nad sub-zdrojem účast (stejný vzor jako POST /api/login). Zdroje      */
+/* zůstávají plural (`/api/expeditions`, `/api/expeditions/:id/ucastnici`).*/
+/* Idempotence: PATCH se stejným tělem je bezpečný; DELETE /odhlasit    */
+/* bez přihlášky vrací 200 `{ ok: true }` (ne 404).                     */
+/* Chyby vždy jen `ApiErrorResponse` — nikdy jiný tvar.                  */
+/* ------------------------------------------------------------------ */
+
+export const EXPEDICE_DETAIL_VZOR = "/api/expeditions/:id" as const;
+export const EXPEDICE_UCASTNICI_VZOR =
+  "/api/expeditions/:id/ucastnici" as const;
+export const EXPEDICE_PRIHLASIT_VZOR =
+  "/api/expeditions/:id/prihlasit" as const;
+export const EXPEDICE_ODHLASIT_VZOR =
+  "/api/expeditions/:id/odhlasit" as const;
+export const EXPEDICE_UZAVRIT_VZOR = "/api/expeditions/:id/uzavrit" as const;
+
+/** Staví URL detailu: `/api/expeditions/sumava-trijezerska-slat`. */
+export function expediceDetailPath(id: string): `/api/expeditions/${string}` {
+  return `/api/expeditions/${id}`;
+}
+
+/** Staví URL seznamu účastníků dané výpravy. */
+export function ucastniciPath(id: string): `/api/expeditions/${string}/ucastnici` {
+  return `/api/expeditions/${id}/ucastnici`;
+}
+
+/** Staví URL přihlášení na výpravu. */
+export function prihlasitPath(id: string): `/api/expeditions/${string}/prihlasit` {
+  return `/api/expeditions/${id}/prihlasit`;
+}
+
+/** Staví URL odhlášení z výpravy. */
+export function odhlasitPath(id: string): `/api/expeditions/${string}/odhlasit` {
+  return `/api/expeditions/${id}/odhlasit`;
+}
+
+/** Staví URL uzavření výpravy (včetně docházky). */
+export function uzavritPath(id: string): `/api/expeditions/${string}/uzavrit` {
+  return `/api/expeditions/${id}/uzavrit`;
+}
+
+/**
+ * Staví URL seznamu s filtrem historie:
+ * `/api/expeditions?stav=prob%C4%9Bhl%C3%A1` nebo s `page` / `pageSize`.
+ */
+export function expediceListUrl(query: ExpediceListQuery): string {
+  const params = new URLSearchParams();
+  if (query.stav !== undefined) params.set("stav", query.stav);
+  if (query.page !== undefined) params.set("page", String(query.page));
+  if (query.pageSize !== undefined)
+    params.set("pageSize", String(query.pageSize));
+  const qs = params.toString();
+  return qs.length > 0 ? `${EXPEDITIONS_PATH}?${qs}` : EXPEDITIONS_PATH;
+}
+
+/** Status účasti — kopie DB CHECK (participants.status). */
+export type StatusUcasti = "prihlasen" | "ucastnil_se" | "omluven";
+
+/** Docházkový status zapisovaný při uzavření (jen ADMIN). */
+export type DochazkovyStatus = "ucastnil_se" | "omluven";
+
+/**
+ * Účastník výpravy pro modal (seznam přihlášených + docházka).
+ * Právě jedna identita: `userId` XOR `clenId` (hlídá DB CHECK
+ * v migraci participants). `jmeno` je denormalizované pro seznam.
+ */
+export interface ApiUcastnik {
+  id: string;
+  expeditionId: string;
+  userId: UserId | null;
+  clenId: string | null;
+  jmeno: string;
+  status: StatusUcasti;
+  createdAt: string;
+}
+
+/** Query pro GET /api/expeditions (seznam + historie, vše PUBLIC). */
+export interface ExpediceListQuery {
+  /** `stav=proběhlá` = historie; bez filtru = nadcházející + proběhlé. */
+  stav?: StavVypravy;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Vytvoření výpravy (jen ADMIN). Expirace ani stav se neposílají. */
+export interface VytvoritExpediciRequest {
+  /** 3–120 znaků. */
+  nazev: string;
+  /** Datum YYYY-MM-DD. Minulost → 422 (historie vzniká jen uzavřením). */
+  datum: string;
+  /** Místo a čas srazu. 3–120 znaků. */
+  sraz: string;
+  /** Nepovinný; max 2000 znaků. Prázdný řetězec hranice normalizuje na "". */
+  popis?: string;
+  /** 1–100. */
+  kapacitaCelkem: number;
+}
+
+export interface VytvoritExpediciResponse {
+  expedice: ApiExpedice;
+}
+
+/**
+ * Parciální update (jen ADMIN, PATCH sémantika — jen poslaná pole se mění).
+ * Snížení `kapacitaCelkem` pod aktuální `prihlaseno` → 422 VALIDATION_ERROR.
+ * Změna `stav` tudy NEJDE — proběhlá vzniká jen PATCH /uzavrit.
+ */
+export interface UpravitExpediciRequest {
+  nazev?: string;
+  datum?: string;
+  sraz?: string;
+  popis?: string;
+  kapacitaCelkem?: number;
+}
+
+export interface UpravitExpediciResponse {
+  expedice: ApiExpedice;
+}
+
+/** Smazání maže i účastníky (CASCADE). Idempotentní: opakovaný DELETE → 404. */
+export interface SmazatExpediciResponse {
+  ok: true;
+}
+
+/** Detail výpravy pro modal (PUBLIC — čte i nepřihlášený). */
+export interface ExpediceDetailResponse {
+  expedice: ApiExpedice;
+}
+
+/** Seznam účastníků (USER i ADMIN). Bez session → 401 NEPRIHLASEN. */
+export interface UcastniciListResponse {
+  ucastnici: ApiUcastnik[];
+  /** Snapshot hlavičky pro modal (kapacita + stav bez druhého volání). */
+  expedice: ApiExpedice;
+}
+
+/** Přihlášení sebe (USER). Plná výprava → 409 KAPACITA_PLNA. */
+export interface PrihlasitNaVypravuResponse {
+  ucastnik: ApiUcastnik;
+  expedice: ApiExpedice;
+}
+
+/** Odhlášení sebe (USER). Idempotentní — bez přihlášky stále 200. */
+export interface OdhlasitResponse {
+  ok: true;
+  expedice: ApiExpedice;
+}
+
+/** Jeden řádek docházky při uzavření. Jen stavy po akci. */
+export interface DochazkaZaznam {
+  ucastnikId: string;
+  status: DochazkovyStatus;
+}
+
+/**
+ * Uzavření výpravy (jen ADMIN).
+ * Nastaví `stav: "proběhlá"` + zapíše docházku. Neznámé `ucastnikId`
+ * → 422 VALIDATION_ERROR (`dochazka: [dochazkaNeznamyUcastnik]`).
+ * Prázdná docházka → 422 (`dochazka: [dochazkaPrazdna]`).
+ * Opakované uzavření již proběhlé → 409 VYPRAVA_UZAVRENA.
+ * Fotky a Strava párování sem NEPATŘÍ — samostatné kroky Fáze 2/4.
+ */
+export interface UzavritVypravuRequest {
+  dochazka: DochazkaZaznam[];
+}
+
+export interface UzavritVypravuResponse {
+  expedice: ApiExpedice;
+  ucastnici: ApiUcastnik[];
+}
+
+/* ------------------------------------------------------------------ */
 /* Hranice admin vs user — jediná definice pro middleware i UI.        */
+/* Fáze 1 cesty zamčeny v PRISTUP; Krok 2 cesty v PRISTUP_KROK2         */
+/* (odděleně, protože POST /api/expeditions je ADMIN, zatímco          */
+/* GET /api/expeditions je PUBLIC — klíč je metoda + cesta, viz        */
+/* MATICE_EXPEDICE níže).                                              */
 /* ------------------------------------------------------------------ */
 
 /** Endpointy Fáze 1 + Krok 3/4b a kdo je smí volat. */
@@ -417,6 +639,98 @@ export const PRISTUP: Record<ChranenaCesta, AuthRole | "PUBLIC"> = {
   [CLEN_DETAIL_VZOR]: "ADMIN",
 } as const;
 
+/** Vzory cest Kroku 2 (detail, účast, uzavření). */
+export type Krok2Cesta =
+  | typeof EXPEDICE_DETAIL_VZOR
+  | typeof EXPEDICE_UCASTNICI_VZOR
+  | typeof EXPEDICE_PRIHLASIT_VZOR
+  | typeof EXPEDICE_ODHLASIT_VZOR
+  | typeof EXPEDICE_UZAVRIT_VZOR;
+
+/**
+ * Hranice pro vzory Kroku 2 (bez rozlišení metody — přísnější z dvojice).
+ * Přesná metoda + cesta viz MATICE_EXPEDICE (POST/PATCH/DELETE detailu
+ * je ADMIN, GET detailu je PUBLIC).
+ */
+export const PRISTUP_KROK2: Record<Krok2Cesta, AuthRole | "PUBLIC"> = {
+  [EXPEDICE_DETAIL_VZOR]: "PUBLIC",
+  [EXPEDICE_UCASTNICI_VZOR]: "USER",
+  [EXPEDICE_PRIHLASIT_VZOR]: "USER",
+  [EXPEDICE_ODHLASIT_VZOR]: "USER",
+  [EXPEDICE_UZAVRIT_VZOR]: "ADMIN",
+} as const;
+
+export type ExpediceMetoda = "GET" | "POST" | "PATCH" | "DELETE";
+
+export interface MaticeRadek {
+  metoda: ExpediceMetoda;
+  cesta: string;
+  kdo: AuthRole | "PUBLIC";
+  uspech: string;
+}
+
+/**
+ * Matice oprávnění Kroku 2 (metoda + cesta → kdo smí).
+ * ADMIN smí vše; USER jen čtení detailu/seznamu + vlastní účast;
+ * nepřihlášený jen PUBLIC. Middleware kontroluje metodu i vzor.
+ */
+export const MATICE_EXPEDICE: readonly MaticeRadek[] = [
+  {
+    metoda: "GET",
+    cesta: EXPEDITIONS_PATH,
+    kdo: "PUBLIC",
+    uspech: "200 + ExpediceListResponse (?stav=proběhlá = historie)",
+  },
+  {
+    metoda: "POST",
+    cesta: EXPEDITIONS_PATH,
+    kdo: "ADMIN",
+    uspech: "201 + VytvoritExpediciResponse",
+  },
+  {
+    metoda: "GET",
+    cesta: EXPEDICE_DETAIL_VZOR,
+    kdo: "PUBLIC",
+    uspech: "200 + ExpediceDetailResponse",
+  },
+  {
+    metoda: "PATCH",
+    cesta: EXPEDICE_DETAIL_VZOR,
+    kdo: "ADMIN",
+    uspech: "200 + UpravitExpediciResponse",
+  },
+  {
+    metoda: "DELETE",
+    cesta: EXPEDICE_DETAIL_VZOR,
+    kdo: "ADMIN",
+    uspech: "200 + SmazatExpediciResponse",
+  },
+  {
+    metoda: "GET",
+    cesta: EXPEDICE_UCASTNICI_VZOR,
+    kdo: "USER",
+    uspech: "200 + UcastniciListResponse",
+  },
+  {
+    metoda: "POST",
+    cesta: EXPEDICE_PRIHLASIT_VZOR,
+    kdo: "USER",
+    uspech: "201 + PrihlasitNaVypravuResponse",
+  },
+  {
+    metoda: "DELETE",
+    cesta: EXPEDICE_ODHLASIT_VZOR,
+    kdo: "USER",
+    uspech: "200 + OdhlasitResponse (idempotentní)",
+  },
+  {
+    metoda: "PATCH",
+    cesta: EXPEDICE_UZAVRIT_VZOR,
+    kdo: "ADMIN",
+    uspech: "200 + UzavritVypravuResponse (stav → proběhlá)",
+  },
+] as const;
+
 /**
  * Rozhodne přístup: ADMIN smí vše, USER smí vše kromě ADMIN-only,
  * nepřihlášený jen PUBLIC. Validace patří na hranici (middleware).
@@ -431,3 +745,76 @@ export function smiNaEndpoint(
   if (pozadavek === "USER") return true;
   return authRole === "ADMIN";
 }
+
+/* ------------------------------------------------------------------ */
+/* 9) Krok 6 — Fotky k uzavřené výpravě (minimum Fáze 2: URL režim).    */
+/* Storage rozhodnutí (src/config/storage.ts): žádný Cloudinary /      */
+/* Supabase klíč není → admin vkládá veřejnou https:// URL + popis,     */
+/* server ukládá jen URL do `photos` (nikdy blob). Binární upload       */
+/* (Neon Object Storage, bucket `expedition-photos`) přijde později     */
+/* přes stejné `PhotkyPath` endpointy — kontrakt se nemění, jen         */
+/* `zdroj` přibude `"upload"`.                                          */
+/* Matice: GET = PUBLIC (náhled v modalu/historii čte každý),           */
+/* POST + DELETE detailu = ADMIN. Zápis jen u `stav: "proběhlá"`,       */
+/* jinak 409 VYPRAVA_UZAVRENA (stejný kód jako přihláška na proběhlou). */
+/* Chyby vždy jen `ApiErrorResponse`. Aditivní, nic se nepřejmenovává.  */
+/* ------------------------------------------------------------------ */
+
+export const EXPEDICE_FOTKY_VZOR = "/api/expeditions/:id/fotky" as const;
+export const EXPEDICE_FOTKA_DETAIL_VZOR =
+  "/api/expeditions/:id/fotky/:fotkaId" as const;
+
+/** Staví URL seznamu / přidání fotky: `/api/expeditions/xxx/fotky`. */
+export function fotkyPath(id: string): `/api/expeditions/${string}/fotky` {
+  return `/api/expeditions/${id}/fotky`;
+}
+
+/** Staví URL smazání jedné fotky. */
+export function fotkaDetailPath(
+  id: string,
+  fotkaId: string,
+): `/api/expeditions/${string}/fotky/${string}` {
+  return `/api/expeditions/${id}/fotky/${fotkaId}`;
+}
+
+/** Jedna fotka v kronice — kopie řádku `photos` (url, ne blob). */
+export interface ApiFotka {
+  id: string;
+  expeditionId: string;
+  /** Veřejná https:// URL (dnes vložená adminem, později z bucketu). */
+  url: string;
+  popis: string;
+  createdAt: string;
+}
+
+/** Seznam fotek pro modal/historii (PUBLIC — čte i nepřihlášený). */
+export interface FotkyListResponse {
+  fotky: ApiFotka[];
+}
+
+/** Přidání fotky (jen ADMIN, jen proběhlá). Úspěch → 201. */
+export interface PridatFotkuRequest {
+  url: string;
+  /** Nepovinný; max 500 znaků. Prázdný řetězec → "". */
+  popis?: string;
+}
+
+export interface PridatFotkuResponse {
+  fotka: ApiFotka;
+}
+
+/** Smazání fotky (jen ADMIN). Idempotentní: opakovaný DELETE → 404. */
+export interface SmazatFotkuResponse {
+  ok: true;
+}
+
+/** Vzory cest Kroku 6 pro matici oprávnění (odděleně jako Krok 2). */
+export type Krok6Cesta =
+  | typeof EXPEDICE_FOTKY_VZOR
+  | typeof EXPEDICE_FOTKA_DETAIL_VZOR;
+
+/** Hranice Kroku 6: čtení PUBLIC, zápis ADMIN. */
+export const PRISTUP_KROK6: Record<Krok6Cesta, AuthRole | "PUBLIC"> = {
+  [EXPEDICE_FOTKY_VZOR]: "PUBLIC",
+  [EXPEDICE_FOTKA_DETAIL_VZOR]: "ADMIN",
+} as const;

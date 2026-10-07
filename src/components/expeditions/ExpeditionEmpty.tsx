@@ -4,7 +4,7 @@ export default function ExpeditionEmpty(): JSX.Element {
   return (
     <div
       role="status"
-      className="flex flex-col items-center rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-14 text-center shadow-denik"
+      className="flex flex-col items-center rounded-3xl border-2 border-dashed border-inkoust/30 bg-karta px-6 py-14 text-center shadow-denik"
     >
       <div
         aria-hidden="true"
@@ -25,8 +25,8 @@ export default function ExpeditionEmpty(): JSX.Element {
         </svg>
       </div>
 
-      <h2 className="mt-5 text-lg font-bold tracking-tight">
-        Žádné nadcházející výpravy
+      <h2 className="font-galerie mt-5 text-2xl italic">
+        Prázdný sál galerie
       </h2>
       <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
         Seznam je zatím prázdný — vedoucí sem brzy připíše první záznam.

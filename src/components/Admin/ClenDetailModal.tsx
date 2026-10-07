@@ -549,7 +549,7 @@ function ClenUpravForm({ clen, onZrusit, onUlozit }: ClenUpravFormProps): JSX.El
                   checked={zaskrtnuto}
                   onChange={() => prepniRoli(info.id)}
                   aria-describedby={chyby.role === undefined ? undefined : roleChybaId}
-                  className="mt-1 h-5 w-5 shrink-0 accent-[#2D6A4F]"
+                  className="mt-1 h-5 w-5 shrink-0 accent-smrk"
                 />
                 <span className="min-w-0">
                   <span className="block text-sm font-bold">{info.nazev}</span>

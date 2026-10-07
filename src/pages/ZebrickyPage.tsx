@@ -6,26 +6,36 @@ export default function ZebrickyPage(): JSX.Element {
   const { user, isLoading } = useAuth();
   const odhlasen = !isLoading && user === null;
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
-      <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Žebříčky
+    <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6 sm:px-6 sm:pt-10">
+      <div className="flex items-center justify-between gap-3 text-[12px] font-medium text-inkoust/60">
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className="tabular-nums">02</span>
+          <span>Síň slávy</span>
+        </span>
+        <span>ExApp · podzim 2026</span>
+      </div>
+
+      <header className="pt-4 text-center">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-inkoust/55">
+          Exkluzivní přehled oddílu
+        </p>
+        <h1 className="font-galerie mx-auto mt-2 max-w-3xl text-[clamp(2.4rem,7vw,4.6rem)] leading-[0.95]">
+          Žebříčky <span className="italic font-light">členů</span>
         </h1>
-        <p className="mt-2 max-w-2xl text-base text-inkoust/75">
+        <p className="mx-auto mt-3 max-w-xl text-[15px] text-inkoust/70">
           Přehled nejaktivnějších členů podle účasti a kilometrů. Žebříček se
           doplní ve Fázi 4 po napojení Stravy.
         </p>
       </header>
 
-      <div className="pt-6">
+      <div className="pt-8">
         <div
           role="status"
-          className="flex flex-col items-center rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-14 text-center shadow-denik"
+          className="flex flex-col items-center rounded-3xl border-2 border-dashed border-inkoust/30 bg-karta px-6 py-14 text-center shadow-denik"
         >
           <div
             aria-hidden="true"
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-inkoust bg-papir shadow-razitko"
+            className="oblouk-maly flex h-20 w-16 items-center justify-center border-2 border-inkoust bg-papir shadow-razitko"
           >
             <svg
               viewBox="0 0 24 24"
@@ -41,16 +51,16 @@ export default function ZebrickyPage(): JSX.Element {
               <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
             </svg>
           </div>
-          <h2 className="mt-5 text-lg font-bold tracking-tight">
+          <h2 className="font-galerie mt-5 text-3xl italic">
             Zatím tu není co hodnotit
           </h2>
-          <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
+          <p className="mt-2 max-w-sm text-sm leading-relaxed text-inkoust/70">
             Jakmile uzavřeme první výpravy, objeví se tu pořadí
             nejaktivnějších členů.
           </p>
           <p
             aria-hidden="true"
-            className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70"
+            className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/60"
           >
             exapp · žebříčky se chystají
           </p>
@@ -58,25 +68,25 @@ export default function ZebrickyPage(): JSX.Element {
         {odhlasen && (
           <section
             aria-labelledby="zebricky-prihlaseni"
-            className="mt-5 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik"
+            className="mt-5 rounded-3xl border-2 border-inkoust bg-inkoust p-6 text-center text-papir shadow-denik"
           >
-            <h2 id="zebricky-prihlaseni" className="text-base font-bold tracking-tight">
+            <h2 id="zebricky-prihlaseni" className="font-galerie text-2xl italic">
               Chceš být v žebříčku?
             </h2>
-            <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-papir/75">
               Přihlas se, nebo se zaregistruj s kódem od vedoucí — pak se ti
               započítá účast na výpravách.
             </p>
-            <div className="mt-3 flex flex-col justify-center gap-2 sm:flex-row">
+            <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
               <Link
                 to="/login"
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-jantar px-7 py-2 text-sm font-bold text-papir"
               >
                 Přihlásit se
               </Link>
               <Link
                 to="/register"
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-papir/40 px-7 py-2 text-sm font-semibold text-papir transition-colors hover:border-papir"
               >
                 Registrace s kódem
               </Link>

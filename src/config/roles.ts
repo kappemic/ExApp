@@ -57,12 +57,12 @@ export interface RoleStyle {
   border: string;
 }
 
-const PAPIR = "#FBF8F1";
-const INKOUST = "#1A2E22";
-const SMRK = "#2D6A4F";
-const LINKA = "#DCE7DE";
-const JANTAR = "#A05E0C";
-const MECH = "#5C6B60";
+const PAPIR = "#F1EBDD";
+const INKOUST = "#211D14";
+const SMRK = "#2E4438";
+const LINKA = "#D9D1BE";
+const JANTAR = "#E4571D";
+const MECH = "#7A7668";
 
 /**
  * Vrátí barvy badge pro danou roli z exapp tokenů.
