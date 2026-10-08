@@ -14,8 +14,12 @@ export const expeditions = pgTable("expeditions", {
   nazev: text("nazev").notNull(),
   /** DATE → drizzle vrací string YYYY-MM-DD (připraveno pro API). */
   datum: date("datum").notNull(),
+  /** Konec vícedenní výpravy (od–do); NULL = jednodenní. */
+  datumDo: date("datum_do"),
   sraz: text("sraz").notNull(),
   popis: text("popis").notNull().default(""),
+  /** Nepovinný odkaz na naplánovanou trasu (mapy.com) — "" = bez odkazu. */
+  trasaOdkaz: text("trasa_odkaz").notNull().default(""),
   kapacitaCelkem: integer("kapacita_celkem").notNull(),
   kapacitaPrihlaseno: integer("kapacita_prihlaseno").notNull().default(0),
   stav: text("stav").notNull(),
