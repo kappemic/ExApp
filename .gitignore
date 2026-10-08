@@ -3,4 +3,7 @@
 !.env.example
 node_modules/
 opencode.json
+dist/
 dist-server/
+_tmp-*
+logs/
