@@ -43,6 +43,7 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
   - Pro Admina obsahuje modal navíc možnost **Upravit** a **Odstranit**.
 - **Uzavření & Vyhodnocení výpravy (Po akci):**
   - Admin vybere reálné účastníky, kteří na výpravě byli.
+  - I po uzavření (stav „proběhlá“) může admin dodatečně přidat či odebrat účastníka (POST / DELETE ucastnici/:id, bez kontroly kapacity).
   - Admin nahraje fotografie z akce.
   - Propojení se Stravou: Výprava se spáruje s poslední aktivitou ze Stravy (pokud ještě není přiřazena), čímž se automaticky doplní vzdálenost (km), převýšení a trasa.
 
