@@ -461,8 +461,10 @@ export function validujUpravuClena(
 /* Krok 3b — Expedice CRUD + uzavření (validace na hranici).            */
 /* Pravidla kopírují kontrakt (VALIDACE + VALIDACNI_ZPRAVY):            */
 /* nazev 3–120, datum YYYY-MM-DD (minulost → 422, historie vzniká jen   */
-/* uzavřením), sraz 3–120, popis max 2000 ("" = nevyplněn), kapacita    */
-/* 1–100. PATCH je parciální — `stav` tudy nikdy nejde (jen /uzavrit).  */
+/* uzavřením), datumDo YYYY-MM-DD | prázdné (konec od–do, >= datum),     */
+/* sraz 3–120, popis max 2000 ("" = nevyplněn), kapacita                 */
+/* 0–100 (0 / chybějící = bez omezení). PATCH je parciální — `stav`     */
+/* tudy nikdy nejde (jen /uzavrit).                                      */
 /* ------------------------------------------------------------------ */
 
 const DATUM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -531,8 +533,45 @@ function overDatumExpedice(chyby: ChybyPoli, hodnota: unknown): string | null {
     pridej(
       chyby,
       "datum",
-      "Datum nesmí být v minulosti — historie vzniká jen uzavřením.",
+      VALIDACNI_ZPRAVY.expediceDatumMinulost,
     );
+    return null;
+  }
+  return ciste;
+}
+
+/**
+ * Nepovinný konec vícedenní výpravy (od–do).
+ * Nezadané (undefined/null/"") → "" (jednodenní, volající mapuje na NULL).
+ * `null` je jen chyba. Rozsah proti `datumOd` (null = nekontrolovat —
+ * dopočítá route nad DB).
+ */
+function overDatumDoExpedice(
+  chyby: ChybyPoli,
+  hodnota: unknown,
+  datumOd: string | null,
+): string | null {
+  if (hodnota === undefined || hodnota === null) return "";
+  if (typeof hodnota !== "string") {
+    pridej(chyby, "datumDo", VALIDACNI_ZPRAVY.expediceDatumDoNeplatne);
+    return null;
+  }
+  const cisty = hodnota.trim();
+  if (cisty.length === 0) return "";
+  const ciste = cisty.slice(0, 10);
+  if (!DATUM_REGEX.test(ciste)) {
+    pridej(chyby, "datumDo", VALIDACNI_ZPRAVY.expediceDatumDoNeplatne);
+    return null;
+  }
+  const rok = Number(ciste.slice(0, 4));
+  const mesic = Number(ciste.slice(5, 7));
+  const den = Number(ciste.slice(8, 10));
+  if (!jeRealneDatum(rok, mesic, den)) {
+    pridej(chyby, "datumDo", VALIDACNI_ZPRAVY.expediceDatumDoNeplatne);
+    return null;
+  }
+  if (datumOd !== null && ciste < datumOd) {
+    pridej(chyby, "datumDo", VALIDACNI_ZPRAVY.expediceDatumDoPredZacatkem);
     return null;
   }
   return ciste;
@@ -570,10 +609,41 @@ function overPopisExpedice(chyby: ChybyPoli, hodnota: unknown): string | null {
   return cisty;
 }
 
+/** Nepovinný odkaz na trasu (mapy.com); prázdný řetězec → "". */
+function overTrasaOdkazExpedice(
+  chyby: ChybyPoli,
+  hodnota: unknown,
+): string | null {
+  if (hodnota === undefined || hodnota === null) return "";
+  if (typeof hodnota !== "string") {
+    pridej(chyby, "trasaOdkaz", VALIDACNI_ZPRAVY.expediceTrasaOdkazNeplatny);
+    return null;
+  }
+  const cisty = hodnota.trim();
+  if (cisty.length === 0) return "";
+  if (cisty.length > VALIDACE.expediceTrasaOdkazMaxDelka) {
+    pridej(chyby, "trasaOdkaz", VALIDACNI_ZPRAVY.expediceTrasaOdkazDlouhy);
+    return null;
+  }
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(cisty);
+  } catch {
+    parsed = null;
+  }
+  if (parsed === null || parsed.protocol !== "https:") {
+    pridej(chyby, "trasaOdkaz", VALIDACNI_ZPRAVY.expediceTrasaOdkazNeplatny);
+    return null;
+  }
+  return parsed.toString();
+}
+
+/** 0–100, 0 = bez omezení. Chybějící údaj se normalizuje na 0. */
 function overKapacituExpedice(
   chyby: ChybyPoli,
   hodnota: unknown,
 ): number | null {
+  if (hodnota === undefined || hodnota === null) return 0;
   if (
     typeof hodnota !== "number" ||
     !Number.isInteger(hodnota) ||
@@ -589,8 +659,11 @@ function overKapacituExpedice(
 export interface CistaNovaExpedice {
   nazev: string;
   datum: string;
+  /** Konec od–do; null = jednodenní. */
+  datumDo: string | null;
   sraz: string;
   popis: string;
+  trasaOdkaz: string;
   kapacitaCelkem: number;
 }
 
@@ -608,8 +681,14 @@ export function validujVytvoreniExpedice(
   }
   const nazev = overNazevExpedice(chyby, ctiString(telo, "nazev"));
   const datum = overDatumExpedice(chyby, ctiString(telo, "datum"));
+  const datumDoRaw = overDatumDoExpedice(
+    chyby,
+    ctiString(telo, "datumDo"),
+    datum,
+  );
   const sraz = overSrazExpedice(chyby, ctiString(telo, "sraz"));
   const popis = overPopisExpedice(chyby, ctiString(telo, "popis"));
+  const trasaOdkaz = overTrasaOdkazExpedice(chyby, ctiString(telo, "trasaOdkaz"));
   const kapacitaCelkem = overKapacituExpedice(
     chyby,
     ctiString(telo, "kapacitaCelkem"),
@@ -617,8 +696,10 @@ export function validujVytvoreniExpedice(
   if (
     nazev === null ||
     datum === null ||
+    datumDoRaw === null ||
     sraz === null ||
     popis === null ||
+    trasaOdkaz === null ||
     kapacitaCelkem === null ||
     Object.keys(chyby).length > 0
   ) {
@@ -626,7 +707,15 @@ export function validujVytvoreniExpedice(
   }
   return {
     uspech: true,
-    data: { nazev, datum, sraz, popis, kapacitaCelkem },
+    data: {
+      nazev,
+      datum,
+      datumDo: datumDoRaw === "" ? null : datumDoRaw,
+      sraz,
+      popis,
+      trasaOdkaz,
+      kapacitaCelkem,
+    },
     chybyPoli: {},
   };
 }
@@ -634,8 +723,11 @@ export function validujVytvoreniExpedice(
 export interface CistaUpravaExpedice {
   nazev?: string;
   datum?: string;
+  /** Konec od–do; null = zrušit konec (jednodenní). */
+  datumDo?: string | null;
   sraz?: string;
   popis?: string;
+  trasaOdkaz?: string;
   kapacitaCelkem?: number;
 }
 
@@ -670,6 +762,16 @@ export function validujUpravuExpedice(
     const datum = overDatumExpedice(chyby, ctiString(telo, "datum"));
     if (datum !== null) data.datum = datum;
   }
+  if (Object.hasOwn(telo, "datumDo")) {
+    // Rozsah proti novému začátku ze stejného patche; zbytek dopočítá
+    // route nad existujícím řádkem.
+    const datumDoRaw = overDatumDoExpedice(
+      chyby,
+      ctiString(telo, "datumDo"),
+      data.datum ?? null,
+    );
+    if (datumDoRaw !== null) data.datumDo = datumDoRaw === "" ? null : datumDoRaw;
+  }
   if (Object.hasOwn(telo, "sraz")) {
     const sraz = overSrazExpedice(chyby, ctiString(telo, "sraz"));
     if (sraz !== null) data.sraz = sraz;
@@ -677,6 +779,13 @@ export function validujUpravuExpedice(
   if (Object.hasOwn(telo, "popis")) {
     const popis = overPopisExpedice(chyby, ctiString(telo, "popis"));
     if (popis !== null) data.popis = popis;
+  }
+  if (Object.hasOwn(telo, "trasaOdkaz")) {
+    const trasaOdkaz = overTrasaOdkazExpedice(
+      chyby,
+      ctiString(telo, "trasaOdkaz"),
+    );
+    if (trasaOdkaz !== null) data.trasaOdkaz = trasaOdkaz;
   }
   if (Object.hasOwn(telo, "kapacitaCelkem")) {
     const kapacita = overKapacituExpedice(
@@ -761,6 +870,82 @@ export function validujUzavreni(
 }
 
 /* ------------------------------------------------------------------ */
+/* Dodatečná správa účastníků po uzavření — varianta A (validace hranice).*/
+/* POST /api/expeditions/:id/ucastnici (jen ADMIN, i po proběhlá).      */
+/* Právě jedna identita userId XOR clenId; status default ucastnil_se.  */
+/* Existenci userId/clenId hlídá route nad DB (404), duplicitu UNIQUE   */
+/* (409 UZ_PRIHLASEN) — tady jen tvar. Kapacita se nekontroluje.        */
+/* ------------------------------------------------------------------ */
+
+export interface CistyUcastnikPoUzavreni {
+  userId: string | null;
+  clenId: string | null;
+  status: DochazkovyStatus;
+}
+
+function ctiIdentituUcastnika(hodnota: unknown): string | null {
+  if (hodnota === undefined || hodnota === null) return null;
+  if (typeof hodnota !== "string") return null;
+  const cista = hodnota.trim();
+  return cista.length === 0 ? null : cista;
+}
+
+/**
+ * Validace POST /api/expeditions/:id/ucastnici — tvar dle kontraktu §10.
+ * Bez identity → ucastnik: [ucastnikIdentitaChybi], obojí → ucastnik:
+ * [ucastnikIdentitaOboji], špatný status → status: [ucastnikStatusNeplatny].
+ */
+export function validujPridaniUcastnikaPoUzavreni(
+  telo: unknown,
+): VysledekValidace<CistyUcastnikPoUzavreni> {
+  const chyby: ChybyPoli = {};
+  if (!jeRecord(telo)) {
+    return {
+      uspech: false,
+      data: null,
+      chybyPoli: { telo: ["Požadavek musí být JSON objekt."] },
+    };
+  }
+  const maUserId = Object.hasOwn(telo, "userId");
+  const maClenId = Object.hasOwn(telo, "clenId");
+  const userId =
+    maUserId || ctiString(telo, "userId") !== undefined
+      ? ctiIdentituUcastnika(ctiString(telo, "userId"))
+      : null;
+  const clenId =
+    maClenId || ctiString(telo, "clenId") !== undefined
+      ? ctiIdentituUcastnika(ctiString(telo, "clenId"))
+      : null;
+  if (maUserId && typeof ctiString(telo, "userId") !== "string") {
+    pridej(chyby, "ucastnik", VALIDACNI_ZPRAVY.ucastnikIdentitaChybi);
+  } else if (maClenId && typeof ctiString(telo, "clenId") !== "string") {
+    pridej(chyby, "ucastnik", VALIDACNI_ZPRAVY.ucastnikIdentitaChybi);
+  } else if (userId === null && clenId === null) {
+    pridej(chyby, "ucastnik", VALIDACNI_ZPRAVY.ucastnikIdentitaChybi);
+  } else if (userId !== null && clenId !== null) {
+    pridej(chyby, "ucastnik", VALIDACNI_ZPRAVY.ucastnikIdentitaOboji);
+  }
+
+  let status: DochazkovyStatus = "ucastnil_se";
+  if (Object.hasOwn(telo, "status")) {
+    const raw: unknown = ctiString(telo, "status");
+    if (
+      typeof raw !== "string" ||
+      !(DOCHAZKOVE_STAVY as readonly string[]).includes(raw)
+    ) {
+      pridej(chyby, "status", VALIDACNI_ZPRAVY.ucastnikStatusNeplatny);
+    } else {
+      status = raw as DochazkovyStatus;
+    }
+  }
+
+  if (Object.keys(chyby).length > 0) {
+    return { uspech: false, data: null, chybyPoli: chyby };
+  }
+  return { uspech: true, data: { userId, clenId, status }, chybyPoli: {} };
+}
+
+/* ------------------------------------------------------------------ */
 /* Krok 6 — Fotka k proběhlé výpravě (URL režim, validace na hranici).  */
 /* `url` musí být https:// (max 2048), `popis` max 500 ("" = bez popisu).*/
 /* Příslušnost k proběhlé výpravě hlídá route nad DB (409               */
@@ -828,4 +1013,42 @@ export function validujFotku(telo: unknown): VysledekValidace<CistaFotka> {
     return { uspech: false, data: null, chybyPoli: chyby };
   }
   return { uspech: true, data: { url, popis }, chybyPoli: {} };
+}
+
+/* ------------------------------------------------------------------ */
+/* PATCH /api/users/:id — úprava primární role (jen ADMIN).              */
+/* `role` je jedna hodnota z roles.ts (DB users.role CHECK kopíruje     */
+/* stejných 5 hodnot). Kombinace se neřeší — jedna hodnota je vždy      */
+/* validní, stačí isKnownRole.                                          */
+/* ------------------------------------------------------------------ */
+
+export interface CistaUpravaRoleUzivatele {
+  role: Role;
+}
+
+/**
+ * Validace PATCH /api/users/:id — tělo musí nést právě `role`.
+ * Neznámá / chybějící role → chyby.role = [česká hláška] (422).
+ */
+export function validujUpravuRoleUzivatele(
+  telo: unknown,
+): VysledekValidace<CistaUpravaRoleUzivatele> {
+  const chyby: ChybyPoli = {};
+  if (!jeRecord(telo)) {
+    return {
+      uspech: false,
+      data: null,
+      chybyPoli: { telo: ["Požadavek musí být JSON objekt."] },
+    };
+  }
+  const raw: unknown = ctiString(telo, "role");
+  if (typeof raw !== "string" || !isKnownRole(raw)) {
+    pridej(
+      chyby,
+      "role",
+      "Vyber platnou roli: admin, člen, aktivní člen, člen rady, nebo vedení.",
+    );
+    return { uspech: false, data: null, chybyPoli: chyby };
+  }
+  return { uspech: true, data: { role: raw }, chybyPoli: {} };
 }

@@ -275,11 +275,16 @@ export interface ApiExpedice {
   nazev: string;
   /** Datum YYYY-MM-DD (DB DATE → ISO slice). */
   datum: string;
+  /** Konec vícedenní výpravy (od–do); null = jednodenní. */
+  datumDo: string | null;
   /** Místo a čas srazu. */
   sraz: string;
   popis: string;
+  /** Odkaz na naplánovanou trasu (mapy.com) — "" = bez odkazu. */
+  trasaOdkaz: string;
   kapacita: {
     prihlaseno: number;
+    /** Celkem míst; 0 = bez omezení. */
     celkem: number;
   };
   stav: StavVypravy;
@@ -347,7 +352,8 @@ export const VALIDACE = {
   expediceSrazMinDelka: 3,
   expediceSrazMaxDelka: 120,
   expedicePopisMaxDelka: 2000,
-  expediceKapacitaMin: 1,
+  expediceTrasaOdkazMaxDelka: 2048,
+  expediceKapacitaMin: 0,
   expediceKapacitaMax: 100,
 } as const;
 
@@ -373,13 +379,21 @@ export const VALIDACNI_ZPRAVY = {
   expediceNazevDlouhy: "Název výpravy může mít nejvýš 120 znaků.",
   expediceDatumPovinne: "Zadej datum výpravy.",
   expediceDatumNeplatne: "Datum musí být ve tvaru RRRR-MM-DD.",
+  expediceDatumMinulost: "Datum nesmí být v minulosti — historie vzniká jen uzavřením.",
+  expediceDatumDoNeplatne: "Koncové datum musí být ve tvaru RRRR-MM-DD.",
+  expediceDatumDoPredZacatkem: "Konec výpravy nesmí být před jejím začátkem.",
   expediceSrazPovinny: "Zadej místo a čas srazu.",
   expediceSrazKratky: "Sraz musí mít aspoň 3 znaky.",
   expediceSrazDlouhy: "Sraz může mít nejvýš 120 znaků.",
   expedicePopisDlouhy: "Popis může mít nejvýš 2000 znaků.",
-  expediceKapacitaNeplatna: "Kapacita musí být číslo od 1 do 100.",
+  expediceTrasaOdkazDlouhy: "Odkaz na trasu může mít nejvýš 2048 znaků.",
+  expediceTrasaOdkazNeplatny: "Odkaz na trasu musí začínat https://.",
+  expediceKapacitaNeplatna: "Kapacita musí být číslo od 0 do 100 (0 = bez omezení).",
   dochazkaPrazdna: "Vyber aspoň jednoho účastníka docházky.",
   dochazkaNeznamyUcastnik: "Docházka obsahuje neznámého účastníka.",
+  ucastnikIdentitaChybi: "Vyber člena — zadej userId, nebo clenId.",
+  ucastnikIdentitaOboji: "Zadej právě jednu identitu — userId, nebo clenId, ne obojí.",
+  ucastnikStatusNeplatny: "Status musí být „ucastnil_se“, nebo „omluven“.",
 } as const;
 
 /**
@@ -455,6 +469,9 @@ export const EXPEDICE_PRIHLASIT_VZOR =
 export const EXPEDICE_ODHLASIT_VZOR =
   "/api/expeditions/:id/odhlasit" as const;
 export const EXPEDICE_UZAVRIT_VZOR = "/api/expeditions/:id/uzavrit" as const;
+/** Detail jednoho účastníka pro dodatečnou správu po uzavření (varianta A, aditivní). */
+export const EXPEDICE_UCASTNIK_DETAIL_VZOR =
+  "/api/expeditions/:id/ucastnici/:ucastnikId" as const;
 
 /** Staví URL detailu: `/api/expeditions/sumava-trijezerska-slat`. */
 export function expediceDetailPath(id: string): `/api/expeditions/${string}` {
@@ -530,11 +547,15 @@ export interface VytvoritExpediciRequest {
   nazev: string;
   /** Datum YYYY-MM-DD. Minulost → 422 (historie vzniká jen uzavřením). */
   datum: string;
+  /** Konec vícedenní výpravy (od–do); prázdné/null = jednodenní. Musí být >= datum. */
+  datumDo?: string | null;
   /** Místo a čas srazu. 3–120 znaků. */
   sraz: string;
   /** Nepovinný; max 2000 znaků. Prázdný řetězec hranice normalizuje na "". */
   popis?: string;
-  /** 1–100. */
+  /** Nepovinný odkaz na trasu (mapy.com); max 2048, https://. "" = bez odkazu. */
+  trasaOdkaz?: string;
+  /** 0–100, 0 = bez omezení (prázdné se normalizuje na 0). */
   kapacitaCelkem: number;
 }
 
@@ -544,14 +565,18 @@ export interface VytvoritExpediciResponse {
 
 /**
  * Parciální update (jen ADMIN, PATCH sémantika — jen poslaná pole se mění).
- * Snížení `kapacitaCelkem` pod aktuální `prihlaseno` → 422 VALIDATION_ERROR.
+ * Snížení `kapacitaCelkem` pod aktuální `prihlaseno` → 422 VALIDATION_ERROR
+ * (kromě 0 = bez omezení).
  * Změna `stav` tudy NEJDE — proběhlá vzniká jen PATCH /uzavrit.
  */
 export interface UpravitExpediciRequest {
   nazev?: string;
   datum?: string;
+  /** Konec od–do; null/"" = zrušit konec (jednodenní). */
+  datumDo?: string | null;
   sraz?: string;
   popis?: string;
+  trasaOdkaz?: string;
   kapacitaCelkem?: number;
 }
 
@@ -639,18 +664,22 @@ export const PRISTUP: Record<ChranenaCesta, AuthRole | "PUBLIC"> = {
   [CLEN_DETAIL_VZOR]: "ADMIN",
 } as const;
 
-/** Vzory cest Kroku 2 (detail, účast, uzavření). */
+/** Vzory cest Kroku 2 (detail, účast, uzavření + dodatečná správa po uzavření). */
 export type Krok2Cesta =
   | typeof EXPEDICE_DETAIL_VZOR
   | typeof EXPEDICE_UCASTNICI_VZOR
   | typeof EXPEDICE_PRIHLASIT_VZOR
   | typeof EXPEDICE_ODHLASIT_VZOR
-  | typeof EXPEDICE_UZAVRIT_VZOR;
+  | typeof EXPEDICE_UZAVRIT_VZOR
+  | typeof EXPEDICE_UCASTNIK_DETAIL_VZOR;
 
 /**
  * Hranice pro vzory Kroku 2 (bez rozlišení metody — přísnější z dvojice).
  * Přesná metoda + cesta viz MATICE_EXPEDICE (POST/PATCH/DELETE detailu
  * je ADMIN, GET detailu je PUBLIC).
+ * Výjimka s rozlišením metody: `EXPEDICE_UCASTNICI_VZOR` je GET = USER,
+ * ale POST na stejné cestě (dodatečné přidání po uzavření, varianta A)
+ * je ADMIN — viz MATICE_EXPEDICE. Zápis do vzoru se proto řídí metodou.
  */
 export const PRISTUP_KROK2: Record<Krok2Cesta, AuthRole | "PUBLIC"> = {
   [EXPEDICE_DETAIL_VZOR]: "PUBLIC",
@@ -658,6 +687,7 @@ export const PRISTUP_KROK2: Record<Krok2Cesta, AuthRole | "PUBLIC"> = {
   [EXPEDICE_PRIHLASIT_VZOR]: "USER",
   [EXPEDICE_ODHLASIT_VZOR]: "USER",
   [EXPEDICE_UZAVRIT_VZOR]: "ADMIN",
+  [EXPEDICE_UCASTNIK_DETAIL_VZOR]: "ADMIN",
 } as const;
 
 export type ExpediceMetoda = "GET" | "POST" | "PATCH" | "DELETE";
@@ -728,6 +758,20 @@ export const MATICE_EXPEDICE: readonly MaticeRadek[] = [
     cesta: EXPEDICE_UZAVRIT_VZOR,
     kdo: "ADMIN",
     uspech: "200 + UzavritVypravuResponse (stav → proběhlá)",
+  },
+  {
+    metoda: "POST",
+    cesta: EXPEDICE_UCASTNICI_VZOR,
+    kdo: "ADMIN",
+    uspech:
+      "201 + PridatUcastnikaPoUzavreniResponse (funguje i po proběhlá, kapacita se nekontroluje)",
+  },
+  {
+    metoda: "DELETE",
+    cesta: EXPEDICE_UCASTNIK_DETAIL_VZOR,
+    kdo: "ADMIN",
+    uspech:
+      "200 + OdebratUcastnikaResponse (funguje i po proběhlá, opakovaný DELETE → 404)",
   },
 ] as const;
 
@@ -817,4 +861,146 @@ export type Krok6Cesta =
 export const PRISTUP_KROK6: Record<Krok6Cesta, AuthRole | "PUBLIC"> = {
   [EXPEDICE_FOTKY_VZOR]: "PUBLIC",
   [EXPEDICE_FOTKA_DETAIL_VZOR]: "ADMIN",
+} as const;
+
+/* ------------------------------------------------------------------ */
+/* 10) Dodatečná správa účastníků po uzavření — varianta A (aditivní)   */
+/* Jen ADMIN. Funguje i u `stav: "proběhlá"` (na rozdíl od             */
+/* POST /prihlasit, který proběhlou odmítá 409 VYPRAVA_UZAVRENA).       */
+/* Kapacita se po uzavření NEKONTROLUJE — nikdy 409 KAPACITA_PLNA.      */
+/* Nic se nepřejmenovává; stávající vzory, matice i hlášky zůstávají.   */
+/* Chyby vždy jen `ApiErrorResponse`. Validace na hranici (API route),  */
+/* vnitřní kód typům věří (skill api-and-interface-design §3).          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Dodatečné přidání účastníka po uzavření (jen ADMIN).
+ * Právě jedna identita: `userId` XOR `clenId` (stejně jako ApiUcastnik
+ * a DB CHECK participants). Bez identity / obojí → 422 VALIDATION_ERROR
+ * (`ucastnik: [ucastnikIdentitaChybi | ucastnikIdentitaOboji]`).
+ * `status` je nepovinný, default `ucastnil_se`; jiná hodnota než
+ * DochazkovyStatus → 422 (`status: [ucastnikStatusNeplatny]`).
+ * Duplicita (stejná identita už evidována) → 409 UZ_PRIHLASEN.
+ * Neznámá výprava → 404 NENALEZENO. Bez session → 401 NEPRIHLASEN,
+ * USER → 403 ZAKAZANO. Úspěch → 201.
+ */
+export interface PridatUcastnikaPoUzavreniRequest {
+  userId?: UserId;
+  clenId?: string;
+  /** Nepovinný; default `ucastnil_se`. */
+  status?: DochazkovyStatus;
+}
+
+export interface PridatUcastnikaPoUzavreniResponse {
+  ucastnik: ApiUcastnik;
+  /** Snapshot hlavičky pro modal (kapacita + stav bez druhého volání). */
+  expedice: ApiExpedice;
+}
+
+/**
+ * Odebrání účastníka po uzavření (jen ADMIN).
+ * Neznámá výprava / neznámé `ucastnikId` → 404 NENALEZENO
+ * (není idempotentní na 200 — opakovaný DELETE stejného id → 404,
+ * stejný vzor jako SmazatFotkuResponse).
+ * Bez session → 401 NEPRIHLASEN, USER → 403 ZAKAZANO. Úspěch → 200.
+ */
+export interface OdebratUcastnikaResponse {
+  ok: true;
+  /** Snapshot hlavičky pro modal po odebrání. */
+  expedice: ApiExpedice;
+}
+
+/** Staví URL dodatečného přidání: `/api/expeditions/xxx/ucastnici` (POST, ADMIN). */
+export function pridatUcastnikaPoUzavreniPath(
+  id: string,
+): `/api/expeditions/${string}/ucastnici` {
+  return `/api/expeditions/${id}/ucastnici`;
+}
+
+/** Staví URL odebrání: `/api/expeditions/xxx/ucastnici/yyy` (DELETE, ADMIN). */
+export function odebratUcastnikaPath(
+  id: string,
+  ucastnikId: string,
+): `/api/expeditions/${string}/ucastnici/${string}` {
+  return `/api/expeditions/${id}/ucastnici/${ucastnikId}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* 11) GET /api/users — seznam uživatelů pro selektor (jen ADMIN, Krok 4) */
+/* Implementováno v server/src/index.ts 1:1 dle kontraktu.              */
+/* Důvod: POST /api/expeditions/:id/ucastnici { userId | clenId } už    */
+/* funguje (varianta A, §10), ale admin UI nemá odkud brát `userId` —   */
+/* chybí jen list uživatelů pro selektor. Aditivní, nic se nepřejmenovává.*/
+/* Hranice: vyžaduje session s authRole === "ADMIN" (stejný guard jako  */
+/* GET /api/clenove — `vyzadujAdmina`). Jinak 401 NEPRIHLASEN (bez       */
+/* session) / 403 ZAKAZANO (USER). Úspěch → 200 + `UsersListResponse`.   */
+/* Tvar je záměrně úzký `UserListItem { id, jmeno, email }` — nikdy      */
+/* hesla ani hashe (stejně jako `ApiUser` nenosí `passwordHash`).        */
+/* `jmeno` je složené z DB `users.jmeno + users.prijmeni` (trim +        */
+/* collapse whitespace, fallback prázdné → email — stejný vzor jako      */
+/* denormalizace v `nactiExpediciSDetailem`). Řazeno e-mailem vzestupně  */
+/* (deterministický selektor, 5 reálných users — bez stránkování;        */
+/* `pagination?: Strankovani` se přidá aditivně, až bude potřeba).       */
+/* Chyby vždy jen `ApiErrorResponse` — nikdy jiný tvar. Validace na      */
+/* hranici není potřeba (GET bez query/body); vnitřní kód typům věří.    */
+/* Idempotence: čisté GET, opakovatelné bez vedlejších účinků.           */
+/* ------------------------------------------------------------------ */
+
+export const USERS_PATH = "/api/users" as const;
+
+/**
+ * Úzký řádek pro admin selektor účastníků.
+ * Na rozdíl od `ApiUser` nenese kontakty / stravaId / čas —
+ * jen to, co selektor a správa členů potřebuje.
+ * `role` je primární DB role (jedna hodnota dle users.role CHECK) —
+ * aditivně přidáno pro AdminClenovePage (filtry tabů + editace).
+ */
+export interface UserListItem {
+  id: UserId;
+  /** Složené „Jméno Příjmení" z DB (fallback prázdné → email). */
+  jmeno: string;
+  email: string;
+  /** Primární DB role — jediná hodnota z `Role` (users.role CHECK). */
+  role: Role;
+}
+
+export interface UsersListResponse {
+  users: UserListItem[];
+}
+
+/* ------------------------------------------------------------------ */
+/* 12) PATCH /api/users/:id — úprava role uživatele (jen ADMIN)         */
+/* Aditivně nad §11: seznam users už nese `role`, tenhle endpoint ji    */
+/* umí změnit. `role` je jedna hodnota (ne pole — DB users.role je      */
+/* TEXT s CHECK na 5 hodnot z roles.ts). Hranice: session s authRole     */
+/* ADMIN, jinak 401 NEPRIHLASEN / 403 ZAKAZANO. Neznámé id → 404         */
+/* NENALEZENO. Neznámá role → 422 VALIDATION_ERROR                      */
+/* s `details` ve tvaru role: [česká hláška]. Úspěch → 200 +            */
+/* `UpravitUzivateleResponse`. Idempotentní: opakovaný PATCH se stejnou */
+/* rolí přepíše stejnou hodnotu. Chyby vždy jen `ApiErrorResponse`.     */
+/* ------------------------------------------------------------------ */
+
+export const USERS_DETAIL_VZOR = "/api/users/:id" as const;
+
+/** Staví konkrétní URL detailu uživatele: `/api/users/uuid`. */
+export function userDetailPath(id: string): `/api/users/${string}` {
+  return `/api/users/${id}`;
+}
+
+/** Vstup editace role — právě jedna primární role. */
+export interface UpravitUzivateleRequest {
+  role: Role;
+}
+
+export interface UpravitUzivateleResponse {
+  user: UserListItem;
+}
+
+/** Vzory cest uživatelského listu + detailu (odděleně jako Krok 2 / Krok 6). */
+export type UsersCesta = typeof USERS_PATH | typeof USERS_DETAIL_VZOR;
+
+/** Hranice správy uživatelů: list i editace role jen ADMIN. */
+export const PRISTUP_USERS: Record<UsersCesta, AuthRole | "PUBLIC"> = {
+  [USERS_PATH]: "ADMIN",
+  [USERS_DETAIL_VZOR]: "ADMIN",
 } as const;

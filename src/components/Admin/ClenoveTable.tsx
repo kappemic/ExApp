@@ -3,18 +3,24 @@ import {
   jeAktivniClen,
   jeVRade,
   jeVeVedeni,
+  type Role,
   type RoleSet,
 } from "../../config/roles";
-import { celeJmeno, type MockClen } from "../../data/mockClenove";
+import type { UserListItem } from "../../shared/api-types";
 import RoleBadge from "./RoleBadge";
 
 interface ClenoveTableProps {
-  clenove: ReadonlyArray<MockClen>;
+  clenove: ReadonlyArray<UserListItem>;
   /** Id právě otevřeného člena — zvýrazní řádek, jehož detail je v dialogu. */
   vybranyId?: string | null;
   /** Klik / Enter na řádek — stránka otevře ClenDetailModal. */
-  onVyber: (clen: MockClen) => void;
+  onVyber: (clen: UserListItem) => void;
   popisek?: string;
+}
+
+/** Jedna DB role zabalená pro je*() helpery (single-source roles.ts). */
+function jakoRoleSet(role: Role): RoleSet {
+  return [role];
 }
 
 function Zarazeni({ role }: { role: RoleSet }): JSX.Element {
@@ -106,7 +112,7 @@ export default function ClenoveTable({
         <tbody>
           {clenove.map((clen) => {
             const vybran: boolean = vybranyId === clen.id;
-            const jmeno: string = celeJmeno(clen);
+            const roleSet: RoleSet = jakoRoleSet(clen.role);
             return (
               <tr
                 key={clen.id}
@@ -119,11 +125,16 @@ export default function ClenoveTable({
                     type="button"
                     onClick={() => onVyber(clen)}
                     aria-haspopup="dialog"
-                    aria-label={`${jmeno} — otevřít detail člena`}
-                    className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm font-bold leading-snug"
+                    aria-label={`${clen.jmeno} — otevřít detail člena`}
+                    className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left leading-snug"
                   >
-                    <span className="block max-w-[220px] truncate sm:max-w-none sm:whitespace-normal">
-                      {jmeno}
+                    <span className="min-w-0">
+                      <span className="block max-w-[220px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
+                        {clen.jmeno}
+                      </span>
+                      <span className="block max-w-[220px] truncate text-xs font-normal text-mech sm:max-w-none sm:whitespace-normal">
+                        {clen.email}
+                      </span>
                     </span>
                     <span
                       aria-hidden="true"
@@ -135,16 +146,14 @@ export default function ClenoveTable({
                 </th>
                 <td className="px-4 py-3">
                   <span className="inline-flex max-w-[280px] flex-wrap gap-1.5">
-                    {clen.role.map((r) => (
-                      <RoleBadge key={r} role={r} />
-                    ))}
+                    <RoleBadge role={clen.role} />
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <Stav role={clen.role} />
+                  <Stav role={roleSet} />
                 </td>
                 <td className="px-4 py-3">
-                  <Zarazeni role={clen.role} />
+                  <Zarazeni role={roleSet} />
                 </td>
               </tr>
             );

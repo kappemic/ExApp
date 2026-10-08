@@ -15,6 +15,13 @@
  * v migraci). Status: `prihlasen` (před akcí) → `ucastnil_se` / `omluven`
  * (uzavření výpravy adminem). Duplicitní přihláška je zakázána UNIQUE
  * dvojicí `(expedition_id, user_id)` a `(expedition_id, clen_id)` v migraci.
+ *
+ * Krok 6 — ověření schématu (2026-10-07): migrace NENÍ potřeba.
+ * `0001_faze1.sql` + `0002_krok3_ucast_fotky_probehla.sql` už obsahují
+ * `participants_xor_check` (XOR), `uq_participants_expedition_user/clen`
+ * (UNIQUE dvojice) i `ON DELETE CASCADE` (expedition_id, user_id).
+ * Dodatečná správa po uzavření (POST/DELETE ucastnici/:id, varianta A)
+ * proto jen čte/píše tato pravidla — žádné ALTER TABLE.
  */
 import {
   pgTable,

@@ -9,14 +9,18 @@ import {
 } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import {
-  formatCelyDatum,
+  formatRozsahData,
+  jeBezOmezeni,
   jeProbehla,
   obsazenostProcenta,
   volnaMista,
 } from "../../lib/expedition-utils";
 import {
   nactiUcastniky,
+  nactiUzivateleProSelektor,
+  odeberUcastnika,
   odhlasZVypravy,
+  pridejUcastnikaPoUzavreni,
   prihlasNaVypravu,
   smazVypravu,
   upravVypravu,
@@ -24,6 +28,10 @@ import {
   type ApiUcastnik,
 } from "../../lib/expeditions-ucast";
 import type { Expedition } from "../../lib/mock-expeditions";
+import type {
+  UserId,
+  UserListItem,
+} from "../../shared/api-types";
 import type {
   ApiExpedice,
   UpravitExpediciRequest,
@@ -54,8 +62,10 @@ function prevedExpedici(api: ApiExpedice): Expedition {
     id: api.id,
     nazev: api.nazev,
     datum: api.datum,
+    datumDo: api.datumDo,
     sraz: api.sraz,
     popis: api.popis,
+    trasaOdkaz: api.trasaOdkaz,
     kapacita: { prihlaseno: api.kapacita.prihlaseno, celkem: api.kapacita.celkem },
     stav: api.stav,
   };
@@ -83,8 +93,20 @@ export default function ExpeditionModal({
   const nadpisId: string = useId();
   const popisId: string = useId();
   const ucastNadpisId: string = useId();
+  const spravaNadpisId: string = useId();
+  const filtrUzivateluId: string = useId();
+  const vyberUzivateleId: string = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const krizekRef = useRef<HTMLButtonElement>(null);
+  const vyberUzivateleRef = useRef<HTMLSelectElement>(null);
+  /* onZavrit držíme v refu — focus efekt smí běžet jen při mountu.
+     Jinak každá aktualizace rodiče (např. přidání účastníka →
+     onAktualizace → nový render) refocusne křížek a scrollne
+     dialog zpět nahoru. */
+  const onZavritRef = useRef(onZavrit);
+  onZavritRef.current = onZavrit;
+  const onAktualizaceRef = useRef(onAktualizace);
+  onAktualizaceRef.current = onAktualizace;
 
   const [rezim, setRezim] = useState<Rezim>("prehled");
   const [ucastStav, setUcastStav] = useState<UcastStav>("nacitani");
@@ -104,9 +126,24 @@ export default function ExpeditionModal({
   const [uzaviraSe, setUzaviraSe] = useState<boolean>(false);
   const [uzavriChyba, setUzavriChyba] = useState<string | null>(null);
 
+  /* Správa docházky po uzavření (jen proběhlá + ADMIN, Krok 4: userId). */
+  type UzivateleStav = "neaktivni" | "nacitani" | "hotovo" | "chyba";
+  const [uzivatele, setUzivatele] = useState<UserListItem[]>([]);
+  const [uzivateleStav, setUzivateleStav] = useState<UzivateleStav>("neaktivni");
+  const [uzivateleChyba, setUzivateleChyba] = useState<string | null>(null);
+  const [filtrUzivatelu, setFiltrUzivatelu] = useState<string>("");
+  const [vybranyUzivatelId, setVybranyUzivatelId] = useState<string>("");
+  const [pridavaSe, setPridavaSe] = useState<boolean>(false);
+  const [spravaZprava, setSpravaZprava] = useState<string | null>(null);
+  const [spravaChyba, setSpravaChyba] = useState<string | null>(null);
+  const [potvrzOdebraniId, setPotvrzOdebraniId] = useState<string | null>(null);
+  const [odebiraId, setOdebiraId] = useState<string | null>(null);
+
   const probehla: boolean = jeProbehla(expedice);
+  const bezOmezeni: boolean = jeBezOmezeni(expedice);
   const procenta: number = obsazenostProcenta(expedice);
   const volna: number = volnaMista(expedice);
+  const plno: boolean = !bezOmezeni && volna === 0;
 
   const nacistiUcastniky = useCallback(async (idVypravy: string): Promise<void> => {
     setUcastStav("nacitani");
@@ -120,9 +157,29 @@ export default function ExpeditionModal({
     setUcastnici(vysledek.data.ucastnici);
     setDochazka(new Set(vysledek.data.ucastnici.map((u) => u.id)));
     setUcastStav("hotovo");
-    onAktualizace(prevedExpedici(vysledek.data.expedice));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
   }, []);
+
+  const nacistiUzivatele = useCallback(async (): Promise<void> => {
+    setUzivateleStav("nacitani");
+    setUzivateleChyba(null);
+    const vysledek = await nactiUzivateleProSelektor();
+    if (!vysledek.ok) {
+      setUzivateleStav("chyba");
+      setUzivateleChyba(vysledek.chyba);
+      return;
+    }
+    setUzivatele(vysledek.data);
+    setUzivateleStav("hotovo");
+  }, []);
+
+  /* Selektor reálných users (GET /api/users) jen v editačním režimu Upravit. */
+  useEffect(() => {
+    if (!probehla || !isAdmin || rezim !== "upravy") return;
+    if (uzivateleStav !== "neaktivni") return;
+    void nacistiUzivatele();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probehla, isAdmin, rezim, uzivateleStav]);
 
   useEffect(() => {
     setRezim("prehled");
@@ -131,10 +188,20 @@ export default function ExpeditionModal({
     setServerChybyPoli({});
     setSmazChyba(null);
     setUzavriChyba(null);
+    setSpravaZprava(null);
+    setSpravaChyba(null);
+    setPotvrzOdebraniId(null);
+    setFiltrUzivatelu("");
+    setVybranyUzivatelId("");
+    setUzivateleStav("neaktivni");
+    setUzivatele([]);
+    setUzivateleChyba(null);
     void nacistiUcastniky(expedice.id);
   }, [expedice.id, nacistiUcastniky]);
 
-  /* Focus-trap + Esc + zamknutí scrollu + návrat fokusu. */
+  /* Focus-trap + Esc + zamknutí scrollu + návrat fokusu.
+     Schválně jen při mountu ([]) — refocus křížku při každé
+     aktualizaci by házel scroll dialogu nahoru (viz onZavritRef). */
   useEffect(() => {
     const predchoziFocus: Element | null = document.activeElement;
     krizekRef.current?.focus();
@@ -144,7 +211,7 @@ export default function ExpeditionModal({
     function naStiskKlavesy(udalost: KeyboardEvent): void {
       if (udalost.key === "Escape") {
         udalost.stopPropagation();
-        onZavrit();
+        onZavritRef.current();
         return;
       }
       if (udalost.key !== "Tab") return;
@@ -171,7 +238,8 @@ export default function ExpeditionModal({
       document.body.style.overflow = puvodniOverflow;
       if (predchoziFocus instanceof HTMLElement) predchoziFocus.focus();
     };
-  }, [onZavrit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function naKlikBackdropu(udalost: MouseEvent<HTMLDivElement>): void {
     if (udalost.target === udalost.currentTarget) onZavrit();
@@ -192,7 +260,7 @@ export default function ExpeditionModal({
       setAkceChyba(vysledek.chyba);
       return;
     }
-    onAktualizace(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
     await nacistiUcastniky(expedice.id);
   }
 
@@ -205,8 +273,100 @@ export default function ExpeditionModal({
       setAkceChyba(vysledek.chyba);
       return;
     }
-    onAktualizace(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
     await nacistiUcastniky(expedice.id);
+  }
+
+  /* ——— Správa docházky po uzavření: filtrování + mutace ——— */
+
+  /** Uloží scroll dialogu a po překreslení ho vrátí — přidání/odebrání
+      účastníka nesmí házet uživatele nahoru. */
+  function obnovScrollPoPrekresleni(ulozene: number): void {
+    const dialog: HTMLDivElement | null = dialogRef.current;
+    if (dialog === null) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        dialog.scrollTop = ulozene;
+      });
+    });
+  }
+
+  function normalizujJmeno(hodnota: string): string {
+    return hodnota.trim().toLowerCase();
+  }
+
+  const userIdUzEvidovanych = new Set<string>(
+    ucastnici.flatMap((u) => (u.userId === null ? [] : [u.userId])),
+  );
+  const jmenaUzEvidovanych = new Set<string>(
+    ucastnici.map((u) => normalizujJmeno(u.jmeno)),
+  );
+  const filtrNorm: string = normalizujJmeno(filtrUzivatelu);
+  const dostupniUzivatele: UserListItem[] = uzivatele.filter((uzivatel) => {
+    if (userIdUzEvidovanych.has(uzivatel.id)) return false;
+    if (jmenaUzEvidovanych.has(normalizujJmeno(uzivatel.jmeno))) return false;
+    if (filtrNorm.length > 0 && !normalizujJmeno(uzivatel.jmeno).includes(filtrNorm))
+      return false;
+    return true;
+  });
+
+  async function naPridatUcastnika(): Promise<void> {
+    if (vybranyUzivatelId.trim().length === 0) {
+      setSpravaChyba("Vyber uživatele ze seznamu.");
+      return;
+    }
+    const dialog: HTMLDivElement | null = dialogRef.current;
+    const pozice: number = dialog?.scrollTop ?? 0;
+    setPridavaSe(true);
+    setSpravaChyba(null);
+    setSpravaZprava(null);
+    const vysledek = await pridejUcastnikaPoUzavreni(expedice.id, {
+      userId: vybranyUzivatelId as UserId,
+    });
+    setPridavaSe(false);
+    if (!vysledek.ok) {
+      setSpravaChyba(vysledek.chyba);
+      obnovScrollPoPrekresleni(pozice);
+      return;
+    }
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    setSpravaZprava(`„${vysledek.data.ucastnik.jmeno}“ je zapsán v kronice.`);
+    setVybranyUzivatelId("");
+    setFiltrUzivatelu("");
+    await nacistiUcastniky(expedice.id);
+    obnovScrollPoPrekresleni(pozice);
+    /* Fokus zpět k selektoru bez scrollu — uživatel pokračuje v přidávání
+       tam, kde skončil. */
+    requestAnimationFrame(() => {
+      vyberUzivateleRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  async function naOdebratUcastnika(idUcastnika: string): Promise<void> {
+    const dialog: HTMLDivElement | null = dialogRef.current;
+    const pozice: number = dialog?.scrollTop ?? 0;
+    setOdebiraId(idUcastnika);
+    setSpravaChyba(null);
+    setSpravaZprava(null);
+    const odebirany: ApiUcastnik | undefined = ucastnici.find(
+      (u) => u.id === idUcastnika,
+    );
+    const vysledek = await odeberUcastnika(expedice.id, idUcastnika);
+    setOdebiraId(null);
+    if (!vysledek.ok) {
+      setSpravaChyba(vysledek.chyba);
+      obnovScrollPoPrekresleni(pozice);
+      return;
+    }
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    setSpravaZprava(
+      odebirany === undefined
+        ? "Účastník byl odebrán z kroniky."
+        : `„${odebirany.jmeno}“ byl odebrán z kroniky.`,
+    );
+    setPotvrzOdebraniId(null);
+    await nacistiUcastniky(expedice.id);
+    obnovScrollPoPrekresleni(pozice);
   }
 
   function naOdeslatUpravu(
@@ -222,7 +382,7 @@ export default function ExpeditionModal({
         else setServerChyba(vysledek.chyba);
         return;
       }
-      onAktualizace(prevedExpedici(vysledek.data.expedice));
+      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
       setRezim("prehled");
     })();
   }
@@ -265,7 +425,7 @@ export default function ExpeditionModal({
         setUzavriChyba(vysledek.chyba);
         return;
       }
-      onAktualizace(prevedExpedici(vysledek.data.expedice));
+      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
       setUcastnici(vysledek.data.ucastnici);
       setRezim("prehled");
     })();
@@ -274,8 +434,10 @@ export default function ExpeditionModal({
   const vychoziUpravy: ExpeditionFormVychozi = {
     nazev: expedice.nazev,
     datum: expedice.datum,
+    datumDo: expedice.datumDo,
     sraz: expedice.sraz,
     popis: expedice.popis,
+    trasaOdkaz: expedice.trasaOdkaz,
     kapacitaCelkem: expedice.kapacita.celkem,
   };
 
@@ -371,7 +533,7 @@ export default function ExpeditionModal({
             {expedice.nazev}
           </h2>
           <p id={popisId} className="mt-1 text-sm text-inkoust/70">
-            <time dateTime={expedice.datum}>{formatCelyDatum(expedice.datum)}</time>
+            <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
             {" · "}
             {expedice.sraz}
           </p>
@@ -383,35 +545,61 @@ export default function ExpeditionModal({
                   {expedice.popis}
                 </p>
               )}
+              {expedice.trasaOdkaz.trim().length > 0 && (
+                <p className="mt-3">
+                  <a
+                    href={expedice.trasaOdkaz}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-[44px] items-center gap-2 rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+                  >
+                    <span aria-hidden="true">🗺</span> Zobrazit naplánovanou
+                    trasu
+                  </a>
+                </p>
+              )}
 
               <div className="mt-4 rounded-2xl border border-inkoust/15 bg-papir/60 p-3">
                 <div className="flex items-baseline justify-between gap-3 text-[13px]">
                   <span className="font-semibold tabular-nums">
-                    {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
-                    <span className="font-normal text-inkoust/60"> přihlášeno</span>
+                    {bezOmezeni ? (
+                      <>
+                        {expedice.kapacita.prihlaseno}
+                        <span className="font-normal text-inkoust/60"> přihlášeno · bez omezení</span>
+                      </>
+                    ) : (
+                      <>
+                        {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
+                        <span className="font-normal text-inkoust/60"> přihlášeno</span>
+                      </>
+                    )}
                   </span>
                   <span className="shrink-0 text-[12px] text-inkoust/60">
                     {probehla
                       ? "výprava proběhla"
-                      : volna === 0
-                        ? "plně obsazeno"
-                        : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
+                      : bezOmezeni
+                        ? "místa dost"
+                        : volna === 0
+                          ? "plně obsazeno"
+                          : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
                   </span>
                 </div>
-                <div
-                  role="progressbar"
-                  aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
-                  aria-valuenow={expedice.kapacita.prihlaseno}
-                  aria-valuemin={0}
-                  aria-valuemax={expedice.kapacita.celkem}
-                  className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
-                >
+                {!bezOmezeni && (
                   <div
-                    aria-hidden="true"
-                    className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
-                    style={{ width: `${procenta}%` }}
-                  />
-                </div>
+                    role="progressbar"
+                    aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
+                    aria-valuenow={expedice.kapacita.prihlaseno}
+                    aria-valuemin={0}
+                    aria-valuemax={expedice.kapacita.celkem}
+                    className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
+                      style={{ width: `${procenta}%` }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Účast — USER akce */}
@@ -501,11 +689,11 @@ export default function ExpeditionModal({
                           <button
                             type="button"
                             onClick={() => void naPrihlasit()}
-                            disabled={akceBezi || volna === 0}
-                            title={volna === 0 ? "Výprava je plná" : "Přihlásit se na výpravu"}
+                            disabled={akceBezi || plno}
+                            title={plno ? "Výprava je plná" : "Přihlásit se na výpravu"}
                             className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {akceBezi ? "Přihlašuji…" : volna === 0 ? "Plně obsazeno" : "Přihlásit se"}
+                            {akceBezi ? "Přihlašuji…" : plno ? "Plně obsazeno" : "Přihlásit se"}
                           </button>
                         )}
                       </div>
@@ -533,6 +721,12 @@ export default function ExpeditionModal({
                 />
               )}
 
+              {/* Prohlížecí režim: jen read-only seznam výše. Správa docházky je v Upravit. */}
+              {probehla && isAdmin && (
+                <p role="status" className="mt-5 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-3 text-center text-[13px] text-inkoust/70">
+                  Kroniku upravíš v režimu Upravit — přidání ze seznamu uživatelů i odebrání je jen tam.
+                </p>
+              )}
               {/* Admin akce */}
               {isAdmin && (
                 <div className="mt-5 border-t-2 border-inkoust pt-4">
@@ -591,7 +785,7 @@ export default function ExpeditionModal({
           )}
 
           {rezim === "upravy" && (
-            <div className="mt-4">
+            <div className="mt-4 space-y-5">
               <ExpeditionForm
                 nadpis="Upravit výpravu"
                 odeslatPopisek="Uložit změny"
@@ -602,6 +796,231 @@ export default function ExpeditionModal({
                 onSubmit={naOdeslatUpravu}
                 onZrusit={() => setRezim("prehled")}
               />
+              {/* Správa docházky POUZE v editačním režimu — proběhlá + ADMIN, zdroj GET /api/users. */}
+              {probehla && isAdmin && (
+                <section
+                  aria-labelledby={spravaNadpisId}
+                  className="rounded-2xl border-2 border-inkoust bg-papir/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3
+                      id={spravaNadpisId}
+                      className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/60"
+                    >
+                      Správa docházky
+                    </h3>
+                    {uzivateleStav === "hotovo" && (
+                      <button
+                        type="button"
+                        onClick={() => void nacistiUzivatele()}
+                        className="min-h-[44px] min-w-[44px] rounded-full px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
+                      >
+                        Obnovit seznam
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-inkoust/70">
+                    Kronika po uzavření — odeber omylem zapsané a dopiš ty, kdo
+                    dorazili bez přihlášky. Změna se hned propíše do seznamu.
+                  </p>
+
+                  {spravaZprava !== null && (
+                    <p
+                      role="status"
+                      className="mt-2 rounded-xl border border-smrk/30 bg-smrk/10 p-3 text-sm font-semibold text-inkoust"
+                    >
+                      {spravaZprava}
+                    </p>
+                  )}
+                  {spravaChyba !== null && (
+                    <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
+                      {spravaChyba}
+                    </p>
+                  )}
+
+                  {ucastStav === "nacitani" && (
+                    <p role="status" className="mt-3 text-sm text-inkoust/70">
+                      Načítám kroniku…
+                    </p>
+                  )}
+                  {ucastStav === "chyba" && (
+                    <p role="alert" className="mt-3 text-sm font-semibold text-red-800">
+                      {ucastChyba ?? "Kroniku se nepodařilo načíst."}
+                    </p>
+                  )}
+                  {ucastStav === "hotovo" && ucastnici.length === 0 && (
+                    <p
+                      role="status"
+                      className="mt-3 rounded-xl border border-dashed border-inkoust/25 p-3 text-center text-sm text-inkoust/70"
+                    >
+                      V kronice zatím nikdo není — prvního dopište níže, prázdný
+                      stav přidání nebrání.
+                    </p>
+                  )}
+                  {ucastStav === "hotovo" && ucastnici.length > 0 && (
+                    <ul role="list" className="mt-3 divide-y divide-inkoust/10 rounded-xl border border-inkoust/15">
+                      {ucastnici.map((u) => {
+                        const potvrzuje: boolean = potvrzOdebraniId === u.id;
+                        const odebirani: boolean = odebiraId === u.id;
+                        return (
+                          <li key={u.id} className="px-3 py-2">
+                            <div className="flex min-h-[44px] items-center justify-between gap-3">
+                              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                                {u.jmeno}
+                                <span className="ml-2 text-[12px] font-normal text-inkoust/60">
+                                  {statusUcastiPopisek(u.status)}
+                                </span>
+                              </span>
+                              {!potvrzuje && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSpravaZprava(null);
+                                    setSpravaChyba(null);
+                                    setPotvrzOdebraniId(u.id);
+                                  }}
+                                  aria-label={`Odebrat účastníka ${u.jmeno}`}
+                                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-inkoust/25 px-4 text-[13px] font-bold text-red-800 motion-safe:transition-colors motion-safe:hover:bg-red-800 motion-safe:hover:text-papir"
+                                >
+                                  Odebrat
+                                </button>
+                              )}
+                            </div>
+                            {potvrzuje && (
+                              <div className="mt-2 rounded-xl bg-red-800/5 p-2">
+                                <p className="text-[13px] font-semibold">
+                                  Odebrat „{u.jmeno}“ z kroniky?
+                                </p>
+                                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                                  <button
+                                    type="button"
+                                    onClick={() => void naOdebratUcastnika(u.id)}
+                                    disabled={odebirani}
+                                    className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-4 text-sm font-bold text-papir disabled:opacity-60"
+                                  >
+                                    {odebirani ? "Odebírám…" : "Ano, odebrat"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPotvrzOdebraniId(null)}
+                                    disabled={odebirani}
+                                    className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold disabled:opacity-60"
+                                  >
+                                    Ponechat
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  <div className="mt-4 border-t border-dashed border-linka pt-3">
+                    <h4 className="text-sm font-bold">Přidat účastníka</h4>
+                    {uzivateleStav === "neaktivni" && (
+                      <p role="status" className="mt-2 text-sm text-inkoust/70">
+                        Připravuji seznam uživatelů…
+                      </p>
+                    )}
+                    {uzivateleStav === "nacitani" && (
+                      <div className="mt-2 space-y-2" aria-busy="true" aria-label="Načítám uživatele">
+                        {[0, 1].map((i) => (
+                          <div key={i} className="h-11 animate-pulse rounded-xl bg-inkoust/10 motion-reduce:animate-none" />
+                        ))}
+                        <p role="status" className="text-sm text-inkoust/70">
+                          Načítám uživatele…
+                        </p>
+                      </div>
+                    )}
+                    {uzivateleStav === "chyba" && (
+                      <div className="mt-2 rounded-xl border border-inkoust/20 p-3 text-center">
+                        <p role="alert" className="text-sm font-semibold">
+                          {uzivateleChyba ?? "Seznam uživatelů se nepodařilo načíst."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void nacistiUzivatele()}
+                          className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold"
+                        >
+                          Zkusit znovu
+                        </button>
+                      </div>
+                    )}
+                    {uzivateleStav === "hotovo" && (
+                      <div className="mt-2 space-y-2">
+                        <div>
+                          <label
+                            htmlFor={filtrUzivateluId}
+                            className="mb-1 block text-[13px] font-semibold text-inkoust/70"
+                          >
+                            Hledat uživatele
+                          </label>
+                          <input
+                            id={filtrUzivateluId}
+                            type="search"
+                            value={filtrUzivatelu}
+                            onChange={(e) => setFiltrUzivatelu(e.target.value)}
+                            placeholder="Začni psát jméno…"
+                            autoComplete="off"
+                            className="block min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-sm placeholder:text-inkoust/40"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={vyberUzivateleId}
+                            className="mb-1 block text-[13px] font-semibold text-inkoust/70"
+                          >
+                            Uživatel k přidání
+                          </label>
+                          <select
+                            id={vyberUzivateleId}
+                            ref={vyberUzivateleRef}
+                            value={vybranyUzivatelId}
+                            onChange={(e) => setVybranyUzivatelId(e.target.value)}
+                            className="block min-h-[44px] w-full rounded-xl border-2 border-inkoust bg-papir px-3 text-sm font-semibold"
+                          >
+                            <option value="">— Vyber uživatele —</option>
+                            {dostupniUzivatele.map((uzivatel) => (
+                              <option key={uzivatel.id} value={uzivatel.id}>
+                                {uzivatel.jmeno}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {dostupniUzivatele.length === 0 ? (
+                          <p role="status" className="text-[13px] text-inkoust/70">
+                            Žádný další uživatel k přidání — všichni už jsou v kronice.
+                          </p>
+                        ) : (
+                          <p role="status" className="text-[13px] text-inkoust/60">
+                            K přidání: {dostupniUzivatele.length}{" "}
+                            {dostupniUzivatele.length === 1
+                              ? "uživatel"
+                              : dostupniUzivatele.length >= 2 && dostupniUzivatele.length <= 4
+                                ? "uživatelé"
+                                : "uživatelů"}.
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void naPridatUcastnika()}
+                          disabled={pridavaSe || vybranyUzivatelId === ""}
+                          title={
+                            vybranyUzivatelId === ""
+                              ? "Nejdřív vyber uživatele"
+                              : "Přidat uživatele do kroniky"
+                          }
+                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {pridavaSe ? "Zapisuji…" : "Přidat do kroniky"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
             </div>
           )}
 

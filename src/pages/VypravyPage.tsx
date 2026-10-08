@@ -1,9 +1,19 @@
-import { useMemo, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useSearchParams } from "react-router-dom";
+import ExpeditionForm, {
+  type ChybyExpedice,
+} from "../components/expeditions/ExpeditionForm";
 import ExpeditionList from "../components/expeditions/ExpeditionList";
 import ExpeditionModal from "../components/expeditions/ExpeditionModal";
-import { getExpeditionsSync } from "../lib/expeditions-api";
+import { useAuth } from "../hooks/useAuth";
+import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
+import { vytvorVypravu } from "../lib/expeditions-ucast";
 import type { Expedition } from "../lib/mock-expeditions";
+import type {
+  ApiExpedice,
+  UpravitExpediciRequest,
+  VytvoritExpediciRequest,
+} from "../shared/api-types";
 
 type Zobrazeni = "seznam" | "kalendar";
 
@@ -79,15 +89,94 @@ function KalendarPlaceholder(): JSX.Element {
   );
 }
 
+function prevedApiExpedici(api: ApiExpedice): Expedition {
+  return {
+    id: api.id,
+    nazev: api.nazev,
+    datum: api.datum,
+    datumDo: api.datumDo,
+    sraz: api.sraz,
+    popis: api.popis,
+    trasaOdkaz: api.trasaOdkaz,
+    kapacita: { prihlaseno: api.kapacita.prihlaseno, celkem: api.kapacita.celkem },
+    stav: api.stav,
+  };
+}
+
+/**
+ * Sloučí živý seznam z BFF s lokálním stavem.
+ * Živá data jsou pravda pro počty (`kapacita.prihlaseno` = COUNT v DB),
+ * ale řádky změněné lokálně po mountu (účast / úprava / nová) jsou čerstvější
+ * z mutačních odpovědí — ty se nechávají. Lokálně smazané se neobnovují.
+ */
+function sloucSeZivymi(
+  lokalni: Expedition[],
+  zive: ApiExpedice[],
+  zmenene: ReadonlySet<string>,
+  smazane: ReadonlySet<string>,
+): Expedition[] {
+  const lokalnePodleId = new Map(lokalni.map((e) => [e.id, e]));
+  const vysledek: Expedition[] = [];
+  for (const api of zive) {
+    if (smazane.has(api.id)) continue;
+    const lokalniVerze: Expedition | undefined = lokalnePodleId.get(api.id);
+    vysledek.push(
+      lokalniVerze !== undefined && zmenene.has(api.id)
+        ? lokalniVerze
+        : prevedApiExpedici(api),
+    );
+  }
+  for (const mistni of lokalni) {
+    if (
+      !smazane.has(mistni.id) &&
+      !vysledek.some((e) => e.id === mistni.id)
+    ) {
+      vysledek.push(mistni);
+    }
+  }
+  return vysledek.sort((a, b) => a.datum.localeCompare(b.datum));
+}
+
 export default function VypravyPage(): JSX.Element {
+  const { isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
-  // Tenká read vrstva (Fáze 2): build-time snapshot, jinak mock fallback.
+  // Start: build-time snapshot pro okamžité vykreslení, po mountu se tiše
+  // povýší na živá data z BFF (GET /api/expeditions, PUBLIC) — snapshot
+  // jinak ukazuje zastaralé počty přihlášených proti detailu z DB.
   // Lokální stav, aby se účast / úprava / uzavření propsaly bez refetche.
   const [expedice, setExpedice] = useState<Expedition[]>(
     () => getExpeditionsSync().data,
   );
+  /* ID změněná/smazaná lokálně po mountu — živý fetch je nesmí přepsat. */
+  const zmeneneRef = useRef<Set<string>>(new Set());
+  const smazaneRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let zruseno = false;
+    void (async (): Promise<void> => {
+      const zive = await getExpeditions();
+      if (zruseno || zive.source !== "db") return;
+      setExpedice((prev) =>
+        sloucSeZivymi(prev, zive.data, zmeneneRef.current, smazaneRef.current),
+      );
+      setVybrana((prev) => {
+        if (prev === null || zmeneneRef.current.has(prev.id)) return prev;
+        const cerstva: ApiExpedice | undefined = zive.data.find(
+          (e) => e.id === prev.id,
+        );
+        return cerstva === undefined ? prev : prevedApiExpedici(cerstva);
+      });
+    })();
+    return () => {
+      zruseno = true;
+    };
+  }, []);
   const [vybrana, setVybrana] = useState<Expedition | null>(null);
+  const [tvorbaOtevrena, setTvorbaOtevrena] = useState<boolean>(false);
+  const [vytvariSe, setVytvariSe] = useState<boolean>(false);
+  const [chybaTvorby, setChybaTvorby] = useState<string | null>(null);
+  const [chybyPoliTvorby, setChybyPoliTvorby] = useState<ChybyExpedice>({});
 
   const nadchazejici: Expedition[] = useMemo(
     () => expedice.filter((e) => e.stav !== "proběhlá"),
@@ -107,13 +196,43 @@ export default function VypravyPage(): JSX.Element {
   }
 
   function naAktualizaci(nova: Expedition): void {
+    zmeneneRef.current.add(nova.id);
     setExpedice((prev) => prev.map((e) => (e.id === nova.id ? nova : e)));
     setVybrana((prev) => (prev !== null && prev.id === nova.id ? nova : prev));
   }
 
-  function naSmazana(id: string): void {
+  const naAktualizaciStabilni = useCallback(naAktualizaci, []);
+  const naSmazanaStabilni = useCallback((id: string): void => {
+    smazaneRef.current.add(id);
     setExpedice((prev) => prev.filter((e) => e.id !== id));
     setVybrana(null);
+  }, []);
+  const naZavritModalStabilni = useCallback((): void => {
+    setVybrana(null);
+  }, []);
+
+  function naOdeslatNovou(
+    payload: VytvoritExpediciRequest | UpravitExpediciRequest,
+  ): void {
+    setVytvariSe(true);
+    setChybaTvorby(null);
+    setChybyPoliTvorby({});
+    void (async (): Promise<void> => {
+      const vysledek = await vytvorVypravu(payload as VytvoritExpediciRequest);
+      setVytvariSe(false);
+      if (!vysledek.ok) {
+        if (vysledek.chybyPoli !== undefined) setChybyPoliTvorby(vysledek.chybyPoli);
+        else setChybaTvorby(vysledek.chyba);
+        return;
+      }
+      const nova = prevedApiExpedici(vysledek.data.expedice);
+      zmeneneRef.current.add(nova.id);
+      setExpedice((prev) =>
+        [...prev, nova].sort((a, b) => a.datum.localeCompare(b.datum)),
+      );
+      setTvorbaOtevrena(false);
+      setVybrana(nova);
+    })();
   }
 
   return (
@@ -152,6 +271,21 @@ export default function VypravyPage(): JSX.Element {
             );
           })}
         </div>
+        {isAdmin && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setChybaTvorby(null);
+                setChybyPoliTvorby({});
+                setTvorbaOtevrena(true);
+              }}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir shadow-denik motion-safe:transition-colors motion-safe:hover:bg-inkoust"
+            >
+              <span aria-hidden="true">＋</span> Nová výprava
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="pt-6">
@@ -214,10 +348,37 @@ export default function VypravyPage(): JSX.Element {
         <ExpeditionModal
           key={vybrana.id}
           expedice={vybrana}
-          onZavrit={() => setVybrana(null)}
-          onAktualizace={naAktualizaci}
-          onSmazana={naSmazana}
+          onZavrit={naZavritModalStabilni}
+          onAktualizace={naAktualizaciStabilni}
+          onSmazana={naSmazanaStabilni}
         />
+      )}
+
+      {tvorbaOtevrena && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 p-4 sm:items-center"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setTvorbaOtevrena(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nová výprava"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border-2 border-inkoust bg-papir p-5 shadow-denik sm:p-6"
+          >
+            <ExpeditionForm
+              nadpis="Nová výprava"
+              odeslatPopisek="Vytvořit výpravu"
+              vychozi={null}
+              odesilaSe={vytvariSe}
+              serverChyba={chybaTvorby}
+              serverChybyPoli={chybyPoliTvorby}
+              onSubmit={naOdeslatNovou}
+              onZrusit={() => setTvorbaOtevrena(false)}
+            />
+          </div>
+        </div>
       )}
     </main>
   );

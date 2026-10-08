@@ -15,9 +15,13 @@ export interface Expedition {
   nazev: string;
   /** Datum ve formátu ISO (YYYY-MM-DD). */
   datum: string;
+  /** Konec vícedenní výpravy (od–do); null = jednodenní. */
+  datumDo: string | null;
   /** Místo a čas srazu. */
   sraz: string;
   popis: string;
+  /** Odkaz na naplánovanou trasu (mapy.com) — "" = bez odkazu. */
+  trasaOdkaz: string;
   kapacita: ExpeditionCapacity;
   stav: ExpeditionStatus;
 }
@@ -32,6 +36,8 @@ export const mockExpeditions: Expedition[] = [
       "Lehký okruh slatěmi a lesy kolem Modravy. Vhodné i pro nováčky, svačina z vlastních zásob.",
     kapacita: { prihlaseno: 8, celkem: 18 },
     stav: "volno",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "cesky-raj-prachov",
@@ -42,6 +48,8 @@ export const mockExpeditions: Expedition[] = [
       "Smyčka mezi skalními vyhlídkami s výstupem na Přivýšinu. Návrat vlakem přes Jičín.",
     kapacita: { prihlaseno: 14, celkem: 16 },
     stav: "skoro plno",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "brdy-tok",
@@ -52,6 +60,8 @@ export const mockExpeditions: Expedition[] = [
       "Nejvyšší vrchol Brd po hřebeni přes Klobouček. Delší trasa, pevné boty nutné.",
     kapacita: { prihlaseno: 5, celkem: 20 },
     stav: "volno",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "krkonose-snezka",
@@ -62,6 +72,8 @@ export const mockExpeditions: Expedition[] = [
       "Náročná celodenní túra Obřím dolem na Sněžku a zpět přes Růžohorky. Jen pro zdatné.",
     kapacita: { prihlaseno: 11, celkem: 12 },
     stav: "skoro plno",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "podyji-vyhlidky",
@@ -72,6 +84,8 @@ export const mockExpeditions: Expedition[] = [
       "Poklidná trasa nad Dyjí s výhledy na hrad Hardegg. Zakončení na punči ve Znojmě.",
     kapacita: { prihlaseno: 3, celkem: 15 },
     stav: "volno",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "krivoklatsko-berounka",
@@ -82,6 +96,8 @@ export const mockExpeditions: Expedition[] = [
       "Už proběhlo: podzimní procházka údolím řeky s opékáním u ležení pod hradem.",
     kapacita: { prihlaseno: 16, celkem: 16 },
     stav: "proběhlá",
+    trasaOdkaz: "",
+    datumDo: null,
   },
   {
     id: "adrspach-broumovsko",
@@ -92,5 +108,7 @@ export const mockExpeditions: Expedition[] = [
       "Už proběhlo: víkend mezi skalními městy, přespání na faře v Teplicích nad Metují.",
     kapacita: { prihlaseno: 12, celkem: 14 },
     stav: "proběhlá",
+    trasaOdkaz: "",
+    datumDo: null,
   },
 ];

@@ -69,8 +69,22 @@ function jeExpedice(hodnota: unknown): hodnota is Expedition {
   if (typeof hodnota["id"] !== "string" || hodnota["id"].length === 0) return false;
   if (typeof hodnota["nazev"] !== "string" || hodnota["nazev"].length === 0) return false;
   if (typeof hodnota["datum"] !== "string" || !ISO_DATUM.test(hodnota["datum"])) return false;
+  // Starší snapshot bez datumDo projde — normalizuje se na null.
+  const datumDo = hodnota["datumDo"];
+  if (
+    datumDo !== undefined &&
+    datumDo !== null &&
+    (typeof datumDo !== "string" || !ISO_DATUM.test(datumDo))
+  )
+    return false;
   if (typeof hodnota["sraz"] !== "string") return false;
   if (typeof hodnota["popis"] !== "string") return false;
+  // Starší snapshot bez trasaOdkaz projde — normalizuje se na "".
+  if (
+    hodnota["trasaOdkaz"] !== undefined &&
+    typeof hodnota["trasaOdkaz"] !== "string"
+  )
+    return false;
   if (typeof hodnota["stav"] !== "string" || !PLATNE_STAVY.includes(hodnota["stav"])) return false;
   const kapacita = hodnota["kapacita"];
   if (!jeRecord(kapacita)) return false;
@@ -78,6 +92,14 @@ function jeExpedice(hodnota: unknown): hodnota is Expedition {
   if (typeof kapacita["celkem"] !== "number" || !Number.isInteger(kapacita["celkem"])) return false;
   if ((kapacita["prihlaseno"] as number) < 0 || (kapacita["celkem"] as number) < 0) return false;
   return true;
+}
+
+function normalizujExpedici(hodnota: Expedition): Expedition {
+  return {
+    ...hodnota,
+    trasaOdkaz: hodnota.trasaOdkaz ?? "",
+    datumDo: hodnota.datumDo ?? null,
+  };
 }
 
 interface ParsedSnapshot {
@@ -93,7 +115,7 @@ function parseSnapshot(neznamySnapshot: unknown): ParsedSnapshot | null {
   const expedice: Expedition[] = [];
   for (const polozka of expediceRaw) {
     if (!jeExpedice(polozka)) return null;
-    expedice.push(polozka);
+    expedice.push(normalizujExpedici(polozka));
   }
   const meta = neznamySnapshot["_meta"];
   let generatedAt: string | null = null;
@@ -132,7 +154,7 @@ function fallback(
   errorCode: ExpeditionsErrorCode,
 ): ExpeditionsResult {
   return {
-    data: [...mockExpeditions],
+    data: mockExpeditions.map(normalizujExpedici),
     source: "mock-fallback",
     generatedAt: null,
     errorCode,
@@ -206,7 +228,7 @@ export async function getExpeditions(): Promise<ExpeditionsResult> {
     return fallbackNaSync("BACKEND_CHYBA");
   }
   return {
-    data: expedice,
+    data: expedice.map(normalizujExpedici),
     source: "db",
     generatedAt: new Date().toISOString(),
   };

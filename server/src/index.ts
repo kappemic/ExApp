@@ -9,6 +9,10 @@
  * - GET  /api/expeditions — seznam výprav z Neon DB (veřejné, Krok 3)
  * - GET  /api/clenove     — seznam členů z Neon DB (jen ADMIN, Krok 3)
  * - PATCH /api/clenove/:id — úprava člena (jen ADMIN, Krok 3)
+ * - GET  /api/users       — seznam uživatelů pro selektor (jen ADMIN, Krok 4)
+ * - POST /api/expeditions/:id/ucastnici — dodatečné přidání (jen ADMIN,
+ *   i po proběhlá, kapacita se nekontroluje)
+ * - DELETE /api/expeditions/:id/ucastnici/:ucastnikId — odebrání (jen ADMIN)
  * - POST /api/logout      — smazání session cookie (aditivně nad kontrakt)
  *
  * Kódy jsou sdílené a opakovaně použitelné: platnost je POUZE
@@ -39,10 +43,12 @@ import type {
   ExpediceDetailResponse,
   ExpediceListResponse,
   FotkyListResponse,
+  OdebratUcastnikaResponse,
   OdhlasitResponse,
   PrihlaseniResponse,
   PrihlasitNaVypravuResponse,
   PridatFotkuResponse,
+  PridatUcastnikaPoUzavreniResponse,
   RegistraceResponse,
   SmazatExpediciResponse,
   SmazatFotkuResponse,
@@ -50,6 +56,10 @@ import type {
   UcastniciListResponse,
   UpravitClenaResponse,
   UpravitExpediciResponse,
+  UpravitUzivateleResponse,
+  UserId,
+  UserListItem,
+  UsersListResponse,
   UzavritVypravuResponse,
   VytvoritExpediciResponse,
   VytvoritKodResponse,
@@ -82,12 +92,15 @@ import {
   validujFotku,
   validujPoznamkuKodu,
   validujPrihlaseni,
+  validujPridaniUcastnikaPoUzavreni,
   validujRegistraci,
   validujUpravuClena,
   validujUpravuExpedice,
+  validujUpravuRoleUzivatele,
   validujUzavreni,
   validujVytvoreniExpedice,
 } from "./validace";
+import { isKnownRole, type Role } from "../../src/config/roles";
 import { clenove } from "../../drizzle/schema/clenove";
 import { expeditions } from "../../drizzle/schema/expeditions";
 import type { ExpeditionRow } from "../../drizzle/schema/expeditions";
@@ -200,10 +213,20 @@ async function vytvorKod(res: Response, createdBy: string | null): Promise<void>
   posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
 }
 
-/** Postgres unique_violation (23505) — typově bezpečná detekce bez any. */
+/**
+ * Postgres unique_violation (23505) — typově bezpečná detekce bez any.
+ * HTTP driver (neon-http) balí NeonDbError do `cause` — obálka od drizzle
+ * nese jen query/params, takže se kontrolují obě úrovně (pg i neon-http).
+ */
 function jeUnikatniKolize(chyba: unknown): boolean {
   if (typeof chyba !== "object" || chyba === null) return false;
-  return (chyba as { code?: unknown }).code === "23505";
+  const zaznam = chyba as { code?: unknown; cause?: unknown };
+  if (zaznam.code === "23505") return true;
+  const pricina: unknown = zaznam.cause;
+  if (typeof pricina === "object" && pricina !== null) {
+    return (pricina as { code?: unknown }).code === "23505";
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -433,7 +456,10 @@ app.get("/api/expeditions", (req: Request, res: Response) => {
               .orderBy(asc(expeditions.datum));
       const vysledek: ApiExpedice[] = [];
       for (const radek of radky) {
-        const api = toApiExpedice(radek);
+        // Vždy čerstvý COUNT z participants (ne cache sloupec) — číslo
+        // na kartách musí sedět se seznamem v detailu. Řádků jsou jednotky.
+        const pocet = await spocitejUcastniky(db, radek.id);
+        const api = apiExpediceSPoctem(radek, pocet);
         if (api !== null) vysledek.push(api);
       }
       if (page === undefined || pageSize === undefined) {
@@ -563,6 +589,114 @@ app.patch("/api/clenove/:id", (req: Request, res: Response) => {
             telefon: vstup.telefon,
             discordNick: vstup.discordNick,
           }),
+        };
+        res.json(telo);
+      } catch {
+        if (!res.headersSent) {
+          posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+        }
+      }
+    })();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* GET /api/users — jen ADMIN (Krok 4 + správa členů). Úzký tvar         */
+/* `[{ id, jmeno (složené), email, role }]` — role je primární DB role  */
+/* (jedna hodnota z roles.ts, users.role CHECK). Bez session → 401      */
+/* NEPRIHLASEN, přihlášený USER → 403 ZAKAZANO. Nikdy nevrací hash      */
+/* hesla (stejně jako ApiUser). Řazeno e-mailem.                        */
+/* ------------------------------------------------------------------ */
+
+app.get("/api/users", (req: Request, res: Response) => {
+  vyzadujAdmina(req, res, () => {
+    void (async (): Promise<void> => {
+      try {
+        const db = getDb();
+        const radky = await db
+          .select({
+            id: users.id,
+            jmeno: users.jmeno,
+            prijmeni: users.prijmeni,
+            email: users.email,
+            role: users.role,
+          })
+          .from(users)
+          .orderBy(asc(users.email));
+        const telo: UsersListResponse = {
+          users: radky.map((radek): UserListItem => {
+            const cele = `${radek.jmeno} ${radek.prijmeni}`
+              .trim()
+              .replace(/\s+/g, " ");
+            const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+            return {
+              id: radek.id as UserId,
+              jmeno: cele.length > 0 ? cele : radek.email,
+              email: radek.email,
+              role,
+            };
+          }),
+        };
+        res.json(telo);
+      } catch {
+        if (!res.headersSent) {
+          posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+        }
+      }
+    })();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* PATCH /api/users/:id — úprava primární role (jen ADMIN).              */
+/* `role` je jedna hodnota (DB users.role CHECK: 5 hodnot z roles.ts).  */
+/* Neznámé id → 404 NENALEZENO. Neznámá role → 422 VALIDATION_ERROR      */
+/* s details.role. Idempotentní: stejná role se jen přepíše.            */
+/* ------------------------------------------------------------------ */
+
+app.patch("/api/users/:id", (req: Request, res: Response) => {
+  vyzadujAdmina(req, res, () => {
+    void (async (): Promise<void> => {
+      const overeni = validujUpravuRoleUzivatele(req.body as unknown);
+      if (!overeni.uspech || overeni.data === null) {
+        posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+        return;
+      }
+      const suroveId: unknown = (req.params as Record<string, unknown>)["id"];
+      const id = typeof suroveId === "string" ? suroveId.trim() : "";
+      if (id.length === 0) {
+        posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+        return;
+      }
+      try {
+        const db = getDb();
+        const aktualizovane = await db
+          .update(users)
+          .set({ role: overeni.data.role, updatedAt: new Date() })
+          .where(eq(users.id, id))
+          .returning({
+            id: users.id,
+            jmeno: users.jmeno,
+            prijmeni: users.prijmeni,
+            email: users.email,
+            role: users.role,
+          });
+        const radek = aktualizovane[0];
+        if (radek === undefined) {
+          posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+          return;
+        }
+        const cele = `${radek.jmeno} ${radek.prijmeni}`
+          .trim()
+          .replace(/\s+/g, " ");
+        const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+        const telo: UpravitUzivateleResponse = {
+          user: {
+            id: radek.id as UserId,
+            jmeno: cele.length > 0 ? cele : radek.email,
+            email: radek.email,
+            role,
+          },
         };
         res.json(telo);
       } catch {
@@ -712,8 +846,10 @@ app.post("/api/expeditions", (req: Request, res: Response) => {
                 id,
                 nazev: vstup.nazev,
                 datum: vstup.datum,
+                datumDo: vstup.datumDo,
                 sraz: vstup.sraz,
                 popis: vstup.popis,
+                trasaOdkaz: vstup.trasaOdkaz,
                 kapacitaCelkem: vstup.kapacitaCelkem,
                 kapacitaPrihlaseno: 0,
                 stav: "volno",
@@ -791,7 +927,8 @@ app.patch("/api/expeditions/:id", (req: Request, res: Response) => {
         }
         if (vstup.kapacitaCelkem !== undefined) {
           const pocet = await spocitejUcastniky(db, id);
-          if (vstup.kapacitaCelkem < pocet) {
+          // Nula ruší omezení — pod počet přihlášených jít smí.
+          if (vstup.kapacitaCelkem !== 0 && vstup.kapacitaCelkem < pocet) {
             posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
               kapacitaCelkem: [
                 "Kapacita nemůže být menší než počet přihlášených.",
@@ -803,16 +940,41 @@ app.patch("/api/expeditions/:id", (req: Request, res: Response) => {
         const zmeny: {
           nazev?: string;
           datum?: string;
+          datumDo?: string | null;
           sraz?: string;
           popis?: string;
+          trasaOdkaz?: string;
           kapacitaCelkem?: number;
         } = {};
         if (vstup.nazev !== undefined) zmeny.nazev = vstup.nazev;
         if (vstup.datum !== undefined) zmeny.datum = vstup.datum;
+        if (vstup.datumDo !== undefined) zmeny.datumDo = vstup.datumDo;
         if (vstup.sraz !== undefined) zmeny.sraz = vstup.sraz;
         if (vstup.popis !== undefined) zmeny.popis = vstup.popis;
+        if (vstup.trasaOdkaz !== undefined) zmeny.trasaOdkaz = vstup.trasaOdkaz;
         if (vstup.kapacitaCelkem !== undefined)
           zmeny.kapacitaCelkem = vstup.kapacitaCelkem;
+
+        // Rozsah od–do proti existujícímu řádku (validace zná jen patch).
+        const stavajiciOd: string =
+          typeof stavajici.datum === "string"
+            ? stavajici.datum.slice(0, 10)
+            : "";
+        const stavajiciDo: string | null =
+          stavajici.datumDo === null
+            ? null
+            : typeof stavajici.datumDo === "string"
+              ? stavajici.datumDo.slice(0, 10)
+              : null;
+        const efektOd: string = vstup.datum ?? stavajiciOd;
+        const efektDo: string | null =
+          vstup.datumDo !== undefined ? vstup.datumDo : stavajiciDo;
+        if (efektDo !== null && efektOd.length > 0 && efektDo < efektOd) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            datumDo: ["Konec výpravy nesmí být před jejím začátkem."],
+          });
+          return;
+        }
 
         let radek = stavajici;
         if (Object.keys(zmeny).length > 0) {
@@ -951,7 +1113,8 @@ app.post("/api/expeditions/:id/prihlasit", (req: Request, res: Response) => {
             return;
           }
           const pocet = await spocitejUcastniky(db, id);
-          if (pocet >= radek.kapacitaCelkem) {
+          // Kapacita 0 = bez omezení — plnost se nekontroluje.
+          if (radek.kapacitaCelkem !== 0 && pocet >= radek.kapacitaCelkem) {
             posliChybu(res, "KAPACITA_PLNA", "Výprava je už plná.");
             return;
           }
@@ -1179,6 +1342,185 @@ app.patch("/api/expeditions/:id/uzavrit", (req: Request, res: Response) => {
     })();
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* Dodatečná správa účastníků po uzavření — varianta A (jen ADMIN).      */
+/* POST /:id/ucastnici přidá userId XOR clenId (status default           */
+/* `ucastnil_se`), DELETE /:id/ucastnici/:ucastnikId odebere. Funguje    */
+/* i u `stav: "proběhlá"` (na rozdíl od POST /prihlasit), kapacita se    */
+/* nekontroluje — nikdy KAPACITA_PLNA. Duplicita UNIQUE (23505) → 409    */
+/* UZ_PRIHLASEN, neznámé userId/clenId → 404 NENALEZENO, neznámé         */
+/* ucastnikId (i opakovaný DELETE) → 404. PATCH /uzavrit výše se nemění. */
+/* ------------------------------------------------------------------ */
+
+/** `:ucastnikId` z cesty — prázdné → volající vrátí 404 NENALEZENO. */
+function ctiIdUcastnika(req: Request): string {
+  const surova: unknown = (req.params as Record<string, unknown>)["ucastnikId"];
+  return typeof surova === "string" ? surova.trim() : "";
+}
+
+/* POST /api/expeditions/:id/ucastnici — jen ADMIN, i po proběhlá. → 201. */
+app.post("/api/expeditions/:id/ucastnici", (req: Request, res: Response) => {
+  vyzadujAdmina(req, res, () => {
+    void (async (): Promise<void> => {
+      const overeni = validujPridaniUcastnikaPoUzavreni(req.body as unknown);
+      if (!overeni.uspech || overeni.data === null) {
+        posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+        return;
+      }
+      const id = ctiIdVypravy(req);
+      if (id.length === 0) {
+        posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+        return;
+      }
+      const vstup = overeni.data;
+      try {
+        const db = getDb();
+        const nalezene = await db
+          .select()
+          .from(expeditions)
+          .where(eq(expeditions.id, id))
+          .limit(1);
+        if (nalezene[0] === undefined) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        // Stav se záměrně nekontroluje — jde to i po proběhlá.
+        // Kapacita se po uzavření nekontroluje — nikdy KAPACITA_PLNA.
+        // Existence userId/clenId se ověřuje nad DB (404), jméno pak
+        // denormalizuje nactiExpediciSDetailem z čerstvých řádků.
+        if (vstup.userId !== null) {
+          const ucty = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.id, vstup.userId))
+            .limit(1);
+          if (ucty[0] === undefined) {
+            posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+            return;
+          }
+        } else if (vstup.clenId !== null) {
+          const clenoveRadky = await db
+            .select({ id: clenove.id })
+            .from(clenove)
+            .where(eq(clenove.id, vstup.clenId))
+            .limit(1);
+          if (clenoveRadky[0] === undefined) {
+            posliChybu(res, "NENALEZENO", "Člen nenalezen.");
+            return;
+          }
+        }
+
+        let vlozenyId: string | null = null;
+        try {
+          const vlozene = await db
+            .insert(participants)
+            .values({
+              expeditionId: id,
+              userId: vstup.userId,
+              clenId: vstup.clenId,
+              status: vstup.status,
+            })
+            .returning({ id: participants.id });
+          const prvni = vlozene[0];
+          if (prvni === undefined) throw new Error("prázdný returning");
+          vlozenyId = prvni.id;
+        } catch (chyba) {
+          if (jeUnikatniKolize(chyba)) {
+            posliChybu(
+              res,
+              "UZ_PRIHLASEN",
+              "Tenhle účastník už je na výpravě přihlášený.",
+            );
+            return;
+          }
+          throw chyba;
+        }
+
+        await synchronizujPocet(db, id);
+        const detail = await nactiExpediciSDetailem(db, id);
+        if (detail === null || vlozenyId === null) {
+          vnitrniChyba(res);
+          return;
+        }
+        const ucastnik = detail.ucastnici.find(
+          (polozka) => polozka.id === vlozenyId,
+        );
+        if (ucastnik === undefined) {
+          vnitrniChyba(res);
+          return;
+        }
+        const telo: PridatUcastnikaPoUzavreniResponse = {
+          ucastnik,
+          expedice: detail.expedice,
+        };
+        res.status(201).json(telo);
+      } catch {
+        vnitrniChyba(res);
+      }
+    })();
+  });
+});
+
+/* DELETE /api/expeditions/:id/ucastnici/:ucastnikId — jen ADMIN. → 200. */
+app.delete(
+  "/api/expeditions/:id/ucastnici/:ucastnikId",
+  (req: Request, res: Response) => {
+    vyzadujAdmina(req, res, () => {
+      void (async (): Promise<void> => {
+        const id = ctiIdVypravy(req);
+        const ucastnikId = ctiIdUcastnika(req);
+        if (id.length === 0) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        if (ucastnikId.length === 0) {
+          posliChybu(res, "NENALEZENO", "Účastník nenalezen.");
+          return;
+        }
+        try {
+          const db = getDb();
+          const vyprava = await db
+            .select({ id: expeditions.id })
+            .from(expeditions)
+            .where(eq(expeditions.id, id))
+            .limit(1);
+          if (vyprava.length === 0) {
+            posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+            return;
+          }
+          // Stav se záměrně nekontroluje — jde to i po proběhlá.
+          const smazane = await db
+            .delete(participants)
+            .where(
+              and(
+                eq(participants.id, ucastnikId),
+                eq(participants.expeditionId, id),
+              ),
+            )
+            .returning({ id: participants.id });
+          if (smazane.length === 0) {
+            posliChybu(res, "NENALEZENO", "Účastník nenalezen.");
+            return;
+          }
+          await synchronizujPocet(db, id);
+          const detail = await nactiExpediciSDetailem(db, id);
+          if (detail === null) {
+            vnitrniChyba(res);
+            return;
+          }
+          const telo: OdebratUcastnikaResponse = {
+            ok: true,
+            expedice: detail.expedice,
+          };
+          res.json(telo);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Krok 6 — Fotky k uzavřené výpravě (minimum Fáze 2: URL režim).       */

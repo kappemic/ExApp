@@ -50,6 +50,12 @@ export function toApiExpedice(radek: ExpeditionRow): ApiExpedice | null {
   if (radek.id.length === 0 || radek.nazev.length === 0) return null;
   const datum = normalizujDatum(radek.datum);
   if (datum === null) return null;
+  // datum_do je NULLable (jednodenní); nevalidní tvar → null (skip řádku).
+  let datumDo: string | null = null;
+  if (radek.datumDo !== null) {
+    datumDo = normalizujDatum(radek.datumDo);
+    if (datumDo === null) return null;
+  }
   if (!jePlatnyStav(radek.stav)) return null;
   if (!Number.isInteger(radek.kapacitaPrihlaseno) || radek.kapacitaPrihlaseno < 0)
     return null;
@@ -59,8 +65,10 @@ export function toApiExpedice(radek: ExpeditionRow): ApiExpedice | null {
     id: radek.id,
     nazev: radek.nazev,
     datum,
+    datumDo,
     sraz: radek.sraz,
     popis: radek.popis,
+    trasaOdkaz: typeof radek.trasaOdkaz === "string" ? radek.trasaOdkaz : "",
     kapacita: {
       prihlaseno: radek.kapacitaPrihlaseno,
       celkem: radek.kapacitaCelkem,
@@ -146,8 +154,9 @@ export async function spocitejUcastniky(
 }
 
 /**
- * Srovná cache `expeditions.kapacita_prihlaseno` se skutečným COUNTem,
- * aby i GET list (čte sloupec) hlásil pravdu. Vrací čerstvý počet.
+ * Srovná cache `expeditions.kapacita_prihlaseno` se skutečným COUNTem.
+ * Cache čte build-time snapshot script; živé endpointy (list i detail)
+ * počítají COUNT čerstvě. Vrací čerstvý počet.
  */
 export async function synchronizujPocet(
   db: Db,

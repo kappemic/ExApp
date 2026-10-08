@@ -1,9 +1,10 @@
 import type { JSX } from "react";
 import type { Expedition, ExpeditionStatus } from "../../lib/mock-expeditions";
 import {
-  formatCelyDatum,
   formatDen,
   formatMesicZkratka,
+  formatRozsahData,
+  jeBezOmezeni,
   jeProbehla,
   obsazenostProcenta,
   volnaMista,
@@ -111,6 +112,7 @@ export default function ExpeditionCard({
   onDetail,
 }: ExpeditionCardProps): JSX.Element {
   const probehla = jeProbehla(expedice);
+  const bezOmezeni = jeBezOmezeni(expedice);
   const procenta = obsazenostProcenta(expedice);
   const volna = volnaMista(expedice);
 
@@ -142,7 +144,7 @@ export default function ExpeditionCard({
           <div className="flex gap-2">
             <dt className="shrink-0 font-semibold">Datum:</dt>
             <dd>
-              <time dateTime={expedice.datum}>{formatCelyDatum(expedice.datum)}</time>
+              <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
             </dd>
           </div>
           <div className="flex gap-2">
@@ -154,27 +156,44 @@ export default function ExpeditionCard({
         <div className="mt-3">
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="font-semibold tabular-nums">
-              {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
-              <span className="font-normal text-inkoust/65"> přihlášeno</span>
+              {bezOmezeni ? (
+                <>
+                  {expedice.kapacita.prihlaseno}
+                  <span className="font-normal text-inkoust/65"> přihlášeno · bez omezení</span>
+                </>
+              ) : (
+                <>
+                  {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
+                  <span className="font-normal text-inkoust/65"> přihlášeno</span>
+                </>
+              )}
             </span>
             <span className="shrink-0 text-[13px] text-inkoust/65">
-              {probehla ? "výprava proběhla" : volna === 0 ? "plně obsazeno" : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
+              {probehla
+                ? "výprava proběhla"
+                : bezOmezeni
+                  ? "místa dost"
+                  : volna === 0
+                    ? "plně obsazeno"
+                    : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
             </span>
           </div>
-          <div
-            role="progressbar"
-            aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
-            aria-valuenow={expedice.kapacita.prihlaseno}
-            aria-valuemin={0}
-            aria-valuemax={expedice.kapacita.celkem}
-            className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-linka"
-          >
+          {!bezOmezeni && (
             <div
-              aria-hidden="true"
-              className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
-              style={{ width: `${procenta}%` }}
-            />
-          </div>
+              role="progressbar"
+              aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
+              aria-valuenow={expedice.kapacita.prihlaseno}
+              aria-valuemin={0}
+              aria-valuemax={expedice.kapacita.celkem}
+              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-linka"
+            >
+              <div
+                aria-hidden="true"
+                className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
+                style={{ width: `${procenta}%` }}
+              />
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex-1" />

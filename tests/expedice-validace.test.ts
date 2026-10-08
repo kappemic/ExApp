@@ -44,6 +44,66 @@ describe("validujVytvoreniExpedice", () => {
     expect(vysledek.data?.popis).toBe("");
   });
 
+  it("odkaz na trasu je nepovinný (default prázdný)", () => {
+    const vysledek = validujVytvoreniExpedice(dobraVyprava());
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.trasaOdkaz).toBe("");
+  });
+
+  it("platný odkaz na trasu (mapy.com) projde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ trasaOdkaz: "https://mapy.com/s/abcdef" }),
+    );
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.trasaOdkaz).toContain("https://mapy.com/");
+  });
+
+  it("odkaz bez https:// neprojde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ trasaOdkaz: "mapy.com/s/abcdef" }),
+    );
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["trasaOdkaz"]?.length).toBeGreaterThan(0);
+  });
+
+  it("moc dlouhý odkaz neprojde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ trasaOdkaz: `https://mapy.com/${"a".repeat(2048)}` }),
+    );
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["trasaOdkaz"]?.length).toBeGreaterThan(0);
+  });
+
+  it("konec od–do je nepovinný (default null = jednodenní)", () => {
+    const vysledek = validujVytvoreniExpedice(dobraVyprava());
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.datumDo).toBe(null);
+  });
+
+  it("platný rozsah od–do projde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ datum: "2099-06-12", datumDo: "2099-06-14" }),
+    );
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.datumDo).toBe("2099-06-14");
+  });
+
+  it("konec před začátkem neprojde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ datum: "2099-06-12", datumDo: "2099-06-11" }),
+    );
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["datumDo"]?.length).toBeGreaterThan(0);
+  });
+
+  it("neplatný tvar konce neprojde", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ datumDo: "14.6.2099" }),
+    );
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["datumDo"]?.length).toBeGreaterThan(0);
+  });
+
   it("krátký název neprojde", () => {
     const vysledek = validujVytvoreniExpedice(dobraVyprava({ nazev: "Sr" }));
     expect(vysledek.uspech).toBe(false);
@@ -74,9 +134,9 @@ describe("validujVytvoreniExpedice", () => {
     expect(vysledek.chybyPoli["datum"]?.length).toBeGreaterThan(0);
   });
 
-  it("kapacita mimo 1–100 neprojde", () => {
+  it("kapacita mimo 0–100 neprojde", () => {
     expect(
-      validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: 0 })).uspech,
+      validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: -1 })).uspech,
     ).toBe(false);
     expect(
       validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: 101 })).uspech,
@@ -84,6 +144,14 @@ describe("validujVytvoreniExpedice", () => {
     expect(
       validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: 2.5 })).uspech,
     ).toBe(false);
+  });
+
+  it("kapacita 0 = bez omezení (projde)", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ kapacitaCelkem: 0 }),
+    );
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.kapacitaCelkem).toBe(0);
   });
 
   it("non-objekt vrátí chybu těla", () => {
@@ -128,6 +196,47 @@ describe("validujUpravuExpedice — parciální", () => {
     const vysledek = validujUpravuExpedice({ datum: zitraYmd() });
     expect(vysledek.uspech).toBe(true);
     expect(vysledek.data?.datum).toBe(zitraYmd());
+  });
+
+  it("odkaz na trasu jde přidat patchem", () => {
+    const vysledek = validujUpravuExpedice({
+      trasaOdkaz: "https://mapy.com/s/abcdef",
+    });
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.trasaOdkaz).toContain("https://mapy.com/");
+  });
+
+  it("odkaz jde patchem vymazat (prázdný řetězec)", () => {
+    const vysledek = validujUpravuExpedice({ trasaOdkaz: "   " });
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.trasaOdkaz).toBe("");
+  });
+
+  it("neplatný odkaz v patchi neprojde", () => {
+    const vysledek = validujUpravuExpedice({ trasaOdkaz: "http://mapy.com/x" });
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["trasaOdkaz"]?.length).toBeGreaterThan(0);
+  });
+
+  it("konec od–do jde přidat patchem", () => {
+    const vysledek = validujUpravuExpedice({ datumDo: "2099-06-14" });
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.datumDo).toBe("2099-06-14");
+  });
+
+  it("konec jde patchem zrušit (null = jednodenní)", () => {
+    const vysledek = validujUpravuExpedice({ datumDo: null });
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.datumDo).toBe(null);
+  });
+
+  it("konec před novým začátkem ve stejném patchi neprojde", () => {
+    const vysledek = validujUpravuExpedice({
+      datum: "2099-06-12",
+      datumDo: "2099-06-11",
+    });
+    expect(vysledek.uspech).toBe(false);
+    expect(vysledek.chybyPoli["datumDo"]?.length).toBeGreaterThan(0);
   });
 });
 

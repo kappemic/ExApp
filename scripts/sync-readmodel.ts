@@ -39,8 +39,10 @@ interface SnapshotExpedice {
   id: string;
   nazev: string;
   datum: string;
+  datumDo: string | null;
   sraz: string;
   popis: string;
+  trasaOdkaz: string;
   kapacita: { prihlaseno: number; celkem: number };
   stav: PlatnyStav;
 }
@@ -49,8 +51,10 @@ interface DbRadek {
   id: unknown;
   nazev: unknown;
   datum: unknown;
+  datum_do: unknown;
   sraz: unknown;
   popis: unknown;
+  trasa_odkaz: unknown;
   prihlaseno: unknown;
   celkem: unknown;
   stav: unknown;
@@ -99,12 +103,17 @@ function normalizujRadek(radek: DbRadek): SnapshotExpedice | null {
         : NaN;
   if (!Number.isInteger(prihlaseno) || prihlaseno < 0) return null;
   if (!Number.isInteger(celkem) || celkem < 0) return null;
+  // datum_do je NULLable; nevalidní tvar se mapuje na null (jednodenní).
+  const datumDo =
+    typeof radek.datum_do === "string" ? normalizujDatum(radek.datum_do) : null;
   return {
     id: radek.id,
     nazev: radek.nazev,
     datum,
+    datumDo,
     sraz: typeof radek.sraz === "string" ? radek.sraz : "",
     popis: typeof radek.popis === "string" ? radek.popis : "",
+    trasaOdkaz: typeof radek.trasa_odkaz === "string" ? radek.trasa_odkaz : "",
     kapacita: { prihlaseno, celkem },
     stav: radek.stav,
   };
@@ -150,7 +159,7 @@ async function main(): Promise<void> {
   try {
     await client.connect();
     const vysledek = await client.query(
-      "SELECT id, nazev, datum::text AS datum, sraz, popis, kapacita_prihlaseno AS prihlaseno, kapacita_celkem AS celkem, stav FROM expeditions ORDER BY datum ASC",
+      "SELECT id, nazev, datum::text AS datum, datum_do::text AS datum_do, sraz, popis, trasa_odkaz, kapacita_prihlaseno AS prihlaseno, kapacita_celkem AS celkem, stav FROM expeditions ORDER BY datum ASC",
     );
     const expedice: SnapshotExpedice[] = [];
     for (const radek of vysledek.rows) {

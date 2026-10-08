@@ -91,7 +91,10 @@ describe("validujVytvoreniExpedice — Fáze 2 rozšíření", () => {
     expect(pres.chybyPoli["popis"]?.length).toBeGreaterThan(0);
   });
 
-  it("kapacita 1 a 100 projde (hranice)", () => {
+  it("kapacita 0, 1 a 100 projde (hranice, 0 = bez omezení)", () => {
+    expect(
+      validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: 0 })).uspech,
+    ).toBe(true);
     expect(
       validujVytvoreniExpedice(dobraVyprava({ kapacitaCelkem: 1 })).uspech,
     ).toBe(true);
@@ -101,13 +104,21 @@ describe("validujVytvoreniExpedice — Fáze 2 rozšíření", () => {
   });
 
   it("kapacita string / záporná / necelá neprojde", () => {
-    for (const kapacitaCelkem of [0, -1, 101, 2.5, "12", null]) {
+    for (const kapacitaCelkem of [-1, 101, 2.5, "12"]) {
       const vysledek = validujVytvoreniExpedice(
         dobraVyprava({ kapacitaCelkem }),
       );
       expect(vysledek.uspech).toBe(false);
       expect(vysledek.chybyPoli["kapacitaCelkem"]?.length).toBeGreaterThan(0);
     }
+  });
+
+  it("chybějící kapacita (null) = bez omezení", () => {
+    const vysledek = validujVytvoreniExpedice(
+      dobraVyprava({ kapacitaCelkem: null }),
+    );
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.kapacitaCelkem).toBe(0);
   });
 
   it("název se trimuje", () => {
@@ -173,8 +184,17 @@ describe("validujUpravuExpedice — Fáze 2 rozšíření", () => {
 /* ------------------------------------------------------------------ */
 
 describe("MATICE_EXPEDICE — metoda + cesta → kdo", () => {
-  it("má právě 9 řádků", () => {
-    expect(MATICE_EXPEDICE).toHaveLength(9);
+  it("má právě 11 řádků (Krok 2 + dodatečná správa po uzavření, varianta A)", () => {
+    expect(MATICE_EXPEDICE).toHaveLength(11);
+  });
+
+  it("dodatečná správa po uzavření je ADMIN (POST ucastnici, DELETE detail)", () => {
+    const najdi = (metoda: string, cesta: string) =>
+      MATICE_EXPEDICE.find((r) => r.metoda === metoda && r.cesta === cesta);
+    expect(najdi("POST", EXPEDICE_UCASTNICI_VZOR)?.kdo).toBe("ADMIN");
+    expect(
+      najdi("DELETE", "/api/expeditions/:id/ucastnici/:ucastnikId")?.kdo,
+    ).toBe("ADMIN");
   });
 
   it("POST/PATCH/DELETE detailu a PATCH uzavrit je ADMIN", () => {
@@ -245,7 +265,7 @@ describe("kapacita — kontrakt kódů", () => {
   });
 
   it("snížení kapacity pod přihlášené hlídá server (validátor pustí tvar)", () => {
-    // Hranice validuje jen tvar 1–100; srovnání s COUNTem dělá route nad DB
+    // Hranice validuje jen tvar 0–100 (0 = bez omezení); srovnání s COUNTem dělá route nad DB
     // (PATCH → 422 s kapacitaCelkem, viz smoke-krok7). Tady jen tvar projde.
     const vysledek = validujUpravuExpedice({ kapacitaCelkem: 1 });
     expect(vysledek.uspech).toBe(true);

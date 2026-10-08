@@ -1,7 +1,7 @@
 {
   "_meta": {
     "zdroj": "db-snapshot",
-    "generatedAt": "2026-10-07T16:08:24.096Z",
+    "generatedAt": "2026-10-07T17:07:48.745Z",
     "poznamka": "Build-time snapshot z Neon DB (scripts/sync-readmodel.ts). Bez secretů, pouze veřejná read data."
   },
   "expedice": [
@@ -72,7 +72,7 @@
       "sraz": "Pec pod Sněžkou, parkoviště, 7:30",
       "popis": "Náročná celodenní túra Obřím dolem na Sněžku a zpět přes Růžohorky. Jen pro zdatné.",
       "kapacita": {
-        "prihlaseno": 11,
+        "prihlaseno": 1,
         "celkem": 12
       },
       "stav": "skoro plno"
