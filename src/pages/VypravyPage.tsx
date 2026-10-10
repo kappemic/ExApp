@@ -89,6 +89,9 @@ function KalendarPlaceholder(): JSX.Element {
   );
 }
 
+/** Velikost stránky archivu historie (`GET /api/expeditions?stav=proběhlá`). */
+const HISTORIE_PAGE_SIZE = 6;
+
 function prevedApiExpedici(api: ApiExpedice): Expedition {
   return {
     id: api.id,
@@ -172,6 +175,47 @@ export default function VypravyPage(): JSX.Element {
       zruseno = true;
     };
   }, []);
+
+  /*
+   * Historie ze serveru (`GET /api/expeditions?stav=proběhlá&page&pageSize`).
+   * `null` = BFF bez odpovědi → fallback na lokální filtr snapshotu jako dnes.
+   * Lokálně změněné/smazané řádky živý fetch nepřepisuje (stejně jako výše).
+   */
+  const [historie, setHistorie] = useState<Expedition[] | null>(null);
+  const [historieStranka, setHistorieStranka] = useState<number>(1);
+  const [historieCelkem, setHistorieCelkem] = useState<number | null>(null);
+  const [historieStranek, setHistorieStranek] = useState<number>(1);
+
+  useEffect(() => {
+    let zruseno = false;
+    void (async (): Promise<void> => {
+      const ziva = await getExpeditions({
+        stav: "proběhlá",
+        page: historieStranka,
+        pageSize: HISTORIE_PAGE_SIZE,
+      });
+      if (zruseno) return;
+      if (ziva.source !== "db") {
+        setHistorie(null);
+        return;
+      }
+      setHistorie(
+        ziva.data
+          .filter((e) => !smazaneRef.current.has(e.id))
+          .map((e) => prevedApiExpedici(e)),
+      );
+      if (ziva.pagination !== undefined) {
+        setHistorieCelkem(ziva.pagination.totalItems);
+        setHistorieStranek(ziva.pagination.totalPages);
+      } else {
+        setHistorieCelkem(ziva.data.length);
+        setHistorieStranek(1);
+      }
+    })();
+    return () => {
+      zruseno = true;
+    };
+  }, [historieStranka]);
   const [vybrana, setVybrana] = useState<Expedition | null>(null);
   const [tvorbaOtevrena, setTvorbaOtevrena] = useState<boolean>(false);
   const [vytvariSe, setVytvariSe] = useState<boolean>(false);
@@ -182,10 +226,26 @@ export default function VypravyPage(): JSX.Element {
     () => expedice.filter((e) => e.stav !== "proběhlá"),
     [expedice],
   );
-  const probehle: Expedition[] = useMemo(
-    () => expedice.filter((e) => e.stav === "proběhlá"),
-    [expedice],
-  );
+  /*
+   * Historie: server je pravda (`source: "db"`), bez BFF fallback na lokální
+   * filtr snapshotu jako dnes. Lokálně upravené řádky mají přednost před
+   * serverovou kopií (mutace bez refetche).
+   */
+  const probehle: Expedition[] = useMemo(() => {
+    if (historie === null) {
+      return expedice.filter((e) => e.stav === "proběhlá");
+    }
+    const lokalnePodleId = new Map(expedice.map((e) => [e.id, e]));
+    return historie.map((h) => {
+      if (!zmeneneRef.current.has(h.id)) return h;
+      return lokalnePodleId.get(h.id) ?? h;
+    });
+  }, [historie, expedice]);
+  const historieZeServeru = historie !== null;
+  const historiePocet: number =
+    historieZeServeru && historieCelkem !== null
+      ? historieCelkem
+      : probehle.length;
 
   function zmenZobrazeni(nove: Zobrazeni): void {
     setSearchParams((prev) => {
@@ -198,6 +258,9 @@ export default function VypravyPage(): JSX.Element {
   function naAktualizaci(nova: Expedition): void {
     zmeneneRef.current.add(nova.id);
     setExpedice((prev) => prev.map((e) => (e.id === nova.id ? nova : e)));
+    setHistorie((prev) =>
+      prev === null ? prev : prev.map((e) => (e.id === nova.id ? nova : e)),
+    );
     setVybrana((prev) => (prev !== null && prev.id === nova.id ? nova : prev));
   }
 
@@ -205,6 +268,9 @@ export default function VypravyPage(): JSX.Element {
   const naSmazanaStabilni = useCallback((id: string): void => {
     smazaneRef.current.add(id);
     setExpedice((prev) => prev.filter((e) => e.id !== id));
+    setHistorie((prev) =>
+      prev === null ? prev : prev.filter((e) => e.id !== id),
+    );
     setVybrana(null);
   }, []);
   const naZavritModalStabilni = useCallback((): void => {
@@ -322,10 +388,10 @@ export default function VypravyPage(): JSX.Element {
                   Proběhlé · historie
                 </h2>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-mech tabular-nums">
-                  {probehle.length}{" "}
-                  {probehle.length === 1
+                  {historiePocet}{" "}
+                  {historiePocet === 1
                     ? "záznam"
-                    : probehle.length >= 2 && probehle.length <= 4
+                    : historiePocet >= 2 && historiePocet <= 4
                       ? "záznamy"
                       : "záznamů"}
                 </p>
@@ -337,6 +403,41 @@ export default function VypravyPage(): JSX.Element {
               <div className="pt-4">
                 <ExpeditionList expedice={probehle} onDetail={setVybrana} />
               </div>
+              {historieZeServeru && historieStranek > 1 && (
+                <nav
+                  aria-label="Stránkování historie"
+                  className="mt-5 flex flex-wrap items-center justify-center gap-2"
+                >
+                  <button
+                    type="button"
+                    disabled={historieStranka <= 1}
+                    onClick={() =>
+                      setHistorieStranka((prev) => Math.max(1, prev - 1))
+                    }
+                    className="min-h-[44px] min-w-[44px] rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold shadow-denik transition-colors enabled:hover:bg-linka/60 disabled:opacity-40"
+                  >
+                    ← Novější
+                  </button>
+                  <p
+                    aria-live="polite"
+                    className="min-h-[44px] px-2 py-2 text-sm font-bold tabular-nums"
+                  >
+                    Stránka {historieStranka} z {historieStranek}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={historieStranka >= historieStranek}
+                    onClick={() =>
+                      setHistorieStranka((prev) =>
+                        Math.min(historieStranek, prev + 1),
+                      )
+                    }
+                    className="min-h-[44px] min-w-[44px] rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold shadow-denik transition-colors enabled:hover:bg-linka/60 disabled:opacity-40"
+                  >
+                    Starší →
+                  </button>
+                </nav>
+              )}
             </section>
           </div>
         ) : (

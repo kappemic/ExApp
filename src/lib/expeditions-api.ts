@@ -27,7 +27,8 @@
  */
 
 import generatedSnapshot from "../data/expeditions.generated.json";
-import { EXPEDITIONS_PATH } from "../shared/api-types";
+import { expediceListUrl } from "../shared/api-types";
+import type { ExpediceListQuery, Strankovani } from "../shared/api-types";
 import type { Expedition } from "./mock-expeditions";
 import { mockExpeditions } from "./mock-expeditions";
 
@@ -52,6 +53,8 @@ export interface ExpeditionsResult {
   generatedAt: string | null;
   /** Nastaveno pouze při fallbacku na mocky. */
   errorCode?: ExpeditionsErrorCode;
+  /** Stránkování ze serveru (`GET /api/expeditions?page&pageSize`). Bez query chybí. */
+  pagination?: Strankovani;
 }
 
 /** Stav pro budoucí async UI (Krok 6+). Dnes ho konzumuje jen `useExpeditions`. */
@@ -137,6 +140,32 @@ function apiBase(): string {
   return raw.trim().replace(/\/+$/, "");
 }
 
+function jeCeleKladne(
+  hodnota: unknown,
+  max?: number,
+): boolean {
+  if (typeof hodnota !== "number" || !Number.isInteger(hodnota)) return false;
+  if (hodnota < 1) return false;
+  if (max !== undefined && hodnota > max) return false;
+  return true;
+}
+
+/** Guard kontraktu `Strankovani` (server: page ≥ 1, pageSize 1–100). */
+function jeStrankovani(hodnota: unknown): hodnota is Strankovani {
+  if (!jeRecord(hodnota)) return false;
+  if (!jeCeleKladne(hodnota["page"])) return false;
+  if (!jeCeleKladne(hodnota["pageSize"], 100)) return false;
+  const totalItems = hodnota["totalItems"];
+  if (
+    typeof totalItems !== "number" ||
+    !Number.isInteger(totalItems) ||
+    totalItems < 0
+  )
+    return false;
+  if (!jeCeleKladne(hodnota["totalPages"])) return false;
+  return true;
+}
+
 /** Validace živé odpovědi BFF (`ExpediceListResponse`) na hranici. */
 function parseExpediceList(telo: unknown): Expedition[] | null {
   if (!jeRecord(telo)) return null;
@@ -148,6 +177,19 @@ function parseExpediceList(telo: unknown): Expedition[] | null {
     vysledek.push(polozka);
   }
   return vysledek;
+}
+
+/**
+ * Volitelné `pagination` z BFF (`ExpediceListResponse.pagination`).
+ * Chybí = seznam bez stránkování (platné). Nevalidní tvar = celá odpověď
+ * neplatná (stejně jako nevalidní expedice) → fallback.
+ */
+function parsePagination(telo: unknown): Strankovani | undefined | null {
+  if (!jeRecord(telo)) return null;
+  const pagination = telo["pagination"];
+  if (pagination === undefined) return undefined;
+  if (!jeStrankovani(pagination)) return null;
+  return pagination;
 }
 
 function fallback(
@@ -200,15 +242,20 @@ export function getExpeditionsSync(): ExpeditionsResult {
  * při jakémkoliv selhání padá zpět na `getExpeditionsSync()`.
  * Nikdy nevyhazuje. Prázdná DB vrátí prázdné pole se `source: "db"`
  * (UI pak ukáže `ExpeditionEmpty` – zdrojem pravdy je server).
+ * Volitelný `query` staví `?stav&page&pageSize` dle kontraktu
+ * (`expediceListUrl`); bez něj chování beze změny. `pagination` z
+ * odpovědi se předává dál, jinak chybí (aditivní).
  */
-export async function getExpeditions(): Promise<ExpeditionsResult> {
+export async function getExpeditions(
+  query?: ExpediceListQuery,
+): Promise<ExpeditionsResult> {
   const zaklad = apiBase();
   if (zaklad.length === 0) {
     return getExpeditionsSync();
   }
   let odpoved: Response;
   try {
-    odpoved = await fetch(`${zaklad}${EXPEDITIONS_PATH}`, {
+    odpoved = await fetch(`${zaklad}${expediceListUrl(query ?? {})}`, {
       headers: { Accept: "application/json" },
     });
   } catch {
@@ -227,10 +274,15 @@ export async function getExpeditions(): Promise<ExpeditionsResult> {
   if (expedice === null) {
     return fallbackNaSync("BACKEND_CHYBA");
   }
+  const pagination = parsePagination(telo);
+  if (pagination === null) {
+    return fallbackNaSync("BACKEND_CHYBA");
+  }
   return {
     data: expedice.map(normalizujExpedici),
     source: "db",
     generatedAt: new Date().toISOString(),
+    ...(pagination === undefined ? {} : { pagination }),
   };
 }
 
