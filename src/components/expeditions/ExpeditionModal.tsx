@@ -529,10 +529,10 @@ export default function ExpeditionModal({
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
             {nadpisRezim}
           </p>
-          <h2 id={nadpisId} className="mt-1 text-xl font-bold tracking-tight">
+          <h2 id={nadpisId} className="mt-1 break-words text-xl font-bold tracking-tight">
             {expedice.nazev}
           </h2>
-          <p id={popisId} className="mt-1 text-sm text-inkoust/70">
+          <p id={popisId} className="mt-1 break-words text-sm text-inkoust/70">
             <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
             {" · "}
             {expedice.sraz}
@@ -541,7 +541,7 @@ export default function ExpeditionModal({
           {rezim === "prehled" && (
             <>
               {expedice.popis.trim().length > 0 && (
-                <p className="mt-3 border-t border-dashed border-linka pt-3 text-[15px] leading-relaxed">
+                <p className="mt-3 break-words border-t border-dashed border-linka pt-3 text-[15px] leading-relaxed">
                   {expedice.popis}
                 </p>
               )}
@@ -681,6 +681,7 @@ export default function ExpeditionModal({
                             type="button"
                             onClick={() => void naOdhlasit()}
                             disabled={akceBezi}
+                            title={akceBezi ? "Odhlašování probíhá…" : "Odhlásit se z výpravy"}
                             className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50 disabled:opacity-60"
                           >
                             {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
@@ -896,6 +897,7 @@ export default function ExpeditionModal({
                                     type="button"
                                     onClick={() => void naOdebratUcastnika(u.id)}
                                     disabled={odebirani}
+                                    title={odebirani ? "Odebírání probíhá…" : `Odebrat „${u.jmeno}“ z kroniky`}
                                     className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-4 text-sm font-bold text-papir disabled:opacity-60"
                                   >
                                     {odebirani ? "Odebírám…" : "Ano, odebrat"}
@@ -904,6 +906,7 @@ export default function ExpeditionModal({
                                     type="button"
                                     onClick={() => setPotvrzOdebraniId(null)}
                                     disabled={odebirani}
+                                    title={odebirani ? "Odebírání probíhá…" : "Ponechat účastníka v kronice"}
                                     className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold disabled:opacity-60"
                                   >
                                     Ponechat
@@ -1026,7 +1029,7 @@ export default function ExpeditionModal({
 
           {rezim === "ruseni" && (
             <div className="mt-4 rounded-2xl border-2 border-red-800/40 bg-red-800/5 p-4">
-              <h3 className="font-bold">Opravdu odstranit „{expedice.nazev}"?</h3>
+              <h3 className="break-words font-bold">Opravdu odstranit „{expedice.nazev}"?</h3>
               <p className="mt-1 text-sm text-inkoust/70">
                 Smaže se i seznam {ucastnici.length}{" "}
                 {ucastnici.length === 1 ? "přihlášeného" : ucastnici.length >= 2 && ucastnici.length <= 4 ? "přihlášených" : "přihlášených"}.
@@ -1042,6 +1045,7 @@ export default function ExpeditionModal({
                   type="button"
                   onClick={() => setRezim("prehled")}
                   disabled={mazeSe}
+                  title={mazeSe ? "Mazání probíhá…" : "Ponechat výpravu"}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                 >
                   Ponechat
@@ -1050,6 +1054,7 @@ export default function ExpeditionModal({
                   type="button"
                   onClick={naSmazat}
                   disabled={mazeSe}
+                  title={mazeSe ? "Mazání probíhá…" : "Odstranit výpravu nevratně"}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-5 text-sm font-bold text-papir disabled:opacity-60"
                 >
                   {mazeSe ? "Mažu…" : "Ano, odstranit"}
@@ -1117,6 +1122,7 @@ export default function ExpeditionModal({
                   type="button"
                   onClick={() => setRezim("prehled")}
                   disabled={uzaviraSe}
+                  title={uzaviraSe ? "Uzavírání probíhá…" : "Zpět na přehled"}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                 >
                   Zpět

@@ -46,6 +46,8 @@ export default function ExpeditionPhotos({
   const [mazaneId, setMazaneId] = useState<string | null>(null);
   const [mazatChyba, setMazatChyba] = useState<string | null>(null);
   const [potvrditSmazani, setPotvrditSmazani] = useState<string | null>(null);
+  /** Rozbité URL (onError) — místo tichého schování viditelný náhradní stav. */
+  const [rozbite, setRozbite] = useState<Record<string, boolean>>({});
 
   const nacist = useCallback(async (): Promise<void> => {
     setStav("nacitani");
@@ -57,6 +59,7 @@ export default function ExpeditionPhotos({
       return;
     }
     setFotky(vysledek.data.fotky);
+    setRozbite({});
     setStav("hotovo");
   }, [expeditionId]);
 
@@ -177,25 +180,44 @@ export default function ExpeditionPhotos({
               {fotky.map((fotka) => {
                 const mazeSe: boolean = mazaneId === fotka.id;
                 const potvrzeno: boolean = potvrditSmazani === fotka.id;
+                const jeRozbita: boolean = rozbite[fotka.id] === true;
                 return (
                   <li
                     key={fotka.id}
                     className="overflow-hidden rounded-2xl border border-inkoust/15 bg-papir/70"
                   >
-                    <img
-                      src={fotka.url}
-                      alt={
-                        fotka.popis.trim().length > 0
-                          ? fotka.popis
-                          : "Fotka z výpravy"
-                      }
-                      loading="lazy"
-                      className="h-28 w-full object-cover"
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.style.display = "none";
-                      }}
-                    />
+                    {jeRozbita ? (
+                      <div className="flex h-28 w-full flex-col items-center justify-center px-2 text-center">
+                        <p
+                          role="status"
+                          className="text-[12px] font-semibold text-inkoust/70"
+                        >
+                          Fotku se nepodařilo načíst.
+                        </p>
+                        <a
+                          href={fotka.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-[44px] items-center justify-center px-3 text-[12px] font-bold text-smrk underline underline-offset-2"
+                        >
+                          Otevřít odkaz
+                        </a>
+                      </div>
+                    ) : (
+                      <img
+                        src={fotka.url}
+                        alt={
+                          fotka.popis.trim().length > 0
+                            ? fotka.popis
+                            : "Fotka z výpravy"
+                        }
+                        loading="lazy"
+                        className="h-28 w-full object-cover"
+                        onError={() => {
+                          setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                        }}
+                      />
+                    )}
                     {fotka.popis.trim().length > 0 && (
                       <p className="truncate px-2 pt-1 text-[12px] text-inkoust/70">
                         {fotka.popis}
@@ -271,12 +293,14 @@ export default function ExpeditionPhotos({
                 type="url"
                 inputMode="url"
                 autoComplete="off"
+                enterKeyHint="go"
+                maxLength={2048}
                 placeholder="https://…"
                 value={url}
                 onChange={(e) => setUrl(e.currentTarget.value)}
                 aria-invalid={chybaUrl !== null}
                 aria-describedby={chybaUrl !== null ? `${urlPoleId}-chyba` : undefined}
-                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-sm"
+                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-base"
               />
               {chybaUrl !== null && (
                 <p
@@ -297,12 +321,13 @@ export default function ExpeditionPhotos({
                 id={popisPoleId}
                 type="text"
                 maxLength={500}
+                enterKeyHint="done"
                 placeholder="Tábořiště při západu slunce…"
                 value={popis}
                 onChange={(e) => setPopis(e.currentTarget.value)}
                 aria-invalid={chybaPopisu !== null}
                 aria-describedby={chybaPopisu !== null ? `${popisPoleId}-chyba` : undefined}
-                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-sm"
+                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-base"
               />
               {chybaPopisu !== null && (
                 <p

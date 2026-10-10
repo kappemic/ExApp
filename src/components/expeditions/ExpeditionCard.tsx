@@ -133,10 +133,10 @@ export default function ExpeditionCard({
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <h2 className="text-[1.05rem] font-bold leading-snug tracking-tight">
+        <h2 className="break-words text-[1.05rem] font-bold leading-snug tracking-tight">
           {expedice.nazev}
         </h2>
-        <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-inkoust/80">
+        <p className="mt-1.5 line-clamp-3 break-words text-sm leading-relaxed text-inkoust/80">
           {expedice.popis}
         </p>
 
@@ -149,7 +149,7 @@ export default function ExpeditionCard({
           </div>
           <div className="flex gap-2">
             <dt className="shrink-0 font-semibold">Sraz:</dt>
-            <dd className="min-w-0">{expedice.sraz}</dd>
+            <dd className="min-w-0 break-words">{expedice.sraz}</dd>
           </div>
         </dl>
 

@@ -18,6 +18,19 @@
 }
 
 @layer base {
+  html {
+    /* mobile-native §2+§6: žádný šedý flash po tapu, žádný pull-to-refresh přes aplikaci */
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    /* mobile-native §5: žádný 300ms click-delay na dotykových prvcích */
+    touch-action: manipulation;
+  }
+
   body {
     background-color: var(--color-papir);
     color: var(--color-inkoust);

@@ -518,6 +518,7 @@ export default function ExpeditionForm({
           type="button"
           onClick={onZrusit}
           disabled={odesilaSe}
+          title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
           className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-60"
         >
           Zrušit
@@ -525,6 +526,7 @@ export default function ExpeditionForm({
         <button
           type="submit"
           disabled={odesilaSe}
+          title={odesilaSe ? "Ukládání probíhá…" : odeslatPopisek}
           className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust disabled:opacity-60"
         >
           {odesilaSe ? "Ukládám…" : odeslatPopisek}
