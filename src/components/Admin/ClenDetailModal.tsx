@@ -135,6 +135,9 @@ export default function ClenDetailModal({
 
   const profil: ClenskyProfil = profilClena(clen);
   const aktivni: boolean = profil.clenstvi === "aktivni_clen";
+  const skolaText: string = clen.skola.trim();
+  const tridaText: string = clen.trida.trim();
+  const discordText: string = (clen.discordNick ?? "").trim();
   const zarazeni: string =
     profil.funkce === "rada"
       ? "Rada"
@@ -229,6 +232,18 @@ export default function ClenDetailModal({
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
                 <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Discord
+                </dt>
+                <dd
+                  className={
+                    discordText.length > 0 ? "font-semibold" : "text-inkoust/70"
+                  }
+                >
+                  {discordText.length > 0 ? discordText : "—"}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
                   Členství
                 </dt>
                 <dd className="font-semibold">
@@ -253,18 +268,27 @@ export default function ClenDetailModal({
                 <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
                   Škola
                 </dt>
-                <dd className="text-inkoust/70">—</dd>
+                <dd
+                  className={
+                    skolaText.length > 0 ? "font-semibold" : "text-inkoust/70"
+                  }
+                >
+                  {skolaText.length > 0 ? skolaText : "—"}
+                </dd>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
                 <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
                   Třída
                 </dt>
-                <dd className="text-inkoust/70">—</dd>
+                <dd
+                  className={
+                    tridaText.length > 0 ? "font-semibold" : "text-inkoust/70"
+                  }
+                >
+                  {tridaText.length > 0 ? tridaText : "—"}
+                </dd>
               </div>
             </dl>
-            <p className="mt-2 text-xs text-inkoust/60">
-              Seznam školu a třídu nenese — vyplníš je v úpravách.
-            </p>
 
             <div className="mt-5 flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:justify-end">
               <button
@@ -345,8 +369,8 @@ function ClenProfilForm({
   const [clenstvi, setClenstvi] = useState<Clenstvi>(puvodni.clenstvi);
   const [funkce, setFunkce] = useState<Funkce>(puvodni.funkce);
   const [adminPriznak, setAdminPriznak] = useState<boolean>(puvodni.isAdmin);
-  const [skola, setSkola] = useState<string>("");
-  const [trida, setTrida] = useState<string>("");
+  const [skola, setSkola] = useState<string>(clen.skola);
+  const [trida, setTrida] = useState<string>(clen.trida);
   const [chyba, setChyba] = useState<string | null>(null);
   const [ukladam, setUkladam] = useState<boolean>(false);
   const profilChybaId: string = useId();
@@ -359,8 +383,8 @@ function ClenProfilForm({
     setClenstvi(aktualni.clenstvi);
     setFunkce(aktualni.funkce);
     setAdminPriznak(aktualni.isAdmin);
-    setSkola("");
-    setTrida("");
+    setSkola(clen.skola);
+    setTrida(clen.trida);
     setChyba(null);
   }, [clen]);
 
@@ -388,12 +412,16 @@ function ClenProfilForm({
     }
     const skolaCista: string = skola.trim();
     const tridaCista: string = trida.trim();
+    const puvodniSkola: string = clen.skola.trim();
+    const puvodniTrida: string = clen.trida.trim();
+    const skolaStejna: boolean = skolaCista === puvodniSkola;
+    const tridaStejna: boolean = tridaCista === puvodniTrida;
     const trioStejne: boolean =
       clenstvi === puvodni.clenstvi &&
       funkce === puvodni.funkce &&
       adminPriznak === puvodni.isAdmin;
-    // Škola/třída se posílá jen vyplněná (seznam je nenese — prázdná by mazala).
-    if (trioStejne && skolaCista.length === 0 && tridaCista.length === 0) {
+    // Bez změny se jen zavře (škola/třída jsou předvyplněné ze seznamu).
+    if (trioStejne && skolaStejna && tridaStejna) {
       onHotovo();
       return;
     }
@@ -402,8 +430,9 @@ function ClenProfilForm({
       funkce,
       isAdmin: adminPriznak,
     };
-    if (skolaCista.length > 0) vstup.skola = skolaCista;
-    if (tridaCista.length > 0) vstup.trida = tridaCista;
+    // Škola/třída se posílá jen vyplněná a změněná (prázdná by mazala).
+    if (!skolaStejna && skolaCista.length > 0) vstup.skola = skolaCista;
+    if (!tridaStejna && tridaCista.length > 0) vstup.trida = tridaCista;
     setUkladam(true);
     const vysledek: string | null = await onUlozitProfil(clen.id, vstup);
     setUkladam(false);
@@ -534,8 +563,8 @@ function ClenProfilForm({
           />
         </div>
         <p className="text-xs text-inkoust/60">
-          Seznam školu a třídu nenese — vyplněním se nastaví (posílá se jen
-          neprázdné, max 120 znaků).
+          Předvyplněno ze seznamu — změnou se nastaví nová hodnota (posílá se
+          jen neprázdné, max 120 znaků).
         </p>
       </div>
 

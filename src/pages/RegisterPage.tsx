@@ -234,11 +234,7 @@ export default function RegisterPage(): JSX.Element {
                 value={skola}
                 onChange={(e) => setSkola(e.target.value)}
                 aria-invalid={chyby.skola !== undefined}
-                aria-describedby={
-                  chyby.skola !== undefined
-                    ? "registrace-skola-chyba"
-                    : "registrace-skola-napoveda"
-                }
+                aria-describedby={chyby.skola !== undefined ? "registrace-skola-chyba" : undefined}
                 placeholder="Např. ZŠ Lesní"
                 maxLength={VALIDACE.skolaMaxDelka}
                 className={chyby.skola !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
@@ -248,12 +244,6 @@ export default function RegisterPage(): JSX.Element {
                   <option key={nabidka} value={nabidka} />
                 ))}
               </datalist>
-              {chyby.skola === undefined && (
-                <p id="registrace-skola-napoveda" className="mt-1 text-xs text-inkoust/60">
-                  Nepovinné — začni psát nebo vyber z nabídky. Novou školu si
-                  zapamatujeme pro příště.
-                </p>
-              )}
             </>
           </Pole>
 
@@ -269,11 +259,7 @@ export default function RegisterPage(): JSX.Element {
                 value={trida}
                 onChange={(e) => setTrida(e.target.value)}
                 aria-invalid={chyby.trida !== undefined}
-                aria-describedby={
-                  chyby.trida !== undefined
-                    ? "registrace-trida-chyba"
-                    : "registrace-trida-napoveda"
-                }
+                aria-describedby={chyby.trida !== undefined ? "registrace-trida-chyba" : undefined}
                 placeholder="Např. 5.A"
                 maxLength={VALIDACE.tridaMaxDelka}
                 className={chyby.trida !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
@@ -283,12 +269,6 @@ export default function RegisterPage(): JSX.Element {
                   <option key={nabidka} value={nabidka} />
                 ))}
               </datalist>
-              {chyby.trida === undefined && (
-                <p id="registrace-trida-napoveda" className="mt-1 text-xs text-inkoust/60">
-                  Nepovinné — třídy se nefiltrují podle školy. Novou třídu si
-                  zapamatujeme pro příště.
-                </p>
-              )}
             </>
           </Pole>
         </div>

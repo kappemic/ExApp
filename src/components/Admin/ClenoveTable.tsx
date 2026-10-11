@@ -4,7 +4,6 @@ import {
   type ClenskyProfil,
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
-import RoleBadge from "./RoleBadge";
 
 interface ClenoveTableProps {
   clenove: ReadonlyArray<UserListItem>;
@@ -93,15 +92,12 @@ export default function ClenoveTable({
     <div className="overflow-x-auto rounded-lg border-2 border-inkoust bg-white/60 shadow-denik">
       <table className="w-full min-w-[640px] border-collapse text-left">
         <caption className="sr-only">
-          {popisek ?? "Seznam členů — jméno, role, stav a zařazení"}
+          {popisek ?? "Seznam členů — jméno, stav a zařazení"}
         </caption>
         <thead>
           <tr className="border-b-2 border-inkoust bg-papir">
             <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
               Jméno
-            </th>
-            <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
-              Role / Hodnost
             </th>
             <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
               Stav
@@ -131,8 +127,19 @@ export default function ClenoveTable({
                     className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left leading-snug"
                   >
                     <span className="min-w-0">
-                      <span className="block max-w-[220px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
-                        {clen.jmeno}
+                      <span className="flex min-w-0 items-baseline gap-1">
+                        <span className="block min-w-0 max-w-[220px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
+                          {clen.jmeno}
+                        </span>
+                        {profil.isAdmin ? (
+                          <span
+                            title="Administrátor"
+                            className="shrink-0 text-sm font-bold text-jantar"
+                          >
+                            <span aria-hidden="true">★</span>
+                            <span className="sr-only">administrátor</span>
+                          </span>
+                        ) : null}
                       </span>
                       <span className="block max-w-[220px] truncate text-xs font-normal text-mech sm:max-w-none sm:whitespace-normal">
                         {clen.email}
@@ -146,11 +153,6 @@ export default function ClenoveTable({
                     </span>
                   </button>
                 </th>
-                <td className="px-4 py-3">
-                  <span className="inline-flex max-w-[280px] flex-wrap gap-1.5">
-                    <RoleBadge role={clen.role} />
-                  </span>
-                </td>
                 <td className="px-4 py-3">
                   <Stav profil={profil} />
                 </td>
