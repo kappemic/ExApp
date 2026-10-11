@@ -1002,6 +1002,12 @@ export interface UserListItem {
   funkce?: Funkce;
   /** Ortogonální admin příznak — aditivně optional. */
   isAdmin?: boolean;
+  /** Škola — "" = nevyplněna (DB NOT NULL DEFAULT "", server mapuje s fallbackem ''). */
+  skola: string;
+  /** Třída — "" = nevyplněna (DB NOT NULL DEFAULT "", server mapuje s fallbackem ''). */
+  trida: string;
+  /** Discord nick — null = nevyplněn (DB `discord_nick` nullable, server mapuje string → string, jinak null). */
+  discordNick: string | null;
 }
 
 export interface UsersListResponse {

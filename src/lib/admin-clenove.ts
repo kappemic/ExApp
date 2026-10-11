@@ -66,6 +66,20 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   ) {
     return false;
   }
+  // Škola/třída nese server vždy (DB NOT NULL DEFAULT "", fallback '').
+  // Chybějící / ne-string tvar odpověď odmítne (špatný tvar).
+  if (
+    typeof kandidat["skola"] !== "string" ||
+    typeof kandidat["trida"] !== "string"
+  ) {
+    return false;
+  }
+  // Discord nick nese server vždy (DB `discord_nick` nullable → string | null).
+  // Platný string i null projdou, chybějící / jiný tvar odpověď odmítne.
+  const discordNick: unknown = kandidat["discordNick"];
+  if (discordNick !== null && typeof discordNick !== "string") {
+    return false;
+  }
   // 3D trio je v kontraktu aditivně optional (fallback mirror ze starého role).
   const clenstvi: unknown = kandidat["clenstvi"];
   if (
@@ -135,7 +149,7 @@ export async function nactiCleny(): Promise<ClenoveVysledek<UserListItem[]>> {
  * Vstup nového profilového PATCH (jen ADMIN, PATCH /api/users/:id).
  * Parciální — `JSON.stringify` nedefinovaná pole vynechá, server mění
  * jen poslaná (`Object.hasOwn`). `skola`/`trida` se posílají jen
- * vyplněné (seznam je nenese, prázdná by mazala).
+ * vyplněné (prázdná by mazala).
  */
 export interface UlozitProfilVstup {
   clenstvi?: Clenstvi;

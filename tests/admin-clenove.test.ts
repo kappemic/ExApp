@@ -10,10 +10,13 @@
  * neexistuje (collection chyba = red). Původní `validujUpravuRoleUzivatele`
  * existuje a staré `{ role }` přes něj dál prochází (kontrakt se neláme).
  * Ne-admin zamítnutí se na route úrovni bez DB netestuje (záměrně vynecháno).
- * Produkční kód se nemění — jen testy.
+ * Klientský guard `jeUserListItem` (src/lib/admin-clenove.ts) se testuje
+ * přes veřejné `nactiCleny` s mocknutým fetchem (žádné HTTP, žádná DB):
+ * `skola`/`trida` musí být string (i ""), jiný tvar odpověď odmítne.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HTTP_STATUS_PRO_KOD } from "../src/shared/api-types";
+import { nactiCleny } from "../src/lib/admin-clenove";
 import {
   validujUpravuRoleUzivatele,
   validujUpravuUzivatele,
@@ -90,5 +93,114 @@ describe("PATCH users — exkluzivita (nikdy obojí najednou → 422)", () => {
     });
     expect(vysledek.uspech).toBe(false);
     expect(Object.keys(vysledek.chybyPoli).length).toBeGreaterThan(0);
+  });
+});
+
+describe("nactiCleny — guard/mapper se skola/trida/discordNick (mock fetch, bez HTTP)", () => {
+  const API_ZAKLAD = "https://api.test";
+
+  function odpovedJson(telo: unknown, status: number): Response {
+    return new Response(JSON.stringify(telo), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function mockFetch(odpoved: Response): void {
+    const mock: typeof fetch = () => Promise.resolve(odpoved);
+    vi.stubGlobal("fetch", mock);
+  }
+
+  function dobryClen(): Record<string, unknown> {
+    return {
+      id: "11111111-1111-4111-8111-111111111111",
+      jmeno: "Anežka Nová",
+      email: "anezka@example.cz",
+      role: "clen",
+      clenstvi: "clen",
+      funkce: null,
+      isAdmin: false,
+      skola: "ZŠ Lesní",
+      trida: "5.A",
+      discordNick: "anezka.hraje",
+    };
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_API_BASE_URL", API_ZAKLAD);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("platný tvar se skola/trida projde a state nese skutečné hodnoty", async () => {
+    mockFetch(odpovedJson({ users: [dobryClen()] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data).toHaveLength(1);
+      expect(vysledek.data[0]?.skola).toBe("ZŠ Lesní");
+      expect(vysledek.data[0]?.trida).toBe("5.A");
+    }
+  });
+
+  it("prázdné skola/trida ('' = nevyplněno) projdou", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    clen["skola"] = "";
+    clen["trida"] = "";
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.skola).toBe("");
+      expect(vysledek.data[0]?.trida).toBe("");
+    }
+  });
+
+  it("chybějící skola/trida odpověď odmítne (špatný tvar)", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    delete clen["skola"];
+    delete clen["trida"];
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(false);
+  });
+
+  it("ne-string skola odpověď odmítne (špatný tvar)", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    clen["skola"] = 123;
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(false);
+  });
+
+  it("platný discordNick projde a nese skutečnou hodnotu", async () => {
+    mockFetch(odpovedJson({ users: [dobryClen()] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.discordNick).toBe("anezka.hraje");
+    }
+  });
+
+  it("null discordNick (nevyplněn) projde", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    clen["discordNick"] = null;
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.discordNick).toBeNull();
+    }
+  });
+
+  it("ne-string ne-null discordNick odpověď odmítne (špatný tvar)", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    clen["discordNick"] = 123;
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(false);
   });
 });

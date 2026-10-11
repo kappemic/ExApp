@@ -643,6 +643,9 @@ app.get("/api/users", (req: Request, res: Response) => {
             clenstvi: users.clenstvi,
             funkce: users.funkce,
             isAdmin: users.isAdmin,
+            skola: users.skola,
+            trida: users.trida,
+            discordNick: users.discordNick,
           })
           .from(users)
           .orderBy(asc(users.email));
@@ -666,6 +669,10 @@ app.get("/api/users", (req: Request, res: Response) => {
               clenstvi,
               funkce,
               isAdmin: radek.isAdmin,
+              skola: typeof radek.skola === "string" ? radek.skola : "",
+              trida: typeof radek.trida === "string" ? radek.trida : "",
+              discordNick:
+                typeof radek.discordNick === "string" ? radek.discordNick : null,
             };
           }),
         };
@@ -699,6 +706,10 @@ function toUserListItem(radek: UserRow): UserListItem {
     clenstvi,
     funkce,
     isAdmin: radek.isAdmin,
+    skola: typeof radek.skola === "string" ? radek.skola : "",
+    trida: typeof radek.trida === "string" ? radek.trida : "",
+    discordNick:
+      typeof radek.discordNick === "string" ? radek.discordNick : null,
   };
 }
 
