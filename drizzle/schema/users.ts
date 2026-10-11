@@ -13,6 +13,7 @@
  * (`pgcrypto` pro `gen_random_uuid()` — na Neonu dostupné by default).
  */
 import {
+  boolean,
   pgTable,
   uuid,
   text,
@@ -44,6 +45,19 @@ export const users = pgTable("users", {
    * — dnes stačí jedna hodnota, admin UI zapisuje tu nejvyšší.
    */
   role: text("role").notNull().default("clen"),
+  /**
+   * 3D členství (aditivní). CHECK žije jen v SQL migraci 0005
+   * (stejně jako dosud u `role`).
+   */
+  clenstvi: text("clenstvi").notNull().default("clen"),
+  /** 3D funkce (nullable, bez defaultu — NULL = bez funkce). */
+  funkce: text("funkce"),
+  /** Ortogonální admin příznak. */
+  isAdmin: boolean("is_admin").notNull().default(false),
+  /** Škola (trim na hranici; "" = nevyplněno). */
+  skola: text("skola").notNull().default(""),
+  /** Třída (trim na hranici; "" = nevyplněno). */
+  trida: text("trida").notNull().default(""),
   /** Strava OAuth subject (Fáze 4). NULL = nepropojeno. */
   stravaId: text("strava_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true })
