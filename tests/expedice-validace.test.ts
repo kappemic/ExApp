@@ -186,8 +186,14 @@ describe("validujUpravuExpedice — parciální", () => {
     });
   });
 
-  it("minulé datum v patchi neprojde", () => {
+  it("minulé datum v patchi projde (úprava historie)", () => {
     const vysledek = validujUpravuExpedice({ datum: "2000-01-01" });
+    expect(vysledek.uspech).toBe(true);
+    expect(vysledek.data?.datum).toBe("2000-01-01");
+  });
+
+  it("neplatný tvar data v patchi dál neprojde", () => {
+    const vysledek = validujUpravuExpedice({ datum: "12.6.2000" });
     expect(vysledek.uspech).toBe(false);
     expect(vysledek.chybyPoli["datum"]?.length).toBeGreaterThan(0);
   });

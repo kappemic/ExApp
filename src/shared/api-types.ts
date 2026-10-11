@@ -31,6 +31,14 @@
  */
 
 import type { Role } from "../config/roles";
+import type { Clenstvi, Funkce } from "../config/roles";
+
+/**
+ * @deprecated Starý model rolí (`Role` union) — ponechán pro zpětnou
+ * kompatibilitu. Nový kód používá 3D trio `Clenstvi` / `Funkce` / `isAdmin`
+ * (viz `src/config/roles.ts`: `ClenskyProfil`, `mapujRoliNaProfil`).
+ */
+export type ZastaralaRole = Role;
 
 /* ------------------------------------------------------------------ */
 /* Branded ID — zabrání prohození UserId vs RegistrationCodeId.        */
@@ -59,6 +67,12 @@ export interface ApiUser {
   role: Role;
   /** Odvozená auth role pro hranici ADMIN vs USER. */
   authRole: AuthRole;
+  /** 3D členství — aditivně optional (detail viz roles.ts ClenskyProfil). */
+  clenstvi?: Clenstvi;
+  /** 3D funkce — aditivně optional (null = bez funkce). */
+  funkce?: Funkce;
+  /** Ortogonální admin příznak — aditivně optional. */
+  isAdmin?: boolean;
   stravaId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -169,6 +183,10 @@ export interface RegistraceRequest {
   discordNick?: string | null;
   /** Pozvánkový kód z POST /api/admin/codes. Trim + uppercase na hranici. */
   kod: string;
+  /** Škola — nepovinná; prázdná se normalizuje na "". Max 120 znaků. */
+  skola?: string;
+  /** Třída — nepovinná; prázdná se normalizuje na "". Max 120 znaků. */
+  trida?: string;
 }
 
 export interface RegistraceResponse {
@@ -251,6 +269,12 @@ export interface AdminClen {
   telefon: string | null;
   discordNick: string | null;
   role: Role[];
+  /** 3D členství — aditivně optional. */
+  clenstvi?: Clenstvi;
+  /** 3D funkce — aditivně optional (null = bez funkce). */
+  funkce?: Funkce;
+  /** Ortogonální admin příznak — aditivně optional. */
+  isAdmin?: boolean;
   updatedAt: string;
 }
 
@@ -323,6 +347,12 @@ export interface ClenPrehled {
   /** Plné jméno z DB („Anna Nováková"). */
   jmeno: string;
   role: Role[];
+  /** 3D členství — aditivně optional. */
+  clenstvi?: Clenstvi;
+  /** 3D funkce — aditivně optional (null = bez funkce). */
+  funkce?: Funkce;
+  /** Ortogonální admin příznak — aditivně optional. */
+  isAdmin?: boolean;
   /** Mapováno z DB `created_at` (sloupec updated_at neexistuje). */
   updatedAt: string;
 }
@@ -355,6 +385,8 @@ export const VALIDACE = {
   expediceTrasaOdkazMaxDelka: 2048,
   expediceKapacitaMin: 0,
   expediceKapacitaMax: 100,
+  skolaMaxDelka: 120,
+  tridaMaxDelka: 120,
 } as const;
 
 /** České hlášky validace pro sdílení mezi API a formuláři. */
@@ -394,6 +426,8 @@ export const VALIDACNI_ZPRAVY = {
   ucastnikIdentitaChybi: "Vyber člena — zadej userId, nebo clenId.",
   ucastnikIdentitaOboji: "Zadej právě jednu identitu — userId, nebo clenId, ne obojí.",
   ucastnikStatusNeplatny: "Status musí být „ucastnil_se“, nebo „omluven“.",
+  skolaDlouha: "Škola může mít nejvýš 120 znaků.",
+  tridaDlouha: "Třída může mít nejvýš 120 znaků.",
 } as const;
 
 /**
@@ -962,6 +996,12 @@ export interface UserListItem {
   email: string;
   /** Primární DB role — jediná hodnota z `Role` (users.role CHECK). */
   role: Role;
+  /** 3D členství — aditivně optional. */
+  clenstvi?: Clenstvi;
+  /** 3D funkce — aditivně optional (null = bez funkce). */
+  funkce?: Funkce;
+  /** Ortogonální admin příznak — aditivně optional. */
+  isAdmin?: boolean;
 }
 
 export interface UsersListResponse {
@@ -987,7 +1027,11 @@ export function userDetailPath(id: string): `/api/users/${string}` {
   return `/api/users/${id}`;
 }
 
-/** Vstup editace role — právě jedna primární role. */
+/** Vstup editace role — právě jedna primární role.
+ * @deprecated Starý tvar `{ role }` — ponechán pro zpětnou kompatibilitu.
+ * Nové trio `clenstvi` / `funkce` / `isAdmin` (+ `skola` / `trida`)
+ * validuje `validujUpravuUzivatele` (server/src/validace.ts).
+ */
 export interface UpravitUzivateleRequest {
   role: Role;
 }
@@ -1004,3 +1048,44 @@ export const PRISTUP_USERS: Record<UsersCesta, AuthRole | "PUBLIC"> = {
   [USERS_PATH]: "ADMIN",
   [USERS_DETAIL_VZOR]: "ADMIN",
 } as const;
+
+/* ------------------------------------------------------------------ */
+/* 13) GET /api/meta/skoly-tridy — číselník škol a tříd (PUBLIC)        */
+/* Vrací jen názvy (žádné osobní údaje — nikdy user_id / e-maily).      */
+/* Aditivní, nic se nepřejmenovává.                                     */
+/* ------------------------------------------------------------------ */
+
+/** Cesta meta číselníku škol a tříd. */
+export const META_SKOLY_TRIDY_PATH = "/api/meta/skoly-tridy" as const;
+
+/** Odpověď číselníku — jen seznamy názvů, žádné osobní údaje. */
+export interface SkolyTridyResponse {
+  skoly: string[];
+  tridy: string[];
+}
+
+/**
+ * Guard odpovědi číselníku: `true` jen pro přesně
+ * `{ skoly: string[], tridy: string[] }` (žádné cizí klíče —
+ * např. `user_id` / `email` — odpověď odmítnou).
+ */
+export function jeSkolyTridyOdpoved(hodnota: unknown): hodnota is SkolyTridyResponse {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  const klice = Object.keys(zaznam).sort();
+  if (klice.length !== 2 || klice[0] !== "skoly" || klice[1] !== "tridy") {
+    return false;
+  }
+  const skoly: unknown = zaznam["skoly"];
+  const tridy: unknown = zaznam["tridy"];
+  if (!Array.isArray(skoly) || !Array.isArray(tridy)) return false;
+  for (const polozka of skoly) {
+    if (typeof polozka !== "string") return false;
+  }
+  for (const polozka of tridy) {
+    if (typeof polozka !== "string") return false;
+  }
+  return true;
+}

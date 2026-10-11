@@ -13,8 +13,12 @@ import {
   type DochazkovyStatus,
 } from "../../src/shared/api-types";
 import {
+  chybaKombinace3D,
   chybaKombinaceRole,
   isKnownRole,
+  type ClenskyProfil,
+  type Clenstvi,
+  type Funkce,
   type Role,
 } from "../../src/config/roles";
 
@@ -150,6 +154,31 @@ function overTvarKodu(chyby: ChybyPoli, hodnota: unknown): string | null {
   return cisty;
 }
 
+/**
+ * Nepovinná škola / třída: chybějící → "", prázdná/whitespace → "",
+ * jinak trim; delší než limit → chyba pole.
+ */
+function overSkolaTrida(
+  chyby: ChybyPoli,
+  pole: "skola" | "trida",
+  hodnota: unknown,
+  maxDelka: number,
+  hlaska: string,
+): string | null {
+  if (hodnota === undefined || hodnota === null) return "";
+  if (typeof hodnota !== "string") {
+    pridej(chyby, pole, hlaska);
+    return null;
+  }
+  const cista = hodnota.trim();
+  if (cista.length === 0) return "";
+  if (cista.length > maxDelka) {
+    pridej(chyby, pole, hlaska);
+    return null;
+  }
+  return cista;
+}
+
 export interface CistaRegistrace {
   jmeno: string;
   prijmeni?: string;
@@ -158,6 +187,10 @@ export interface CistaRegistrace {
   telefon: string | null;
   discordNick: string | null;
   kod: string;
+  /** Vyčištěná škola (trim; prázdná → ""). */
+  skola: string;
+  /** Vyčištěná třída (trim; prázdná → ""). */
+  trida: string;
 }
 
 export interface VysledekValidace<T> {
@@ -183,11 +216,27 @@ export function validujRegistraci(telo: unknown): VysledekValidace<CistaRegistra
   const telefon = overTelefon(chyby, ctiString(telo, "telefon"));
   const discordNick = overDiscordNick(chyby, ctiString(telo, "discordNick"));
   const kod = overTvarKodu(chyby, ctiString(telo, "kod"));
+  const skola = overSkolaTrida(
+    chyby,
+    "skola",
+    ctiString(telo, "skola"),
+    VALIDACE.skolaMaxDelka,
+    VALIDACNI_ZPRAVY.skolaDlouha,
+  );
+  const trida = overSkolaTrida(
+    chyby,
+    "trida",
+    ctiString(telo, "trida"),
+    VALIDACE.tridaMaxDelka,
+    VALIDACNI_ZPRAVY.tridaDlouha,
+  );
   if (
     jmeno === null ||
     email === null ||
     heslo === null ||
     kod === null ||
+    skola === null ||
+    trida === null ||
     Object.keys(chyby).length > 0
   ) {
     return { uspech: false, data: null, chybyPoli: chyby };
@@ -199,6 +248,8 @@ export function validujRegistraci(telo: unknown): VysledekValidace<CistaRegistra
     telefon,
     discordNick,
     kod,
+    skola,
+    trida,
   };
   if (prijmeni !== undefined) data.prijmeni = prijmeni;
   return { uspech: true, data, chybyPoli: {} };
@@ -460,8 +511,8 @@ export function validujUpravuClena(
 /* ------------------------------------------------------------------ */
 /* Krok 3b — Expedice CRUD + uzavření (validace na hranici).            */
 /* Pravidla kopírují kontrakt (VALIDACE + VALIDACNI_ZPRAVY):            */
-/* nazev 3–120, datum YYYY-MM-DD (minulost → 422, historie vzniká jen   */
-/* uzavřením), datumDo YYYY-MM-DD | prázdné (konec od–do, >= datum),     */
+/* nazev 3–120, datum YYYY-MM-DD (minulost → 422 jen při VYTVOŘENÍ,     */
+/* historie vzniká uzavřením; PATCH minulost povoluje pro opravu historie), */
 /* sraz 3–120, popis max 2000 ("" = nevyplněn), kapacita                 */
 /* 0–100 (0 / chybějící = bez omezení). PATCH je parciální — `stav`     */
 /* tudy nikdy nejde (jen /uzavrit).                                      */
@@ -512,7 +563,11 @@ function overNazevExpedice(chyby: ChybyPoli, hodnota: unknown): string | null {
   return cisty;
 }
 
-function overDatumExpedice(chyby: ChybyPoli, hodnota: unknown): string | null {
+function overDatumExpedice(
+  chyby: ChybyPoli,
+  hodnota: unknown,
+  povolitMinulost = false,
+): string | null {
   if (typeof hodnota !== "string" || hodnota.trim().length === 0) {
     pridej(chyby, "datum", VALIDACNI_ZPRAVY.expediceDatumPovinne);
     return null;
@@ -529,7 +584,7 @@ function overDatumExpedice(chyby: ChybyPoli, hodnota: unknown): string | null {
     pridej(chyby, "datum", VALIDACNI_ZPRAVY.expediceDatumNeplatne);
     return null;
   }
-  if (ciste < dnesYmd()) {
+  if (!povolitMinulost && ciste < dnesYmd()) {
     pridej(
       chyby,
       "datum",
@@ -734,6 +789,10 @@ export interface CistaUpravaExpedice {
 /**
  * Validace PATCH /api/expeditions/:id — parciální, jen poslaná pole.
  * `stav` tudy nikdy nejde (proběhlá vzniká jen PATCH /uzavrit).
+ * Minulost data je záměrně povolena — proběhlé záznamy musí zůstat
+ * opravitelné (zákaz minulosti platí jen pro VYTVOŘENÍ). Tvar a reálnost
+ * data se kontrolují stejně jako při vytvoření. Rozsah od–do proti
+ * existujícímu řádku dopočítává route v server/src/index.ts.
  */
 export function validujUpravuExpedice(
   telo: unknown,
@@ -759,7 +818,7 @@ export function validujUpravuExpedice(
     if (nazev !== null) data.nazev = nazev;
   }
   if (Object.hasOwn(telo, "datum")) {
-    const datum = overDatumExpedice(chyby, ctiString(telo, "datum"));
+    const datum = overDatumExpedice(chyby, ctiString(telo, "datum"), true);
     if (datum !== null) data.datum = datum;
   }
   if (Object.hasOwn(telo, "datumDo")) {
@@ -1051,4 +1110,144 @@ export function validujUpravuRoleUzivatele(
     return { uspech: false, data: null, chybyPoli: chyby };
   }
   return { uspech: true, data: { role: raw }, chybyPoli: {} };
+}
+
+/* ------------------------------------------------------------------ */
+/* PATCH /api/users/:id — nové parciální 3D trio (aditivní).             */
+/* Přijímá `clenstvi?/funkce?/isAdmin?/skola?/trida?` (parciální)        */
+/* NEBO samotné staré `{ role }` (přes `validujUpravuRoleUzivatele`).    */
+/* Kombinace obojího → uspech:false (route složí 422).                  */
+/* Pravidlo 3D: `clen` + funkce → chyba (`chybaKombinace3D`).            */
+/* ------------------------------------------------------------------ */
+
+const CLENSTVI_HODNOTY: readonly Clenstvi[] = ["clen", "aktivni_clen"];
+const FUNKCE_HODNOTY: readonly Exclude<Funkce, null>[] = ["vedeni", "rada"];
+
+export interface CistaUpravaUzivatele {
+  clenstvi?: Clenstvi;
+  funkce?: Funkce;
+  isAdmin?: boolean;
+  skola?: string;
+  trida?: string;
+  role?: Role;
+}
+
+/**
+ * Validace PATCH /api/users/:id — nové trio, nebo staré `{ role }`.
+ * Staré `{ role }` prochází přes `validujUpravuRoleUzivatele`
+ * (kontrakt se neláme); obojí najednou → 422 tvar chyb.
+ */
+export function validujUpravuUzivatele(
+  telo: unknown,
+): VysledekValidace<CistaUpravaUzivatele> {
+  const chyby: ChybyPoli = {};
+  if (!jeRecord(telo)) {
+    return {
+      uspech: false,
+      data: null,
+      chybyPoli: { telo: ["Požadavek musí být JSON objekt."] },
+    };
+  }
+  const maRoli = Object.hasOwn(telo, "role");
+  const maNove =
+    Object.hasOwn(telo, "clenstvi") ||
+    Object.hasOwn(telo, "funkce") ||
+    Object.hasOwn(telo, "isAdmin") ||
+    Object.hasOwn(telo, "skola") ||
+    Object.hasOwn(telo, "trida");
+
+  if (maRoli && maNove) {
+    pridej(
+      chyby,
+      "role",
+      "Zadej buď starou roli, nebo nové pole (členství / funkce / admin / škola / třída) — ne obojí.",
+    );
+    return { uspech: false, data: null, chybyPoli: chyby };
+  }
+
+  if (maRoli && !maNove) {
+    const stare = validujUpravuRoleUzivatele(telo);
+    if (!stare.uspech || stare.data === null) {
+      return { uspech: false, data: null, chybyPoli: stare.chybyPoli };
+    }
+    return { uspech: true, data: { role: stare.data.role }, chybyPoli: {} };
+  }
+
+  const data: CistaUpravaUzivatele = {};
+
+  if (Object.hasOwn(telo, "clenstvi")) {
+    const raw: unknown = ctiString(telo, "clenstvi");
+    if (
+      typeof raw !== "string" ||
+      !(CLENSTVI_HODNOTY as readonly string[]).includes(raw)
+    ) {
+      pridej(chyby, "clenstvi", "Vyber platné členství: člen, nebo aktivní člen.");
+    } else {
+      data.clenstvi = raw as Clenstvi;
+    }
+  }
+
+  if (Object.hasOwn(telo, "funkce")) {
+    const raw: unknown = ctiString(telo, "funkce");
+    if (raw === null) {
+      data.funkce = null;
+    } else if (
+      typeof raw !== "string" ||
+      !(FUNKCE_HODNOTY as readonly string[]).includes(raw)
+    ) {
+      pridej(chyby, "funkce", "Vyber platnou funkci: vedení, rada, nebo bez funkce.");
+    } else {
+      data.funkce = raw as Exclude<Funkce, null>;
+    }
+  }
+
+  if (Object.hasOwn(telo, "isAdmin")) {
+    const raw: unknown = ctiString(telo, "isAdmin");
+    if (typeof raw !== "boolean") {
+      pridej(chyby, "isAdmin", "Příznak admin musí být true, nebo false.");
+    } else {
+      data.isAdmin = raw;
+    }
+  }
+
+  if (Object.hasOwn(telo, "skola")) {
+    const cista = overSkolaTrida(
+      chyby,
+      "skola",
+      ctiString(telo, "skola"),
+      VALIDACE.skolaMaxDelka,
+      VALIDACNI_ZPRAVY.skolaDlouha,
+    );
+    if (cista !== null) data.skola = cista;
+  }
+
+  if (Object.hasOwn(telo, "trida")) {
+    const cista = overSkolaTrida(
+      chyby,
+      "trida",
+      ctiString(telo, "trida"),
+      VALIDACE.tridaMaxDelka,
+      VALIDACNI_ZPRAVY.tridaDlouha,
+    );
+    if (cista !== null) data.trida = cista;
+  }
+
+  if (Object.keys(chyby).length > 0) {
+    return { uspech: false, data: null, chybyPoli: chyby };
+  }
+
+  if (data.clenstvi !== undefined && data.funkce !== undefined) {
+    const profil: ClenskyProfil = {
+      clenstvi: data.clenstvi,
+      funkce: data.funkce,
+      isAdmin: data.isAdmin ?? false,
+    };
+    const chyba3D: string | null = chybaKombinace3D(profil);
+    if (chyba3D !== null) {
+      pridej(chyby, "funkce", chyba3D);
+      return { uspech: false, data: null, chybyPoli: chyby };
+    }
+  }
+
+  return { uspech: true, data, chybyPoli: {} };
 }

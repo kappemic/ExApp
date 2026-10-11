@@ -152,3 +152,69 @@ export function chybaKombinaceRole(role: RoleSet): string | null {
 export function jeValidniKombinaceRole(role: RoleSet): boolean {
   return chybaKombinaceRole(role) === null;
 }
+
+/* ------------------------------------------------------------------ */
+/* 3D model členství (aditivní nad starým `Role`, nic se nemění).       */
+/* - `Clenstvi`: základní příslušnost (`clen` | `aktivni_clen`).        */
+/* - `Funkce`: nadstavba (`vedeni` | `rada` | null = bez funkce).       */
+/* - `isAdmin`: ortogonální technický příznak (ne hodnost).             */
+/* Pravidlo 3D: funkci smí mít jen `aktivni_clen` (`chybaKombinace3D`).  */
+/* Na výpravy smí jen `aktivni_clen` (`smiNaVypravy`, isAdmin se nečte). */
+/* ------------------------------------------------------------------ */
+
+/** Základní příslušnost člena (3D model). */
+export type Clenstvi = "clen" | "aktivni_clen";
+
+/** Nadstavbová funkce člena; `null` = bez funkce. */
+export type Funkce = "vedeni" | "rada" | null;
+
+/** 3D profil člena: členství + funkce + ortogonální admin příznak. */
+export interface ClenskyProfil {
+  clenstvi: Clenstvi;
+  funkce: Funkce;
+  isAdmin: boolean;
+}
+
+/**
+ * Mapování staré role (včetně `USER`/`ADMIN`) na 3D profil.
+ * Neznámý string → `(clen, null, false)` (bezpečný default).
+ */
+export function mapujRoliNaProfil(staraRole: string): ClenskyProfil {
+  switch (staraRole) {
+    case "clen":
+      return { clenstvi: "clen", funkce: null, isAdmin: false };
+    case "aktivni-clen":
+      return { clenstvi: "aktivni_clen", funkce: null, isAdmin: false };
+    case "clen-rady":
+      return { clenstvi: "aktivni_clen", funkce: "rada", isAdmin: false };
+    case "vedeni":
+      return { clenstvi: "aktivni_clen", funkce: "vedeni", isAdmin: false };
+    case "admin":
+      return { clenstvi: "aktivni_clen", funkce: null, isAdmin: true };
+    case "USER":
+      return { clenstvi: "clen", funkce: null, isAdmin: false };
+    case "ADMIN":
+      return { clenstvi: "aktivni_clen", funkce: null, isAdmin: true };
+    default:
+      return { clenstvi: "clen", funkce: null, isAdmin: false };
+  }
+}
+
+/**
+ * Vrátí českou chybovou hlášku, nebo `null` když je 3D kombinace validní.
+ * Chyba jen pro `clen` + funkce; `isAdmin` se ignoruje (ortogonální).
+ */
+export function chybaKombinace3D(profil: ClenskyProfil): string | null {
+  if (profil.clenstvi === "clen" && profil.funkce !== null) {
+    return "Funkci (vedení/rada) může mít jen aktivní člen.";
+  }
+  return null;
+}
+
+/**
+ * Na výpravy smí jen `aktivni_clen`. `isAdmin` se záměrně nečte —
+ * samotný admin příznak bez aktivního členství nestačí.
+ */
+export function smiNaVypravy(profil: ClenskyProfil): boolean {
+  return profil.clenstvi === "aktivni_clen";
+}
