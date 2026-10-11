@@ -1,6 +1,7 @@
-import { useState, type FormEvent, type JSX } from "react";
+import { useEffect, useState, type FormEvent, type JSX } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth, type PoleRegistrace } from "../hooks/useAuth";
+import { nactiSkolyTridy } from "../lib/skoly-tridy";
 import { VALIDACE, normalizujKod } from "../shared/api-types";
 
 const VSTUP_TRIDY =
@@ -46,12 +47,31 @@ export default function RegisterPage(): JSX.Element {
   const [email, setEmail] = useState("");
   const [telefon, setTelefon] = useState("");
   const [discordNick, setDiscordNick] = useState("");
+  const [skola, setSkola] = useState("");
+  const [trida, setTrida] = useState("");
+  const [skolySeznam, setSkolySeznam] = useState<string[]>([]);
+  const [tridySeznam, setTridySeznam] = useState<string[]>([]);
   const [heslo, setHeslo] = useState("");
   const [kod, setKod] = useState("");
   const [ukazatHeslo, setUkazatHeslo] = useState(false);
   const [chyby, setChyby] = useState<ChybyPoli>({});
   const [formChyba, setFormChyba] = useState<string | null>(null);
   const [odesilaSe, setOdesilaSe] = useState(false);
+
+  // Číselník pro našeptávání — jednou při mountu; chyba → tichý fallback
+  // na prázdné seznamy (formulář funguje s volným textem i offline).
+  useEffect(() => {
+    let zive = true;
+    void (async (): Promise<void> => {
+      const vysledek = await nactiSkolyTridy();
+      if (!zive || !vysledek.ok) return;
+      setSkolySeznam(vysledek.data.skoly);
+      setTridySeznam(vysledek.data.tridy);
+    })();
+    return () => {
+      zive = false;
+    };
+  }, []);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -64,6 +84,8 @@ export default function RegisterPage(): JSX.Element {
       email,
       telefon: telefon.trim().length === 0 ? null : telefon,
       discordNick: discordNick.trim().length === 0 ? null : discordNick,
+      skola: skola.trim(),
+      trida: trida.trim(),
       heslo,
       kod,
     });
@@ -198,6 +220,78 @@ export default function RegisterPage(): JSX.Element {
             className={chyby.discordNick !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
           />
         </Pole>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Pole id="registrace-skola" label="Škola" chyba={chyby.skola}>
+            <>
+              <input
+                id="registrace-skola"
+                name="skola"
+                type="text"
+                autoComplete="organization"
+                enterKeyHint="next"
+                list="registrace-skoly-nabidka"
+                value={skola}
+                onChange={(e) => setSkola(e.target.value)}
+                aria-invalid={chyby.skola !== undefined}
+                aria-describedby={
+                  chyby.skola !== undefined
+                    ? "registrace-skola-chyba"
+                    : "registrace-skola-napoveda"
+                }
+                placeholder="Např. ZŠ Lesní"
+                maxLength={VALIDACE.skolaMaxDelka}
+                className={chyby.skola !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+              />
+              <datalist id="registrace-skoly-nabidka">
+                {skolySeznam.map((nabidka) => (
+                  <option key={nabidka} value={nabidka} />
+                ))}
+              </datalist>
+              {chyby.skola === undefined && (
+                <p id="registrace-skola-napoveda" className="mt-1 text-xs text-inkoust/60">
+                  Nepovinné — začni psát nebo vyber z nabídky. Novou školu si
+                  zapamatujeme pro příště.
+                </p>
+              )}
+            </>
+          </Pole>
+
+          <Pole id="registrace-trida" label="Třída" chyba={chyby.trida}>
+            <>
+              <input
+                id="registrace-trida"
+                name="trida"
+                type="text"
+                autoComplete="off"
+                enterKeyHint="next"
+                list="registrace-tridy-nabidka"
+                value={trida}
+                onChange={(e) => setTrida(e.target.value)}
+                aria-invalid={chyby.trida !== undefined}
+                aria-describedby={
+                  chyby.trida !== undefined
+                    ? "registrace-trida-chyba"
+                    : "registrace-trida-napoveda"
+                }
+                placeholder="Např. 5.A"
+                maxLength={VALIDACE.tridaMaxDelka}
+                className={chyby.trida !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+              />
+              <datalist id="registrace-tridy-nabidka">
+                {tridySeznam.map((nabidka) => (
+                  <option key={nabidka} value={nabidka} />
+                ))}
+              </datalist>
+              {chyby.trida === undefined && (
+                <p id="registrace-trida-napoveda" className="mt-1 text-xs text-inkoust/60">
+                  Nepovinné — třídy se nefiltrují podle školy. Novou třídu si
+                  zapamatujeme pro příště.
+                </p>
+              )}
+            </>
+          </Pole>
+        </div>
 
         <Pole id="registrace-heslo" label="Heslo *" chyba={chyby.heslo}>
           <div className="flex gap-2">

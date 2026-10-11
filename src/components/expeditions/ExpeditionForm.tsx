@@ -50,6 +50,11 @@ interface ExpeditionFormProps {
   serverChybyPoli: ChybyExpedice;
   onSubmit: (payload: VytvoritExpediciRequest | UpravitExpediciRequest) => void;
   onZrusit: () => void;
+  /**
+   * Úprava historie: při true se klientská kontrola minulosti data přeskočí
+   * (tvar/reálnost zůstává). Default false — tvorba minulost dál blokuje.
+   */
+  povolitMinulost?: boolean;
 }
 
 const DATUM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -95,6 +100,7 @@ function validujKlientsky(
   popis: string,
   trasaOdkaz: string,
   kapacitaText: string,
+  povolitMinulost = false,
 ): { chyby: ChybyExpedice; hodnoty: HodnotyExpedice | null } {
   const chyby: ChybyExpedice = {};
   const cistyNazev = nazev.trim();
@@ -111,7 +117,7 @@ function validujKlientsky(
     chyby.datum = VALIDACNI_ZPRAVY.expediceDatumPovinne;
   } else if (!DATUM_REGEX.test(cisteDatum) || !jeRealneDatum(cisteDatum)) {
     chyby.datum = VALIDACNI_ZPRAVY.expediceDatumNeplatne;
-  } else if (cisteDatum < dnesYmd()) {
+  } else if (!povolitMinulost && cisteDatum < dnesYmd()) {
     chyby.datum = VALIDACNI_ZPRAVY.expediceDatumMinulost;
   }
 
@@ -217,6 +223,7 @@ export default function ExpeditionForm({
   serverChybyPoli,
   onSubmit,
   onZrusit,
+  povolitMinulost = false,
 }: ExpeditionFormProps): JSX.Element {
   const [nazev, setNazev] = useState<string>(vychozi?.nazev ?? "");
   const [datum, setDatum] = useState<string>(vychozi?.datum ?? "");
@@ -267,7 +274,7 @@ export default function ExpeditionForm({
   function odesli(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     setOdeslano(true);
-    const vysledek = validujKlientsky(nazev, datum, datumDo, sraz, popis, trasaOdkaz, kapacita);
+    const vysledek = validujKlientsky(nazev, datum, datumDo, sraz, popis, trasaOdkaz, kapacita, povolitMinulost);
     setChyby({ ...vysledek.chyby, ...serverChybyPoli });
     if (vysledek.hodnoty === null) return;
     const payload: VytvoritExpediciRequest = {
@@ -298,6 +305,7 @@ export default function ExpeditionForm({
         pole === "popis" ? hodnota : popis,
         pole === "trasaOdkaz" ? hodnota : trasaOdkaz,
         pole === "kapacitaCelkem" ? hodnota : kapacita,
+        povolitMinulost,
       );
       setChyby((prev) => {
         const next: ChybyExpedice = { ...prev };

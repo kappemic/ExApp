@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
 import {
-  jeAktivniClen,
-  jeClen,
-  jeVeVedeni,
-  jeVRade,
-  type Role,
-  type RoleSet,
+  mapujRoliNaProfil,
+  type ClenskyProfil,
 } from "../config/roles";
 import AdminTaby, {
   type ClenoveTabId,
@@ -13,7 +9,11 @@ import AdminTaby, {
 } from "../components/Admin/AdminTaby";
 import ClenDetailModal from "../components/Admin/ClenDetailModal";
 import ClenoveTable from "../components/Admin/ClenoveTable";
-import { nactiCleny, ulozRoliClena } from "../lib/admin-clenove";
+import {
+  nactiCleny,
+  ulozProfilClena,
+  type UlozitProfilVstup,
+} from "../lib/admin-clenove";
 import type { UserListItem } from "../shared/api-types";
 
 const POPISKY_PANELU: Record<ClenoveTabId, string> = {
@@ -26,9 +26,19 @@ const POPISKY_PANELU: Record<ClenoveTabId, string> = {
 
 type StavNacteni = "nacteni" | "hotovo" | "chyba";
 
-/** Jedna DB role zabalená pro je*() helpery (single-source roles.ts). */
-function jakoRoleSet(role: Role): RoleSet {
-  return [role];
+/** 3D profil člena s fallbackem ze starého `role` (trio je optional). */
+function profilClena(clen: UserListItem): ClenskyProfil {
+  const profil: ClenskyProfil = mapujRoliNaProfil(clen.role);
+  return {
+    clenstvi: clen.clenstvi ?? profil.clenstvi,
+    funkce: clen.funkce ?? profil.funkce,
+    isAdmin: clen.isAdmin ?? profil.isAdmin,
+  };
+}
+
+/** Aktivní členství (brána správy výprav) — čte jen `clenstvi`. */
+function jeAktivni(profil: ClenskyProfil): boolean {
+  return profil.clenstvi === "aktivni_clen";
 }
 
 /**
@@ -36,16 +46,17 @@ function jakoRoleSet(role: Role): RoleSet {
  * Guard řeší App.tsx (AdminGate), tady layout + taby + tabulka.
  *
  * Zdroj: GET /api/users (jen ADMIN) — DB `clenove` je prázdná,
- * zdrojem je `users` (primární `role`, jedna hodnota).
- * Editace role ukládá PATCH /api/users/:id.
+ * zdrojem je `users` (3D trio + mirror `role`, jedna hodnota).
+ * Editace profilu ukládá PATCH /api/users/:id přes `ulozProfilClena`.
  *
  * Rozhodnutí o 5. tabu „Členové": ponechány Všichni / Aktivní / Rada / Vedení
- * a tab Členové (= jeClen) pro symetrii — jinak by základní neaktivní
- * členové (role `clen`) nešli samostatně vyfiltrovat, jen přes „Všichni".
- * Každý tab filtruje přes role helpery z config/roles
- * (jedna role zabalená jako `[u.role]`),
+ * a tab Členové (= základní bez aktivní účasti) pro symetrii — jinak by
+ * základní neaktivní členové nešli samostatně vyfiltrovat, jen přes „Všichni".
+ * Každý tab filtruje přes 3D trio (`clenstvi` / `funkce`, fallback
+ * `mapujRoliNaProfil` ze starého `role`),
  * počty v tabech souhlasí s filtrem (stejný predikát).
- * Role `admin` je vidět jen ve „Všichni" (není v žádné hodnostní skupině).
+ * Admin příznak je ortogonální — do žádného tabu se nepočítá,
+ * samotný admin je vidět jen ve „Všichni".
  */
 export default function AdminClenovePage(): JSX.Element {
   const [aktivniTab, setAktivniTab] = useState<ClenoveTabId>("vsichni");
@@ -71,11 +82,11 @@ export default function AdminClenovePage(): JSX.Element {
     void nacist();
   }, []);
 
-  async function naUlozitRoli(
+  async function naUlozitProfil(
     id: string,
-    role: Role,
+    vstup: UlozitProfilVstup,
   ): Promise<string | null> {
-    const vysledek = await ulozRoliClena(id, role);
+    const vysledek = await ulozProfilClena(id, vstup);
     if (!vysledek.ok) {
       return vysledek.chyba;
     }
@@ -90,10 +101,10 @@ export default function AdminClenovePage(): JSX.Element {
   const pocty: PoctyTabu = useMemo(
     () => ({
       vsichni: clenove.length,
-      aktivni: clenove.filter((c) => jeAktivniClen(jakoRoleSet(c.role))).length,
-      rada: clenove.filter((c) => jeVRade(jakoRoleSet(c.role))).length,
-      vedeni: clenove.filter((c) => jeVeVedeni(jakoRoleSet(c.role))).length,
-      clenove: clenove.filter((c) => jeClen(jakoRoleSet(c.role))).length,
+      aktivni: clenove.filter((c) => jeAktivni(profilClena(c))).length,
+      rada: clenove.filter((c) => profilClena(c).funkce === "rada").length,
+      vedeni: clenove.filter((c) => profilClena(c).funkce === "vedeni").length,
+      clenove: clenove.filter((c) => !jeAktivni(profilClena(c))).length,
     }),
     [clenove],
   );
@@ -101,13 +112,13 @@ export default function AdminClenovePage(): JSX.Element {
   const filtrovani = useMemo(() => {
     switch (aktivniTab) {
       case "aktivni":
-        return clenove.filter((c) => jeAktivniClen(jakoRoleSet(c.role)));
+        return clenove.filter((c) => jeAktivni(profilClena(c)));
       case "rada":
-        return clenove.filter((c) => jeVRade(jakoRoleSet(c.role)));
+        return clenove.filter((c) => profilClena(c).funkce === "rada");
       case "vedeni":
-        return clenove.filter((c) => jeVeVedeni(jakoRoleSet(c.role)));
+        return clenove.filter((c) => profilClena(c).funkce === "vedeni");
       case "clenove":
-        return clenove.filter((c) => jeClen(jakoRoleSet(c.role)));
+        return clenove.filter((c) => !jeAktivni(profilClena(c)));
       case "vsichni":
       default:
         return clenove;
@@ -194,7 +205,7 @@ export default function AdminClenovePage(): JSX.Element {
       <ClenDetailModal
         clen={vybrany}
         onZavrit={() => setVybranyId(null)}
-        onUlozitRoli={naUlozitRoli}
+        onUlozitProfil={naUlozitProfil}
       />
     </main>
   );

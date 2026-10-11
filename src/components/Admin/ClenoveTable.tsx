@@ -1,10 +1,7 @@
 import type { JSX } from "react";
 import {
-  jeAktivniClen,
-  jeVRade,
-  jeVeVedeni,
-  type Role,
-  type RoleSet,
+  mapujRoliNaProfil,
+  type ClenskyProfil,
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
 import RoleBadge from "./RoleBadge";
@@ -18,14 +15,19 @@ interface ClenoveTableProps {
   popisek?: string;
 }
 
-/** Jedna DB role zabalená pro je*() helpery (single-source roles.ts). */
-function jakoRoleSet(role: Role): RoleSet {
-  return [role];
+/** 3D profil člena s fallbackem ze starého `role` (trio je optional). */
+function profilClena(clen: UserListItem): ClenskyProfil {
+  const profil: ClenskyProfil = mapujRoliNaProfil(clen.role);
+  return {
+    clenstvi: clen.clenstvi ?? profil.clenstvi,
+    funkce: clen.funkce ?? profil.funkce,
+    isAdmin: clen.isAdmin ?? profil.isAdmin,
+  };
 }
 
-function Zarazeni({ role }: { role: RoleSet }): JSX.Element {
-  const rada: boolean = jeVRade(role);
-  const vedeni: boolean = jeVeVedeni(role);
+function Zarazeni({ profil }: { profil: ClenskyProfil }): JSX.Element {
+  const rada: boolean = profil.funkce === "rada";
+  const vedeni: boolean = profil.funkce === "vedeni";
   if (!rada && !vedeni) {
     return <span className="text-sm text-mech">—</span>;
   }
@@ -45,8 +47,8 @@ function Zarazeni({ role }: { role: RoleSet }): JSX.Element {
   );
 }
 
-function Stav({ role }: { role: RoleSet }): JSX.Element {
-  const aktivni: boolean = jeAktivniClen(role);
+function Stav({ profil }: { profil: ClenskyProfil }): JSX.Element {
+  const aktivni: boolean = profil.clenstvi === "aktivni_clen";
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm font-semibold">
       <span
@@ -112,7 +114,7 @@ export default function ClenoveTable({
         <tbody>
           {clenove.map((clen) => {
             const vybran: boolean = vybranyId === clen.id;
-            const roleSet: RoleSet = jakoRoleSet(clen.role);
+            const profil: ClenskyProfil = profilClena(clen);
             return (
               <tr
                 key={clen.id}
@@ -150,10 +152,10 @@ export default function ClenoveTable({
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <Stav role={roleSet} />
+                  <Stav profil={profil} />
                 </td>
                 <td className="px-4 py-3">
-                  <Zarazeni role={roleSet} />
+                  <Zarazeni profil={profil} />
                 </td>
               </tr>
             );

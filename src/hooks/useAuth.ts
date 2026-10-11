@@ -9,7 +9,13 @@ import {
   type JSX,
   type ReactNode,
 } from "react";
-import type { Role } from "../config/roles";
+import type {
+  Clenstvi,
+  ClenskyProfil,
+  Funkce,
+  Role,
+} from "../config/roles";
+import { mapujRoliNaProfil, smiNaVypravy } from "../config/roles";
 import type { ApiErrorBody, ApiUser, AuthRole } from "../shared/api-types";
 import {
   ADMIN_CODES_PATH,
@@ -57,6 +63,10 @@ export interface RegistraceVstup {
   heslo: string;
   telefon?: string | null;
   discordNick?: string | null;
+  /** Škola — nepovinná; prázdná se normalizuje na "". Max 120 znaků. */
+  skola?: string;
+  /** Třída — nepovinná; prázdná se normalizuje na "". Max 120 znaků. */
+  trida?: string;
   kod: string;
 }
 
@@ -72,6 +82,8 @@ export type PoleRegistrace =
   | "heslo"
   | "telefon"
   | "discordNick"
+  | "skola"
+  | "trida"
   | "kod";
 export type PolePrihlaseni = "email" | "heslo";
 
@@ -89,11 +101,19 @@ interface DemoUserRecord {
   email: string;
   telefon?: string | null;
   discordNick?: string | null;
+  /** Škola — nepovinná (trim; prázdná → ""). */
+  skola?: string;
+  /** Třída — nepovinná (trim; prázdná → ""). */
+  trida?: string;
   // WARNING: heslo v plaintextu — pouze demo bez backendu.
   // TODO: po příchodu backendu neukládat heslo vůbec (server bude hashovat, např. argon2/bcrypt).
   heslo: string;
   role: Role;
   authRole: AuthRole;
+  /** 3D trio — aditivně optional; staré záznamy migruje load (viz níže). */
+  clenstvi?: Clenstvi;
+  funkce?: Funkce;
+  isAdmin?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -159,12 +179,14 @@ function parseUzivatele(): DemoUserRecord[] {
   try {
     const data: unknown = JSON.parse(raw);
     if (!Array.isArray(data)) return [];
-    return data.filter(
-      (z): z is DemoUserRecord =>
-        typeof z === "object" &&
-        z !== null &&
-        typeof (z as DemoUserRecord).email === "string",
-    );
+    return data
+      .filter(
+        (z): z is DemoUserRecord =>
+          typeof z === "object" &&
+          z !== null &&
+          typeof (z as DemoUserRecord).email === "string",
+      )
+      .map(migrujDemoZaznam);
   } catch {
     return [];
   }
@@ -238,6 +260,47 @@ function rozdelCeleJmeno(cele: string): { jmeno: string; prijmeni?: string } {
   return { jmeno: casti[0], prijmeni: casti.slice(1).join(" ") };
 }
 
+function jeUlozeneClenstvi(hodnota: unknown): hodnota is Clenstvi {
+  return hodnota === "clen" || hodnota === "aktivni_clen";
+}
+
+function jeUlozenaFunkce(hodnota: unknown): hodnota is Funkce {
+  return hodnota === null || hodnota === "vedeni" || hodnota === "rada";
+}
+
+/**
+ * Migrace starých demo záznamů při loadu (jen v paměti, bez přepisu klíče —
+ * staré demo bez tria se tak nerozbije). Chybějící trio se dopočítá
+ * z `role` přes `mapujRoliNaProfil`; `isAdmin` padá na staré
+ * `authRole === "ADMIN"`.
+ */
+function migrujDemoZaznam(zaznam: DemoUserRecord): DemoUserRecord {
+  const profil: ClenskyProfil = mapujRoliNaProfil(zaznam.role);
+  const clenstvi: Clenstvi = jeUlozeneClenstvi(zaznam.clenstvi)
+    ? zaznam.clenstvi
+    : profil.clenstvi;
+  const funkce: Funkce =
+    zaznam.funkce === undefined
+      ? profil.funkce
+      : jeUlozenaFunkce(zaznam.funkce)
+        ? zaznam.funkce
+        : profil.funkce;
+  const adminPriznak: boolean =
+    typeof zaznam.isAdmin === "boolean"
+      ? zaznam.isAdmin
+      : zaznam.authRole === "ADMIN"
+        ? true
+        : profil.isAdmin;
+  if (
+    zaznam.clenstvi === clenstvi &&
+    zaznam.funkce === funkce &&
+    zaznam.isAdmin === adminPriznak
+  ) {
+    return zaznam;
+  }
+  return { ...zaznam, clenstvi, funkce, isAdmin: adminPriznak };
+}
+
 function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
   const ulozenePrijmeni = zaznam.prijmeni?.trim() ?? "";
   let jmeno = zaznam.jmeno;
@@ -249,6 +312,8 @@ function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
     jmeno = rozdelene.jmeno;
     prijmeni = rozdelene.prijmeni;
   }
+  // Trio s fallbackem ze starého `role` (migrované záznamy ho už nesou).
+  const profil: ClenskyProfil = mapujRoliNaProfil(zaznam.role);
   return {
     id: zaznam.id as ApiUser["id"],
     email: zaznam.email,
@@ -258,6 +323,21 @@ function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
     discordNick: zaznam.discordNick ?? null,
     role: zaznam.role,
     authRole: zaznam.authRole,
+    clenstvi: jeUlozeneClenstvi(zaznam.clenstvi)
+      ? zaznam.clenstvi
+      : profil.clenstvi,
+    funkce:
+      zaznam.funkce === undefined
+        ? profil.funkce
+        : jeUlozenaFunkce(zaznam.funkce)
+          ? zaznam.funkce
+          : profil.funkce,
+    isAdmin:
+      typeof zaznam.isAdmin === "boolean"
+        ? zaznam.isAdmin
+        : zaznam.authRole === "ADMIN"
+          ? true
+          : profil.isAdmin,
     stravaId: null,
     createdAt: zaznam.createdAt,
     updatedAt: zaznam.updatedAt,
@@ -313,6 +393,27 @@ function validujDiscordNick(hodnota?: string | null): string | null {
   if (cisty.length === 0) return null;
   if (cisty.length > VALIDACE.discordNickMaxDelka)
     return VALIDACNI_ZPRAVY.discordNickDlouhy;
+  return null;
+}
+
+/**
+ * Nepovinná škola / třída — zrcadlí server (server/src/validace.ts
+ * `overSkolaTrida`): chybějící / prázdná / whitespace → OK (""),
+ * jinak trim; delší než 120 → česká chyba pole.
+ */
+function validujSkolu(hodnota?: string | null): string | null {
+  const cista = (hodnota ?? "").trim();
+  if (cista.length === 0) return null;
+  if (cista.length > VALIDACE.skolaMaxDelka)
+    return VALIDACNI_ZPRAVY.skolaDlouha;
+  return null;
+}
+
+function validujTridu(hodnota?: string | null): string | null {
+  const cista = (hodnota ?? "").trim();
+  if (cista.length === 0) return null;
+  if (cista.length > VALIDACE.tridaMaxDelka)
+    return VALIDACNI_ZPRAVY.tridaDlouha;
   return null;
 }
 
@@ -400,15 +501,36 @@ function jeApiUser(hodnota: unknown): hodnota is ApiUser {
 /**
  * Vytáhne `ApiUser` z odpovědi: register/login vrací `{ user }`,
  * me vrací profil přímo. Jinak `null` (neočekávaný tvar).
+ * Chybějící trio doplní fallbackem ze starého `role`
+ * (aditivní kontrakt: trio je optional).
  */
 function ctiUsera(telo: unknown): ApiUser | null {
   if (typeof telo !== "object" || telo === null) return null;
   const kandidat = telo as Record<string, unknown>;
   if ("user" in kandidat) {
     const uzivatel = kandidat["user"];
-    return jeApiUser(uzivatel) ? uzivatel : null;
+    return jeApiUser(uzivatel) ? doplnTrio(uzivatel) : null;
   }
-  return jeApiUser(telo) ? telo : null;
+  return jeApiUser(telo) ? doplnTrio(telo) : null;
+}
+
+/** Chybějící trio v `ApiUser` dopočítá ze starého `role` (bez přepisu). */
+function doplnTrio(uzivatel: ApiUser): ApiUser {
+  if (
+    uzivatel.clenstvi !== undefined &&
+    uzivatel.funkce !== undefined &&
+    uzivatel.isAdmin !== undefined
+  ) {
+    return uzivatel;
+  }
+  const profil: ClenskyProfil = mapujRoliNaProfil(uzivatel.role);
+  return {
+    ...uzivatel,
+    clenstvi: uzivatel.clenstvi ?? profil.clenstvi,
+    funkce: uzivatel.funkce ?? profil.funkce,
+    isAdmin:
+      uzivatel.isAdmin ?? (uzivatel.authRole === "ADMIN" ? true : profil.isAdmin),
+  };
 }
 
 /** Validace vytvořeného kódu z backendu; `poznamka` doplníme z požadavku. */
@@ -458,6 +580,8 @@ function mapaChybyRegistrace(
         "heslo",
         "telefon",
         "discordNick",
+        "skola",
+        "trida",
         "kod",
       ];
       for (const klic of pole) {
@@ -547,6 +671,11 @@ interface AuthKontext {
   isLoading: boolean;
   prihlasen: boolean;
   isAdmin: boolean;
+  /**
+   * Správa výprav (dual-guard v UI): jen `aktivni_clen`
+   * (`smiNaVypravy`), samotný admin příznak nestačí.
+   */
+  muzeSpravovatVypravy: boolean;
   /** True, dokud v systému není žádný ADMIN — probíhá prvotní nastavení. */
   jeBootstrap: boolean;
   kody: DemoKod[];
@@ -639,6 +768,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const chybaHesla = validujHeslo(vstup.heslo);
       const chybaTelefonu = validujTelefon(vstup.telefon);
       const chybaDiscordu = validujDiscordNick(vstup.discordNick);
+      const chybaSkoly = validujSkolu(vstup.skola);
+      const chybaTridy = validujTridu(vstup.trida);
       const chybaTvaru = validujTvarKodu(vstup.kod);
       if (chybaJmena !== null) chybyPoli.jmeno = chybaJmena;
       if (chybaPrijmeni !== null) chybyPoli.prijmeni = chybaPrijmeni;
@@ -646,6 +777,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       if (chybaHesla !== null) chybyPoli.heslo = chybaHesla;
       if (chybaTelefonu !== null) chybyPoli.telefon = chybaTelefonu;
       if (chybaDiscordu !== null) chybyPoli.discordNick = chybaDiscordu;
+      if (chybaSkoly !== null) chybyPoli.skola = chybaSkoly;
+      if (chybaTridy !== null) chybyPoli.trida = chybaTridy;
       if (chybaTvaru !== null) chybyPoli.kod = chybaTvaru;
       if (Object.keys(chybyPoli).length > 0) {
         return {
@@ -666,9 +799,15 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const prijmeni = normalizujNepovinny(vstup.prijmeni);
       const telefon = normalizujNepovinny(vstup.telefon);
       const discordNick = normalizujNepovinny(vstup.discordNick);
+      // Škola/třída: server normalizuje prázdné na "" — posíláme vždy
+      // ořezané (prázdné → ""), stejně jako serverová CistaRegistrace.
+      const skola: string = (vstup.skola ?? "").trim();
+      const trida: string = (vstup.trida ?? "").trim();
       if (prijmeni !== null) payload["prijmeni"] = prijmeni;
       if (telefon !== null) payload["telefon"] = telefon;
       if (discordNick !== null) payload["discordNick"] = discordNick;
+      payload["skola"] = skola;
+      payload["trida"] = trida;
       const backend = await volejBackend(REGISTER_PATH, "POST", payload);
       if (backend !== null) {
         const uzivatel = ctiUsera(backend.telo);
@@ -723,10 +862,15 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         email,
         telefon: normalizujNepovinny(vstup.telefon),
         discordNick: normalizujNepovinny(vstup.discordNick),
+        skola: (vstup.skola ?? "").trim(),
+        trida: (vstup.trida ?? "").trim(),
         // WARNING: plaintext heslo — pouze demo (localStorage). Backend bude hashovat.
         heslo: vstup.heslo,
         role: jePrvniAdmin ? "admin" : "clen",
         authRole: jePrvniAdmin ? "ADMIN" : "USER",
+        clenstvi: jePrvniAdmin ? "aktivni_clen" : "clen",
+        funkce: null,
+        isAdmin: jePrvniAdmin,
         createdAt: ted,
         updatedAt: ted,
       };
@@ -860,21 +1004,35 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     [user],
   );
 
-  const hodnota = useMemo<AuthKontext>(
-    () => ({
+  const hodnota = useMemo<AuthKontext>(() => {
+    // `isAdmin` nově z ortogonálního příznaku, fallback staré `authRole`.
+    const adminPriznak: boolean =
+      user?.isAdmin ?? (user?.authRole === "ADMIN" ? true : false);
+    // Profil s fallbackem ze starého `role` (trio je v kontraktu optional).
+    const profil: ClenskyProfil | null =
+      user === null
+        ? null
+        : {
+            clenstvi:
+              user.clenstvi ?? mapujRoliNaProfil(user.role).clenstvi,
+            funkce: user.funkce ?? mapujRoliNaProfil(user.role).funkce,
+            isAdmin: adminPriznak,
+          };
+    return {
       user,
       isLoading,
       prihlasen: user !== null,
-      isAdmin: user?.authRole === "ADMIN",
+      isAdmin: adminPriznak,
+      muzeSpravovatVypravy:
+        profil === null ? false : smiNaVypravy(profil),
       jeBootstrap,
       kody,
       register,
       login,
       odhlasit,
       generujKod,
-    }),
-    [user, isLoading, jeBootstrap, kody, register, login, odhlasit, generujKod],
-  );
+    };
+  }, [user, isLoading, jeBootstrap, kody, register, login, odhlasit, generujKod]);
 
   return createElement(AuthContext.Provider, { value: hodnota }, children);
 }

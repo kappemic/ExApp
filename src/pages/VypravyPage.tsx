@@ -7,6 +7,7 @@ import ExpeditionList from "../components/expeditions/ExpeditionList";
 import ExpeditionModal from "../components/expeditions/ExpeditionModal";
 import { useAuth } from "../hooks/useAuth";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
+import { jeProbihajici } from "../lib/expedition-utils";
 import { vytvorVypravu } from "../lib/expeditions-ucast";
 import type { Expedition } from "../lib/mock-expeditions";
 import type {
@@ -141,7 +142,7 @@ function sloucSeZivymi(
 }
 
 export default function VypravyPage(): JSX.Element {
-  const { isAdmin } = useAuth();
+  const { muzeSpravovatVypravy } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
   // Start: build-time snapshot pro okamžité vykreslení, po mountu se tiše
@@ -222,8 +223,15 @@ export default function VypravyPage(): JSX.Element {
   const [chybaTvorby, setChybaTvorby] = useState<string | null>(null);
   const [chybyPoliTvorby, setChybyPoliTvorby] = useState<ChybyExpedice>({});
 
+  const probihajici: Expedition[] = useMemo(
+    () =>
+      expedice
+        .filter((e) => e.stav !== "proběhlá" && jeProbihajici(e))
+        .sort((a, b) => a.datum.localeCompare(b.datum)),
+    [expedice],
+  );
   const nadchazejici: Expedition[] = useMemo(
-    () => expedice.filter((e) => e.stav !== "proběhlá"),
+    () => expedice.filter((e) => e.stav !== "proběhlá" && !jeProbihajici(e)),
     [expedice],
   );
   /*
@@ -337,7 +345,7 @@ export default function VypravyPage(): JSX.Element {
             );
           })}
         </div>
-        {isAdmin && (
+        {muzeSpravovatVypravy && (
           <div className="mt-4">
             <button
               type="button"
@@ -346,7 +354,7 @@ export default function VypravyPage(): JSX.Element {
                 setChybyPoliTvorby({});
                 setTvorbaOtevrena(true);
               }}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir shadow-denik motion-safe:transition-colors motion-safe:hover:bg-inkoust"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir shadow-denik motion-safe:transition-colors motion-safe:hover:bg-inkoust [touch-action:manipulation]"
             >
               <span aria-hidden="true">＋</span> Nová výprava
             </button>
@@ -357,6 +365,29 @@ export default function VypravyPage(): JSX.Element {
       <div className="pt-6">
         {zobrazeni === "seznam" ? (
           <div className="space-y-10">
+            {probihajici.length > 0 && (
+              <section aria-labelledby="probihajici-nadpis">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2
+                    id="probihajici-nadpis"
+                    className="text-xl font-bold tracking-tight"
+                  >
+                    Právě probíhá
+                  </h2>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-mech tabular-nums">
+                    {probihajici.length}{" "}
+                    {probihajici.length === 1
+                      ? "výprava"
+                      : probihajici.length >= 2 && probihajici.length <= 4
+                        ? "výpravy"
+                        : "výprav"}
+                  </p>
+                </div>
+                <div className="pt-4">
+                  <ExpeditionList expedice={probihajici} onDetail={setVybrana} />
+                </div>
+              </section>
+            )}
             <section aria-labelledby="nadchazejici-nadpis">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2

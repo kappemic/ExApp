@@ -9,7 +9,12 @@
  * síťovou výjimku ven — vrací `{ ok: false, chyba }`.
  */
 
-import { isKnownRole, type Role } from "../config/roles";
+import {
+  isKnownRole,
+  type Clenstvi,
+  type Funkce,
+  type Role,
+} from "../config/roles";
 import {
   USERS_PATH,
   jeApiChyba,
@@ -52,13 +57,38 @@ function chybaZTela(telo: unknown): ClenoveVysledek<never> {
 function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   if (typeof hodnota !== "object" || hodnota === null) return false;
   const kandidat = hodnota as Record<string, unknown>;
-  return (
-    typeof kandidat["id"] === "string" &&
-    typeof kandidat["jmeno"] === "string" &&
-    typeof kandidat["email"] === "string" &&
-    typeof kandidat["role"] === "string" &&
-    isKnownRole(kandidat["role"])
-  );
+  if (
+    typeof kandidat["id"] !== "string" ||
+    typeof kandidat["jmeno"] !== "string" ||
+    typeof kandidat["email"] !== "string" ||
+    typeof kandidat["role"] !== "string" ||
+    !isKnownRole(kandidat["role"])
+  ) {
+    return false;
+  }
+  // 3D trio je v kontraktu aditivně optional (fallback mirror ze starého role).
+  const clenstvi: unknown = kandidat["clenstvi"];
+  if (
+    clenstvi !== undefined &&
+    clenstvi !== "clen" &&
+    clenstvi !== "aktivni_clen"
+  ) {
+    return false;
+  }
+  const funkce: unknown = kandidat["funkce"];
+  if (
+    funkce !== undefined &&
+    funkce !== null &&
+    funkce !== "vedeni" &&
+    funkce !== "rada"
+  ) {
+    return false;
+  }
+  const adminPriznak: unknown = kandidat["isAdmin"];
+  if (adminPriznak !== undefined && typeof adminPriznak !== "boolean") {
+    return false;
+  }
+  return true;
 }
 
 function jeUsersListResponse(telo: unknown): telo is UsersListResponse {
@@ -102,12 +132,22 @@ export async function nactiCleny(): Promise<ClenoveVysledek<UserListItem[]>> {
 }
 
 /**
- * Změna primární role uživatele (jen ADMIN, PATCH /api/users/:id).
- * `role` je jedna hodnota z `Role` — kombinace se neřeší.
+ * Vstup nového profilového PATCH (jen ADMIN, PATCH /api/users/:id).
+ * Parciální — `JSON.stringify` nedefinovaná pole vynechá, server mění
+ * jen poslaná (`Object.hasOwn`). `skola`/`trida` se posílají jen
+ * vyplněné (seznam je nenese, prázdná by mazala).
  */
-export async function ulozRoliClena(
+export interface UlozitProfilVstup {
+  clenstvi?: Clenstvi;
+  funkce?: Funkce;
+  isAdmin?: boolean;
+  skola?: string;
+  trida?: string;
+}
+
+async function patchUzivatele(
   id: string,
-  role: Role,
+  telo: Record<string, unknown>,
 ): Promise<ClenoveVysledek<UserListItem>> {
   const zaklad: string = apiBase();
   if (zaklad.length === 0) {
@@ -121,14 +161,46 @@ export async function ulozRoliClena(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ role }),
+      body: JSON.stringify(telo),
     });
-    const telo: unknown = await ctiTelo(odpoved);
-    if (odpoved.status === 200 && jeUpravitUzivateleResponse(telo)) {
-      return { ok: true, data: telo.user };
+    const odpovedTelo: unknown = await ctiTelo(odpoved);
+    if (odpoved.status === 200 && jeUpravitUzivateleResponse(odpovedTelo)) {
+      return { ok: true, data: odpovedTelo.user };
     }
-    return chybaZTela(telo);
+    return chybaZTela(odpovedTelo);
   } catch {
     return { ok: false, chyba: "Bez připojení uložit nejde. Zkus to později." };
   }
+}
+
+/**
+ * Uložení 3D profilu člena (jen ADMIN, PATCH /api/users/:id).
+ * Parciální trio `clenstvi?/funkce?/isAdmin?` + `skola?/trida?`;
+ * kombinaci `clen` + funkce odmítne server (422, `chybaKombinace3D`).
+ */
+export async function ulozProfilClena(
+  id: string,
+  vstup: UlozitProfilVstup,
+): Promise<ClenoveVysledek<UserListItem>> {
+  const telo: Record<string, unknown> = {};
+  if (vstup.clenstvi !== undefined) telo["clenstvi"] = vstup.clenstvi;
+  if (vstup.funkce !== undefined) telo["funkce"] = vstup.funkce;
+  if (vstup.isAdmin !== undefined) telo["isAdmin"] = vstup.isAdmin;
+  if (vstup.skola !== undefined) telo["skola"] = vstup.skola;
+  if (vstup.trida !== undefined) telo["trida"] = vstup.trida;
+  return patchUzivatele(id, telo);
+}
+
+/**
+ * Změna primární role uživatele (jen ADMIN, PATCH /api/users/:id).
+ * `role` je jedna hodnota z `Role` — kombinace se neřeší.
+ *
+ * @deprecated Starý tvar `{ role }` — nové UI ukládá trio přes
+ * `ulozProfilClena`. Ponecháno pro zpětnou kompatibilitu.
+ */
+export async function ulozRoliClena(
+  id: string,
+  role: Role,
+): Promise<ClenoveVysledek<UserListItem>> {
+  return patchUzivatele(id, { role });
 }

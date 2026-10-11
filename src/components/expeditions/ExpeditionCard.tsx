@@ -5,6 +5,7 @@ import {
   formatMesicZkratka,
   formatRozsahData,
   jeBezOmezeni,
+  jeProbihajici,
   jeProbehla,
   obsazenostProcenta,
   volnaMista,
@@ -28,16 +29,24 @@ const teckaStyly: Record<ExpeditionStatus, string> = {
   "proběhlá": "bg-mech",
 };
 
-function StavBadge({ stav }: { stav: ExpeditionStatus }): JSX.Element {
+function StavBadge({
+  stav,
+  probiha,
+}: {
+  stav: ExpeditionStatus;
+  probiha: boolean;
+}): JSX.Element {
+  const styl: ExpeditionStatus = probiha ? "volno" : stav;
+  const popisek: string = probiha ? "probíhá" : stav;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold tracking-wide text-inkoust ${badgeStyly[stav]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold tracking-wide text-inkoust ${badgeStyly[styl]}`}
     >
       <span
         aria-hidden="true"
-        className={`h-2 w-2 shrink-0 rounded-full ${teckaStyly[stav]}`}
+        className={`h-2 w-2 shrink-0 rounded-full ${teckaStyly[styl]}`}
       />
-      {stav}
+      {popisek}
     </span>
   );
 }
@@ -112,6 +121,7 @@ export default function ExpeditionCard({
   onDetail,
 }: ExpeditionCardProps): JSX.Element {
   const probehla = jeProbehla(expedice);
+  const probiha = !probehla && jeProbihajici(expedice);
   const bezOmezeni = jeBezOmezeni(expedice);
   const procenta = obsazenostProcenta(expedice);
   const volna = volnaMista(expedice);
@@ -128,7 +138,7 @@ export default function ExpeditionCard({
           <RazitkoData isoDatum={expedice.datum} />
         </div>
         <div className="absolute right-3 top-3">
-          <StavBadge stav={expedice.stav} />
+          <StavBadge stav={expedice.stav} probiha={probiha} />
         </div>
       </div>
 
@@ -178,7 +188,7 @@ export default function ExpeditionCard({
                     : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
             </span>
           </div>
-          {!bezOmezeni && (
+          {!bezOmezeni ? (
             <div
               role="progressbar"
               aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
@@ -191,6 +201,24 @@ export default function ExpeditionCard({
                 aria-hidden="true"
                 className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
                 style={{ width: `${procenta}%` }}
+              />
+            </div>
+          ) : (
+            <div
+              role="status"
+              aria-label={`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
+              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-linka"
+            >
+              <span className="sr-only">
+                {`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
+              </span>
+              <div
+                aria-hidden="true"
+                className="h-full w-full rounded-full"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(45deg, rgba(26,46,34,0.28) 0 6px, transparent 6px 12px)",
+                }}
               />
             </div>
           )}

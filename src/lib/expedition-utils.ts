@@ -100,3 +100,31 @@ export function volnaMista(expedice: Expedition): number {
 export function jeProbehla(expedice: Expedition): boolean {
   return expedice.stav === "proběhlá";
 }
+
+/** Dnešek v lokálním YYYY-MM-DD (stejný vzor jako server). */
+export function dnesniDatumYmd(): string {
+  const ted = new Date();
+  const rok = ted.getFullYear();
+  const mesic = String(ted.getMonth() + 1).padStart(2, "0");
+  const den = String(ted.getDate()).padStart(2, "0");
+  return `${rok}-${mesic}-${den}`;
+}
+
+/**
+ * Právě probíhající výprava (čistě klientská definice, BEZ změny
+ * DB/CATEGORY kontraktu — `stav` zůstává volno/skoro plno/proběhlá):
+ * `stav !== "proběhlá"` A `datum <= dnes <= (datumDo ?? datum)`
+ * (ISO řetězce, lokální dnešek).
+ */
+export function jeProbihajici(
+  expedice: Pick<Expedition, "stav" | "datum" | "datumDo">,
+  dnes?: string,
+): boolean {
+  if (expedice.stav === "proběhlá") return false;
+  const dnesYmd: string = dnes ?? dnesniDatumYmd();
+  const od: string = expedice.datum.slice(0, 10);
+  const rawDo: string | null = expedice.datumDo;
+  const konec: string =
+    rawDo === null || rawDo.length === 0 ? od : rawDo.slice(0, 10);
+  return od <= dnesYmd && dnesYmd <= konec;
+}

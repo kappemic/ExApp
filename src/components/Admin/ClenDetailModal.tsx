@@ -8,14 +8,14 @@ import {
   type MouseEvent,
 } from "react";
 import {
-  ROLE_LIST,
-  jeAktivniClen,
-  jeVRade,
-  jeVeVedeni,
-  type Role,
-  type RoleSet,
+  chybaKombinace3D,
+  mapujRoliNaProfil,
+  type Clenstvi,
+  type ClenskyProfil,
+  type Funkce,
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
+import type { UlozitProfilVstup } from "../../lib/admin-clenove";
 import RoleBadge from "./RoleBadge";
 
 interface ClenDetailModalProps {
@@ -23,11 +23,14 @@ interface ClenDetailModalProps {
   clen: UserListItem | null;
   onZavrit: () => void;
   /**
-   * Uložení role přes PATCH /api/users/:id (řeší AdminClenovePage).
+   * Uložení 3D profilu přes PATCH /api/users/:id (řeší AdminClenovePage).
    * Vrací českou chybu, nebo `null` při úspěchu.
    * Bez handleru je tlačítko Upravit neaktivní.
    */
-  onUlozitRoli?: (id: string, role: Role) => Promise<string | null>;
+  onUlozitProfil?: (
+    id: string,
+    vstup: UlozitProfilVstup,
+  ) => Promise<string | null>;
 }
 
 const FOCUSOVATELNE =
@@ -35,9 +38,20 @@ const FOCUSOVATELNE =
 
 type Rezim = "detail" | "upravy";
 
-/** Jedna DB role zabalená pro je*() helpery (single-source roles.ts). */
-function jakoRoleSet(role: Role): RoleSet {
-  return [role];
+/** 3D profil člena s fallbackem ze starého `role` (trio je optional). */
+function profilClena(clen: UserListItem): ClenskyProfil {
+  const profil: ClenskyProfil = mapujRoliNaProfil(clen.role);
+  return {
+    clenstvi: clen.clenstvi ?? profil.clenstvi,
+    funkce: clen.funkce ?? profil.funkce,
+    isAdmin: clen.isAdmin ?? profil.isAdmin,
+  };
+}
+
+function nazevFunkce(funkce: Funkce): string {
+  if (funkce === "vedeni") return "Vedení";
+  if (funkce === "rada") return "Rada";
+  return "Bez funkce";
 }
 
 /**
@@ -46,13 +60,13 @@ function jakoRoleSet(role: Role): RoleSet {
  * Deníkový styl: papír, inkoustový rámeček, plochý stín (tokeny shadow-denik).
  *
  * Zdroj: živí users z GET /api/users (DB `clenove` je prázdná).
- * Editace mění jen primární roli (jedna hodnota) a ukládá ji
- * přes PATCH /api/users/:id.
+ * Editace mění 3D profil (členství / funkce / admin + škola / třída)
+ * a ukládá ho přes PATCH /api/users/:id (`ulozProfilClena`).
  */
 export default function ClenDetailModal({
   clen,
   onZavrit,
-  onUlozitRoli,
+  onUlozitProfil,
 }: ClenDetailModalProps): JSX.Element | null {
   const nadpisId: string = useId();
   const popisId: string = useId();
@@ -119,13 +133,15 @@ export default function ClenDetailModal({
     return null;
   }
 
-  const roleSet: RoleSet = jakoRoleSet(clen.role);
-  const aktivni: boolean = jeAktivniClen(roleSet);
-  const rada: boolean = jeVRade(roleSet);
-  const vedeni: boolean = jeVeVedeni(roleSet);
+  const profil: ClenskyProfil = profilClena(clen);
+  const aktivni: boolean = profil.clenstvi === "aktivni_clen";
   const zarazeni: string =
-    rada && vedeni ? "Rada · Vedení" : rada ? "Rada" : vedeni ? "Vedení" : "—";
-  const upravy: boolean = rezim === "upravy" && onUlozitRoli !== undefined;
+    profil.funkce === "rada"
+      ? "Rada"
+      : profil.funkce === "vedeni"
+        ? "Vedení"
+        : "—";
+  const upravy: boolean = rezim === "upravy" && onUlozitProfil !== undefined;
 
   function naKlikBackdropu(udalost: MouseEvent<HTMLDivElement>): void {
     if (udalost.target === udalost.currentTarget) {
@@ -160,6 +176,7 @@ export default function ClenDetailModal({
             <p id={popisId} className="mt-1 text-sm text-inkoust/70">
               {aktivni ? "Aktivní člen" : "Člen"}
               {zarazeni === "—" ? "" : ` · ${zarazeni}`}
+              {profil.isAdmin ? " · Admin" : ""}
             </p>
           </div>
           <button
@@ -173,12 +190,12 @@ export default function ClenDetailModal({
           </button>
         </div>
 
-        {rezim === "upravy" && onUlozitRoli !== undefined ? (
-          <ClenRoliForm
+        {rezim === "upravy" && onUlozitProfil !== undefined ? (
+          <ClenProfilForm
             key={clen.id}
             clen={clen}
             onZrusit={() => setRezim("detail")}
-            onUlozitRoli={onUlozitRoli}
+            onUlozitProfil={onUlozitProfil}
             onHotovo={() => setRezim("detail")}
           />
         ) : (
@@ -210,7 +227,44 @@ export default function ClenDetailModal({
                   </a>
                 </dd>
               </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Členství
+                </dt>
+                <dd className="font-semibold">
+                  {aktivni ? "Aktivní člen" : "Člen"}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Funkce
+                </dt>
+                <dd className="font-semibold">{nazevFunkce(profil.funkce)}</dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Admin
+                </dt>
+                <dd className="font-semibold">
+                  {profil.isAdmin ? "Ano" : "Ne"}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Škola
+                </dt>
+                <dd className="text-inkoust/70">—</dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Třída
+                </dt>
+                <dd className="text-inkoust/70">—</dd>
+              </div>
             </dl>
+            <p className="mt-2 text-xs text-inkoust/60">
+              Seznam školu a třídu nenese — vyplníš je v úpravách.
+            </p>
 
             <div className="mt-5 flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:justify-end">
               <button
@@ -222,23 +276,23 @@ export default function ClenDetailModal({
               </button>
               <button
                 type="button"
-                disabled={onUlozitRoli === undefined}
+                disabled={onUlozitProfil === undefined}
                 onClick={
-                  onUlozitRoli === undefined
+                  onUlozitProfil === undefined
                     ? undefined
                     : () => setRezim("upravy")
                 }
                 title={
-                  onUlozitRoli === undefined
+                  onUlozitProfil === undefined
                     ? "Editace není k dispozici"
-                    : "Upravit roli člena"
+                    : "Upravit profil člena"
                 }
-                className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors enabled:motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors enabled:motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
               >
                 Upravit
               </button>
             </div>
-            {onUlozitRoli === undefined && (
+            {onUlozitProfil === undefined && (
               <p className="mt-2 text-center text-xs text-inkoust/60 sm:text-right">
                 Editace není k dispozici.
               </p>
@@ -251,45 +305,107 @@ export default function ClenDetailModal({
 }
 
 /* ------------------------------------------------------------------ */
-/* Editační formulář role (hranice): jedna primární role, radio seznam. */
+/* Editační formulář profilu (hranice): členství + funkce + admin +     */
+/* škola/třída. Funkce jen s aktivním členem (`chybaKombinace3D`).      */
 /* ------------------------------------------------------------------ */
 
-interface ClenRoliFormProps {
+interface ClenProfilFormProps {
   clen: UserListItem;
   onZrusit: () => void;
-  onUlozitRoli: (id: string, role: Role) => Promise<string | null>;
+  onUlozitProfil: (
+    id: string,
+    vstup: UlozitProfilVstup,
+  ) => Promise<string | null>;
   onHotovo: () => void;
 }
 
 const POPIS_TRIDY =
   "mb-1 block text-[11px] font-bold uppercase tracking-[0.14em] text-mech";
 
-function ClenRoliForm({
+const CLENSTVI_VOLBY: ReadonlyArray<{
+  id: Clenstvi;
+  nazev: string;
+  popis: string;
+}> = [
+  { id: "clen", nazev: "Člen", popis: "Základní člen oddílu." },
+  {
+    id: "aktivni_clen",
+    nazev: "Aktivní člen",
+    popis: "Pravidelně jezdí na výpravy — smí je i spravovat.",
+  },
+];
+
+function ClenProfilForm({
   clen,
   onZrusit,
-  onUlozitRoli,
+  onUlozitProfil,
   onHotovo,
-}: ClenRoliFormProps): JSX.Element {
-  const [role, setRole] = useState<Role>(clen.role);
+}: ClenProfilFormProps): JSX.Element {
+  const puvodni: ClenskyProfil = profilClena(clen);
+  const [clenstvi, setClenstvi] = useState<Clenstvi>(puvodni.clenstvi);
+  const [funkce, setFunkce] = useState<Funkce>(puvodni.funkce);
+  const [adminPriznak, setAdminPriznak] = useState<boolean>(puvodni.isAdmin);
+  const [skola, setSkola] = useState<string>("");
+  const [trida, setTrida] = useState<string>("");
   const [chyba, setChyba] = useState<string | null>(null);
   const [ukladam, setUkladam] = useState<boolean>(false);
-  const roleChybaId: string = useId();
+  const profilChybaId: string = useId();
+  const skolaId: string = useId();
+  const tridaId: string = useId();
+  const funkceId: string = useId();
 
   useEffect(() => {
-    setRole(clen.role);
+    const aktualni: ClenskyProfil = profilClena(clen);
+    setClenstvi(aktualni.clenstvi);
+    setFunkce(aktualni.funkce);
+    setAdminPriznak(aktualni.isAdmin);
+    setSkola("");
+    setTrida("");
     setChyba(null);
   }, [clen]);
+
+  // Funkci smí mít jen aktivní člen — při přepnutí na člena spadne na null.
+  function naZmenuClenstvi(nove: Clenstvi): void {
+    setClenstvi(nove);
+    if (nove === "clen") {
+      setFunkce(null);
+    }
+  }
+
+  const chybaKombinace: string | null = chybaKombinace3D({
+    clenstvi,
+    funkce,
+    isAdmin: adminPriznak,
+  });
 
   async function naOdeslat(udalost: FormEvent<HTMLFormElement>): Promise<void> {
     udalost.preventDefault();
     if (ukladam) return;
     setChyba(null);
-    if (role === clen.role) {
+    if (chybaKombinace !== null) {
+      setChyba(chybaKombinace);
+      return;
+    }
+    const skolaCista: string = skola.trim();
+    const tridaCista: string = trida.trim();
+    const trioStejne: boolean =
+      clenstvi === puvodni.clenstvi &&
+      funkce === puvodni.funkce &&
+      adminPriznak === puvodni.isAdmin;
+    // Škola/třída se posílá jen vyplněná (seznam je nenese — prázdná by mazala).
+    if (trioStejne && skolaCista.length === 0 && tridaCista.length === 0) {
       onHotovo();
       return;
     }
+    const vstup: UlozitProfilVstup = {
+      clenstvi,
+      funkce,
+      isAdmin: adminPriznak,
+    };
+    if (skolaCista.length > 0) vstup.skola = skolaCista;
+    if (tridaCista.length > 0) vstup.trida = tridaCista;
     setUkladam(true);
-    const vysledek: string | null = await onUlozitRoli(clen.id, role);
+    const vysledek: string | null = await onUlozitProfil(clen.id, vstup);
     setUkladam(false);
     if (vysledek !== null) {
       setChyba(vysledek);
@@ -299,64 +415,158 @@ function ClenRoliForm({
   }
 
   return (
-    <form onSubmit={(e) => void naOdeslat(e)} noValidate className="mt-4 space-y-4">
+    <form onSubmit={(e) => void naOdeslat(e)} noValidate className="mt-4 space-y-5">
       <fieldset>
-        <legend className={POPIS_TRIDY}>Role *</legend>
-        <p className="mb-2 text-xs text-inkoust/60">
-          Každý uživatel má právě jednu primární roli.
-        </p>
+        <legend className={POPIS_TRIDY}>Členství *</legend>
         <div className="space-y-2">
-          {ROLE_LIST.map((info) => {
-            const zaskrtnuto: boolean = role === info.id;
+          {CLENSTVI_VOLBY.map((volba) => {
+            const zaskrtnuto: boolean = clenstvi === volba.id;
             return (
               <label
-                key={info.id}
+                key={volba.id}
                 className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded border border-linka bg-white/60 px-3 py-2 motion-safe:transition-colors motion-safe:hover:bg-linka/30"
               >
                 <input
                   type="radio"
-                  name="role"
-                  value={info.id}
+                  name="clenstvi"
+                  value={volba.id}
                   checked={zaskrtnuto}
-                  onChange={() => setRole(info.id)}
+                  onChange={() => naZmenuClenstvi(volba.id)}
                   disabled={ukladam}
-                  aria-describedby={chyba === null ? undefined : roleChybaId}
+                  aria-describedby={chyba === null ? undefined : profilChybaId}
                   className="mt-1 h-5 w-5 shrink-0 accent-smrk"
                 />
                 <span className="min-w-0">
-                  <span className="block text-sm font-bold">{info.nazev}</span>
+                  <span className="block text-sm font-bold">{volba.nazev}</span>
                   <span className="block text-xs text-inkoust/60">
-                    {info.popis}
+                    {volba.popis}
                   </span>
                 </span>
               </label>
             );
           })}
         </div>
-        {chyba !== null && (
-          <p
-            id={roleChybaId}
-            role="alert"
-            className="mt-2 text-sm font-semibold text-red-800"
-          >
-            {chyba}
-          </p>
-        )}
       </fieldset>
+
+      <div>
+        <label htmlFor={funkceId} className={POPIS_TRIDY}>
+          Funkce
+        </label>
+        <select
+          id={funkceId}
+          value={funkce ?? ""}
+          onChange={(e) => {
+            const hodnota: string = e.target.value;
+            setFunkce(
+              hodnota === "vedeni" ? "vedeni" : hodnota === "rada" ? "rada" : null,
+            );
+          }}
+          disabled={ukladam || clenstvi === "clen"}
+          aria-describedby={chybaKombinace === null ? undefined : profilChybaId}
+          title={
+            clenstvi === "clen"
+              ? "Funkci může mít jen aktivní člen"
+              : "Vyber funkci člena"
+          }
+          className="block min-h-[44px] w-full rounded border border-linka bg-white/60 px-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <option value="">Bez funkce</option>
+          <option value="vedeni">Vedení</option>
+          <option value="rada">Rada</option>
+        </select>
+        <p className="mt-1 text-xs text-inkoust/60">
+          {clenstvi === "clen"
+            ? "Funkci (vedení/rada) může mít jen aktivní člen."
+            : "Nadstavba k aktivnímu členství — vedení, nebo rada."}
+        </p>
+      </div>
+
+      <div className="flex min-h-[44px] items-center justify-between gap-3 rounded border border-linka bg-white/60 px-3 py-2">
+        <label htmlFor={`${funkceId}-admin`} className="min-w-0">
+          <span className="block text-sm font-bold">Admin</span>
+          <span className="block text-xs text-inkoust/60">
+            Technický příznak — správa členů a kódů.
+          </span>
+        </label>
+        <input
+          id={`${funkceId}-admin`}
+          type="checkbox"
+          role="switch"
+          aria-checked={adminPriznak}
+          checked={adminPriznak}
+          onChange={(e) => setAdminPriznak(e.target.checked)}
+          disabled={ukladam}
+          className="h-6 w-6 shrink-0 accent-smrk"
+        />
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label htmlFor={skolaId} className={POPIS_TRIDY}>
+            Škola
+          </label>
+          <input
+            id={skolaId}
+            type="text"
+            value={skola}
+            onChange={(e) => setSkola(e.target.value)}
+            disabled={ukladam}
+            maxLength={120}
+            autoComplete="off"
+            placeholder="Nevyplněno"
+            className="block min-h-[44px] w-full rounded border border-linka bg-white/60 px-3 text-base placeholder:text-inkoust/40"
+          />
+        </div>
+        <div>
+          <label htmlFor={tridaId} className={POPIS_TRIDY}>
+            Třída
+          </label>
+          <input
+            id={tridaId}
+            type="text"
+            value={trida}
+            onChange={(e) => setTrida(e.target.value)}
+            disabled={ukladam}
+            maxLength={120}
+            autoComplete="off"
+            placeholder="Nevyplněno"
+            className="block min-h-[44px] w-full rounded border border-linka bg-white/60 px-3 text-base placeholder:text-inkoust/40"
+          />
+        </div>
+        <p className="text-xs text-inkoust/60">
+          Seznam školu a třídu nenese — vyplněním se nastaví (posílá se jen
+          neprázdné, max 120 znaků).
+        </p>
+      </div>
+
+      {chyba !== null && (
+        <p
+          id={profilChybaId}
+          role="alert"
+          className="text-sm font-semibold text-red-800"
+        >
+          {chyba}
+        </p>
+      )}
 
       <div className="flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onZrusit}
           disabled={ukladam}
-          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50 disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           Zrušit
         </button>
         <button
           type="submit"
-          disabled={ukladam}
-          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={ukladam || chybaKombinace !== null}
+          title={
+            chybaKombinace !== null
+              ? chybaKombinace
+              : "Uložit profil člena"
+          }
+          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           {ukladam ? "Ukládám…" : "Uložit změny"}
         </button>

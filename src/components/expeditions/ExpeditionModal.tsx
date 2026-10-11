@@ -11,6 +11,7 @@ import { useAuth } from "../../hooks/useAuth";
 import {
   formatRozsahData,
   jeBezOmezeni,
+  jeProbihajici,
   jeProbehla,
   obsazenostProcenta,
   volnaMista,
@@ -80,8 +81,9 @@ function statusUcastiPopisek(status: ApiUcastnik["status"]): string {
 /**
  * Deníkový detail výpravy — role=dialog + aria-modal, focus-trap, Esc,
  * klik na backdrop, křížek; po zavření vrací focus na kartu, která ho otevřela.
- * USER: seznam přihlášených + Přihlásit / Odhlásit. ADMIN: Upravit (reuse
- * ExpeditionForm), Odstranit (potvrzení), Uzavřít s docházkou (checkboxy).
+ * USER: seznam přihlášených + Přihlásit / Odhlásit. Správa výprav
+ * (aktivní člen, dual-guard): Upravit (reuse ExpeditionForm),
+ * Odstranit (potvrzení), Uzavřít s docházkou (checkboxy).
  */
 export default function ExpeditionModal({
   expedice,
@@ -89,7 +91,7 @@ export default function ExpeditionModal({
   onAktualizace,
   onSmazana,
 }: ExpeditionModalProps): JSX.Element {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, muzeSpravovatVypravy } = useAuth();
   const nadpisId: string = useId();
   const popisId: string = useId();
   const ucastNadpisId: string = useId();
@@ -126,7 +128,7 @@ export default function ExpeditionModal({
   const [uzaviraSe, setUzaviraSe] = useState<boolean>(false);
   const [uzavriChyba, setUzavriChyba] = useState<string | null>(null);
 
-  /* Správa docházky po uzavření (jen proběhlá + ADMIN, Krok 4: userId). */
+  /* Správa docházky po uzavření (jen proběhlá + správa výprav, Krok 4: userId). */
   type UzivateleStav = "neaktivni" | "nacitani" | "hotovo" | "chyba";
   const [uzivatele, setUzivatele] = useState<UserListItem[]>([]);
   const [uzivateleStav, setUzivateleStav] = useState<UzivateleStav>("neaktivni");
@@ -140,6 +142,7 @@ export default function ExpeditionModal({
   const [odebiraId, setOdebiraId] = useState<string | null>(null);
 
   const probehla: boolean = jeProbehla(expedice);
+  const probiha: boolean = !probehla && jeProbihajici(expedice);
   const bezOmezeni: boolean = jeBezOmezeni(expedice);
   const procenta: number = obsazenostProcenta(expedice);
   const volna: number = volnaMista(expedice);
@@ -175,11 +178,11 @@ export default function ExpeditionModal({
 
   /* Selektor reálných users (GET /api/users) jen v editačním režimu Upravit. */
   useEffect(() => {
-    if (!probehla || !isAdmin || rezim !== "upravy") return;
+    if (!probehla || !muzeSpravovatVypravy || rezim !== "upravy") return;
     if (uzivateleStav !== "neaktivni") return;
     void nacistiUzivatele();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [probehla, isAdmin, rezim, uzivateleStav]);
+  }, [probehla, muzeSpravovatVypravy, rezim, uzivateleStav]);
 
   useEffect(() => {
     setRezim("prehled");
@@ -450,7 +453,9 @@ export default function ExpeditionModal({
           ? "Uzavřít výpravu"
           : probehla
             ? "Archivní záznam"
-            : "Detail výpravy";
+            : probiha
+              ? "Právě probíhá"
+              : "Detail výpravy";
 
   return (
     <div
@@ -584,7 +589,7 @@ export default function ExpeditionModal({
                           : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
                   </span>
                 </div>
-                {!bezOmezeni && (
+                {!bezOmezeni ? (
                   <div
                     role="progressbar"
                     aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
@@ -597,6 +602,24 @@ export default function ExpeditionModal({
                       aria-hidden="true"
                       className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
                       style={{ width: `${procenta}%` }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    role="status"
+                    aria-label={`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
+                    className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
+                  >
+                    <span className="sr-only">
+                      {`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
+                    </span>
+                    <div
+                      aria-hidden="true"
+                      className="h-full w-full rounded-full"
+                      style={{
+                        backgroundImage:
+                          "repeating-linear-gradient(45deg, rgba(26,46,34,0.28) 0 6px, transparent 6px 12px)",
+                      }}
                     />
                   </div>
                 )}
@@ -723,13 +746,13 @@ export default function ExpeditionModal({
               )}
 
               {/* Prohlížecí režim: jen read-only seznam výše. Správa docházky je v Upravit. */}
-              {probehla && isAdmin && (
+              {probehla && muzeSpravovatVypravy && (
                 <p role="status" className="mt-5 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-3 text-center text-[13px] text-inkoust/70">
                   Kroniku upravíš v režimu Upravit — přidání ze seznamu uživatelů i odebrání je jen tam.
                 </p>
               )}
-              {/* Admin akce */}
-              {isAdmin && (
+              {/* Správa výpravy (dual-guard): aktivní člen i bez admin příznaku */}
+              {muzeSpravovatVypravy && (
                 <div className="mt-5 border-t-2 border-inkoust pt-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
                     Správa výpravy
@@ -796,9 +819,10 @@ export default function ExpeditionModal({
                 serverChybyPoli={serverChybyPoli}
                 onSubmit={naOdeslatUpravu}
                 onZrusit={() => setRezim("prehled")}
+                povolitMinulost
               />
-              {/* Správa docházky POUZE v editačním režimu — proběhlá + ADMIN, zdroj GET /api/users. */}
-              {probehla && isAdmin && (
+              {/* Správa docházky POUZE v editačním režimu — proběhlá + správa výprav, zdroj GET /api/users. */}
+              {probehla && muzeSpravovatVypravy && (
                 <section
                   aria-labelledby={spravaNadpisId}
                   className="rounded-2xl border-2 border-inkoust bg-papir/60 p-4"
