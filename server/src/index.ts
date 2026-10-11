@@ -64,7 +64,7 @@ import type {
   VytvoritExpediciResponse,
   VytvoritKodResponse,
 } from "../../src/shared/api-types";
-import { VALIDACNI_ZPRAVY } from "../../src/shared/api-types";
+import { VALIDACNI_ZPRAVY, jeSkolyTridyOdpoved } from "../../src/shared/api-types";
 import {
   hashHesla,
   jeSystemBezAdmina,
@@ -73,8 +73,10 @@ import {
   podepisToken,
   smazSessionCookie,
   toApiUser,
+  trioNaRoli,
   vyzadujAdmina,
   vyzadujPrihlaseni,
+  vyzadujSpravceVyprav,
   type AutentizovanyRequest,
 } from "./auth";
 import { posliChybu } from "./chyby";
@@ -96,11 +98,19 @@ import {
   validujRegistraci,
   validujUpravuClena,
   validujUpravuExpedice,
-  validujUpravuRoleUzivatele,
+  validujUpravuUzivatele,
   validujUzavreni,
   validujVytvoreniExpedice,
 } from "./validace";
-import { isKnownRole, type Role } from "../../src/config/roles";
+import {
+  chybaKombinace3D,
+  isKnownRole,
+  mapujRoliNaProfil,
+  type ClenskyProfil,
+  type Clenstvi,
+  type Funkce,
+  type Role,
+} from "../../src/config/roles";
 import { clenove } from "../../drizzle/schema/clenove";
 import { expeditions } from "../../drizzle/schema/expeditions";
 import type { ExpeditionRow } from "../../drizzle/schema/expeditions";
@@ -274,6 +284,11 @@ app.post("/api/register", (req: Request, res: Response) => {
 
       const bezAdmina = await jeSystemBezAdmina();
       const passwordHash = await hashHesla(vstup.heslo);
+      // Dual-write: trio je zdroj pravdy, `role` je mirror (trioNaRoli).
+      // První účet (systém bez admina): aktivní člen + admin příznak.
+      const noveTrio: ClenskyProfil = bezAdmina
+        ? { clenstvi: "aktivni_clen", funkce: null, isAdmin: true }
+        : { clenstvi: "clen", funkce: null, isAdmin: false };
       const vlozeni = await db
         .insert(users)
         .values({
@@ -282,7 +297,12 @@ app.post("/api/register", (req: Request, res: Response) => {
           prijmeni: vstup.prijmeni ?? "",
           telefon: vstup.telefon,
           discordNick: vstup.discordNick,
-          role: bezAdmina ? "admin" : "clen",
+          role: trioNaRoli(noveTrio),
+          clenstvi: noveTrio.clenstvi,
+          funkce: noveTrio.funkce,
+          isAdmin: noveTrio.isAdmin,
+          skola: vstup.skola,
+          trida: vstup.trida,
           passwordHash,
         })
         .returning();
@@ -620,6 +640,9 @@ app.get("/api/users", (req: Request, res: Response) => {
             prijmeni: users.prijmeni,
             email: users.email,
             role: users.role,
+            clenstvi: users.clenstvi,
+            funkce: users.funkce,
+            isAdmin: users.isAdmin,
           })
           .from(users)
           .orderBy(asc(users.email));
@@ -629,11 +652,20 @@ app.get("/api/users", (req: Request, res: Response) => {
               .trim()
               .replace(/\s+/g, " ");
             const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+            const clenstvi: Clenstvi =
+              radek.clenstvi === "aktivni_clen" ? "aktivni_clen" : "clen";
+            const funkce: Funkce =
+              radek.funkce === "vedeni" || radek.funkce === "rada"
+                ? radek.funkce
+                : null;
             return {
               id: radek.id as UserId,
               jmeno: cele.length > 0 ? cele : radek.email,
               email: radek.email,
               role,
+              clenstvi,
+              funkce,
+              isAdmin: radek.isAdmin,
             };
           }),
         };
@@ -647,17 +679,43 @@ app.get("/api/users", (req: Request, res: Response) => {
   });
 });
 
+type UserRow = typeof users.$inferSelect;
+
+/** DB řádek `users` → úzký `UserListItem` (selektor + správa, včetně 3D tria). */
+function toUserListItem(radek: UserRow): UserListItem {
+  const cele = `${radek.jmeno} ${radek.prijmeni}`.trim().replace(/\s+/g, " ");
+  const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+  const clenstvi: Clenstvi =
+    radek.clenstvi === "aktivni_clen" ? "aktivni_clen" : "clen";
+  const funkce: Funkce =
+    radek.funkce === "vedeni" || radek.funkce === "rada"
+      ? radek.funkce
+      : null;
+  return {
+    id: radek.id as UserId,
+    jmeno: cele.length > 0 ? cele : radek.email,
+    email: radek.email,
+    role,
+    clenstvi,
+    funkce,
+    isAdmin: radek.isAdmin,
+  };
+}
+
 /* ------------------------------------------------------------------ */
-/* PATCH /api/users/:id — úprava primární role (jen ADMIN).              */
-/* `role` je jedna hodnota (DB users.role CHECK: 5 hodnot z roles.ts).  */
-/* Neznámé id → 404 NENALEZENO. Neznámá role → 422 VALIDATION_ERROR      */
-/* s details.role. Idempotentní: stejná role se jen přepíše.            */
+/* PATCH /api/users/:id — úprava 3D tria / školy / třídy (jen ADMIN).    */
+/* Tělo je parciální trio (`clenstvi?/funkce?/isAdmin?/skola?/trida?`)    */
+/* NEBO samotné staré `{ role }` (mapujRoliNaProfil → trio) — obojí      */
+/* najednou → 422 (validujUpravuUzivatele). Efektivní trio (merge s DB)   */
+/* hlídá chybaKombinace3D (`clen` + funkce → 422 s details.funkce).       */
+/* Dual-write: trio + mirror `role` (trioNaRoli) atomicky v témže UPDATE. */
+/* Neznámé id → 404 NENALEZENO. Idempotentní: stejné tělo se jen přepíše. */
 /* ------------------------------------------------------------------ */
 
 app.patch("/api/users/:id", (req: Request, res: Response) => {
   vyzadujAdmina(req, res, () => {
     void (async (): Promise<void> => {
-      const overeni = validujUpravuRoleUzivatele(req.body as unknown);
+      const overeni = validujUpravuUzivatele(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
         posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
         return;
@@ -668,35 +726,92 @@ app.patch("/api/users/:id", (req: Request, res: Response) => {
         posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
         return;
       }
+      const vstup = overeni.data;
       try {
         const db = getDb();
+        const nalezeni = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, id))
+          .limit(1);
+        const stavajici = nalezeni[0];
+        if (stavajici === undefined) {
+          posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+          return;
+        }
+        const stavajiciClenstvi: Clenstvi =
+          stavajici.clenstvi === "aktivni_clen" ? "aktivni_clen" : "clen";
+        const stavajiciFunkce: Funkce =
+          stavajici.funkce === "vedeni" || stavajici.funkce === "rada"
+            ? stavajici.funkce
+            : null;
+
+        const zmeny: {
+          role?: Role;
+          clenstvi?: Clenstvi;
+          funkce?: Funkce;
+          isAdmin?: boolean;
+          skola?: string;
+          trida?: string;
+          updatedAt: Date;
+        } = { updatedAt: new Date() };
+
+        if (vstup.role !== undefined) {
+          // Staré `{ role }` — zpětná kompatibilita: trio z mapování.
+          const profil = mapujRoliNaProfil(vstup.role);
+          zmeny.role = vstup.role;
+          zmeny.clenstvi = profil.clenstvi;
+          zmeny.funkce = profil.funkce;
+          zmeny.isAdmin = profil.isAdmin;
+        } else {
+          // Nové parciální trio — efektivní kombinace (merge s DB řádkem).
+          const efektProfil: ClenskyProfil = {
+            clenstvi: vstup.clenstvi ?? stavajiciClenstvi,
+            funkce:
+              vstup.funkce !== undefined ? vstup.funkce : stavajiciFunkce,
+            isAdmin: vstup.isAdmin ?? stavajici.isAdmin,
+          };
+          const chyba3D: string | null = chybaKombinace3D(efektProfil);
+          if (chyba3D !== null) {
+            posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+              funkce: [chyba3D],
+            });
+            return;
+          }
+          const meniTrio =
+            vstup.clenstvi !== undefined ||
+            vstup.funkce !== undefined ||
+            vstup.isAdmin !== undefined;
+          const meniSkolu =
+            vstup.skola !== undefined || vstup.trida !== undefined;
+          if (!meniTrio && !meniSkolu) {
+            const telo: UpravitUzivateleResponse = {
+              user: toUserListItem(stavajici),
+            };
+            res.json(telo);
+            return;
+          }
+          if (vstup.clenstvi !== undefined) zmeny.clenstvi = vstup.clenstvi;
+          if (vstup.funkce !== undefined) zmeny.funkce = vstup.funkce;
+          if (vstup.isAdmin !== undefined) zmeny.isAdmin = vstup.isAdmin;
+          if (vstup.skola !== undefined) zmeny.skola = vstup.skola;
+          if (vstup.trida !== undefined) zmeny.trida = vstup.trida;
+          // Dual-write mirror — jen když se trio mění (škola/třída roli nese).
+          if (meniTrio) zmeny.role = trioNaRoli(efektProfil);
+        }
+
         const aktualizovane = await db
           .update(users)
-          .set({ role: overeni.data.role, updatedAt: new Date() })
+          .set(zmeny)
           .where(eq(users.id, id))
-          .returning({
-            id: users.id,
-            jmeno: users.jmeno,
-            prijmeni: users.prijmeni,
-            email: users.email,
-            role: users.role,
-          });
+          .returning();
         const radek = aktualizovane[0];
         if (radek === undefined) {
           posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
           return;
         }
-        const cele = `${radek.jmeno} ${radek.prijmeni}`
-          .trim()
-          .replace(/\s+/g, " ");
-        const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
         const telo: UpravitUzivateleResponse = {
-          user: {
-            id: radek.id as UserId,
-            jmeno: cele.length > 0 ? cele : radek.email,
-            email: radek.email,
-            role,
-          },
+          user: toUserListItem(radek),
         };
         res.json(telo);
       } catch {
@@ -710,7 +825,8 @@ app.patch("/api/users/:id", (req: Request, res: Response) => {
 
 /* ------------------------------------------------------------------ */
 /* Krok 3b — Expedice CRUD + účast + uzavření (kontrakt api-types §8).   */
-/* Matice: POST/PATCH/DELETE detailu + PATCH /uzavrit = ADMIN;           */
+/* Matice: POST/PATCH/DELETE detailu + PATCH /uzavrit + správa účastníků */
+/* po uzavření = dual-guard (admin nebo aktivní člen);                   */
 /* GET detail = PUBLIC; účast (seznam / prihlasit / odhlasit) = USER.    */
 /* Kapacita je vždy `kapacita_celkem` vs COUNT řádků v `participants`.   */
 /* Uzavření nastaví `stav: "proběhlá"` + zapíše docházku. Chyby vždy     */
@@ -821,9 +937,9 @@ function vnitrniChyba(res: Response): void {
   }
 }
 
-/* POST /api/expeditions — jen ADMIN. Úspěch → 201. */
+/* POST /api/expeditions — dual-guard (admin nebo aktivní člen). → 201. */
 app.post("/api/expeditions", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  vyzadujSpravceVyprav(req, res, () => {
     void (async (): Promise<void> => {
       const overeni = validujVytvoreniExpedice(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
@@ -898,9 +1014,9 @@ app.get("/api/expeditions/:id", (req: Request, res: Response) => {
   })();
 });
 
-/* PATCH /api/expeditions/:id — jen ADMIN, parciální. `stav` tudy nejde. */
+/* PATCH /api/expeditions/:id — dual-guard, parciální. `stav` tudy nejde. */
 app.patch("/api/expeditions/:id", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  vyzadujSpravceVyprav(req, res, () => {
     void (async (): Promise<void> => {
       const overeni = validujUpravuExpedice(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
@@ -1005,9 +1121,9 @@ app.patch("/api/expeditions/:id", (req: Request, res: Response) => {
   });
 });
 
-/* DELETE /api/expeditions/:id — jen ADMIN, maže i účastníky (CASCADE). */
+/* DELETE /api/expeditions/:id — dual-guard, maže i účastníky (CASCADE). */
 app.delete("/api/expeditions/:id", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  vyzadujSpravceVyprav(req, res, () => {
     void (async (): Promise<void> => {
       const id = ctiIdVypravy(req);
       if (id.length === 0) {
@@ -1265,11 +1381,11 @@ app.delete("/api/expeditions/:id/odhlasit", (req: Request, res: Response) => {
   })();
 });
 
-/* PATCH /api/expeditions/:id/uzavrit — jen ADMIN (+ docházka).           */
+/* PATCH /api/expeditions/:id/uzavrit — dual-guard (+ docházka).        */
 /* Nastaví `stav: "proběhlá"` + přepíše statusy účastníků. Opakované     */
 /* uzavření → 409 VYPRAVA_UZAVRENA. Neznámé `ucastnikId` → 422.          */
 app.patch("/api/expeditions/:id/uzavrit", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  vyzadujSpravceVyprav(req, res, () => {
     void (async (): Promise<void> => {
       const overeni = validujUzavreni(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
@@ -1359,9 +1475,9 @@ function ctiIdUcastnika(req: Request): string {
   return typeof surova === "string" ? surova.trim() : "";
 }
 
-/* POST /api/expeditions/:id/ucastnici — jen ADMIN, i po proběhlá. → 201. */
+/* POST /api/expeditions/:id/ucastnici — dual-guard, i po proběhlá. → 201. */
 app.post("/api/expeditions/:id/ucastnici", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  vyzadujSpravceVyprav(req, res, () => {
     void (async (): Promise<void> => {
       const overeni = validujPridaniUcastnikaPoUzavreni(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
@@ -1462,11 +1578,11 @@ app.post("/api/expeditions/:id/ucastnici", (req: Request, res: Response) => {
   });
 });
 
-/* DELETE /api/expeditions/:id/ucastnici/:ucastnikId — jen ADMIN. → 200. */
+/* DELETE /api/expeditions/:id/ucastnici/:ucastnikId — dual-guard. → 200. */
 app.delete(
   "/api/expeditions/:id/ucastnici/:ucastnikId",
   (req: Request, res: Response) => {
-    vyzadujAdmina(req, res, () => {
+    vyzadujSpravceVyprav(req, res, () => {
       void (async (): Promise<void> => {
         const id = ctiIdVypravy(req);
         const ucastnikId = ctiIdUcastnika(req);
@@ -1664,6 +1780,79 @@ app.delete("/api/expeditions/:id/fotky/:fotkaId", (req: Request, res: Response) 
       }
     })();
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* GET /api/meta/skoly-tridy — PUBLIC číselník škol a tříd.              */
+/* Jen názvy (žádné osobní údaje — nikdy user_id / e-maily). DISTINCT     */
+/* otrimovaných neprázdných hodnot, case-insensitive dedup (první        */
+/* originál), ORDER BY LOWER, LIMIT 200 + 200. Cache 60 s                */
+/* (`Cache-Control: public, max-age=60`). Tvar hlídá jeSkolyTridyOdpoved.*/
+/* ------------------------------------------------------------------ */
+
+const META_SKOLY_TRIDY_LIMIT = 200;
+
+/**
+ * Trim + neprázdné + řazení podle lowercase + case-insensitive dedup
+ * (první originál vítězí). Řazení i dedup v TS, protože Postgres
+ * u `SELECT DISTINCT` vyžaduje ORDER BY výraz v select listu —
+ * `ORDER BY LOWER(col)` by padalo; v SQL je proto DISTINCT + ORDER BY
+ * sloupce a case-insensitive pořadí dorovnává tohle.
+ */
+function normalizujNazvy(hodnoty: readonly string[]): string[] {
+  const ciste: string[] = [];
+  for (const surova of hodnoty) {
+    const otrimovana = surova.trim();
+    if (otrimovana.length > 0) ciste.push(otrimovana);
+  }
+  ciste.sort((a, b) => {
+    const ma = a.toLowerCase();
+    const mb = b.toLowerCase();
+    if (ma < mb) return -1;
+    if (ma > mb) return 1;
+    return 0;
+  });
+  const videne = new Set<string>();
+  const vysledek: string[] = [];
+  for (const nazev of ciste) {
+    const klic = nazev.toLowerCase();
+    if (videne.has(klic)) continue;
+    videne.add(klic);
+    vysledek.push(nazev);
+  }
+  return vysledek;
+}
+
+app.get("/api/meta/skoly-tridy", (_req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    try {
+      const db = getDb();
+      const skolyRadky = await db
+        .selectDistinct({ hodnota: users.skola })
+        .from(users)
+        .where(sql`NULLIF(TRIM(${users.skola}), '') IS NOT NULL`)
+        .orderBy(users.skola)
+        .limit(META_SKOLY_TRIDY_LIMIT);
+      const tridyRadky = await db
+        .selectDistinct({ hodnota: users.trida })
+        .from(users)
+        .where(sql`NULLIF(TRIM(${users.trida}), '') IS NOT NULL`)
+        .orderBy(users.trida)
+        .limit(META_SKOLY_TRIDY_LIMIT);
+      const telo = {
+        skoly: normalizujNazvy(skolyRadky.map((radek) => radek.hodnota)),
+        tridy: normalizujNazvy(tridyRadky.map((radek) => radek.hodnota)),
+      };
+      if (!jeSkolyTridyOdpoved(telo)) {
+        vnitrniChyba(res);
+        return;
+      }
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(telo);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
 });
 
 /* Neznámá /api cesta → jednotná 404 (mimo /api necháváme statický hosting). */

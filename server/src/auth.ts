@@ -6,15 +6,24 @@
  * - Session je JWT v httpOnly cookie `exapp_session` (primárně),
  *   fallback `Authorization: Bearer` pro nativní klienty.
  * - `ApiUser` nikdy nenese hash — mapuje ho `toApiUser`.
- * - Binární auth role: `admin` → ADMIN, jinak USER (ROLE_DOC.md).
+ * - Admin se pozná POUZE podle čerstvého `is_admin` z DB (sloupec
+ *   `users.is_admin`, migrace 0005). Staré `role === 'admin'` se pro
+ *   guardy nečte — `role` je jen dual-write mirror (trioNaRoli).
+ * - `vyzadujSpravceVyprav` je dual-guard pro mutující expedice-routy:
+ *   projde `is_admin` NEBO `smiNaVypravy` z tria čteného čerstvě z DB.
  */
 
 import bcrypt from "bcryptjs";
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { sql } from "drizzle-orm";
-import { isKnownRole } from "../../src/config/roles";
-import type { Role } from "../../src/config/roles";
+import { isKnownRole, smiNaVypravy } from "../../src/config/roles";
+import type {
+  ClenskyProfil,
+  Clenstvi,
+  Funkce,
+  Role,
+} from "../../src/config/roles";
 import type { ApiUser, AuthRole, UserId } from "../../src/shared/api-types";
 import { posliChybu } from "./chyby";
 import { getDb } from "./db";
@@ -33,6 +42,10 @@ export interface SessionUzivatel {
   email: string;
   role: Role;
   authRole: AuthRole;
+  /** 3D trio čtené čerstvě z DB (guards ho nečtou z tokenu). */
+  clenstvi: Clenstvi;
+  funkce: Funkce;
+  isAdmin: boolean;
 }
 
 export interface AutentizovanyRequest extends Request {
@@ -103,7 +116,8 @@ function ctiTokenZRequestu(req: Request): string | null {
 /** DB řádek → veřejný ApiUser. Hash se záměrně nikdy nekopíruje. */
 export function toApiUser(radek: DbUserRow): ApiUser {
   const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
-  const authRole: AuthRole = role === "admin" ? "ADMIN" : "USER";
+  const authRole: AuthRole = radek.isAdmin ? "ADMIN" : "USER";
+  const trio = ctiTrioZRadku(radek);
   return {
     id: radek.id as UserId,
     email: radek.email,
@@ -113,10 +127,41 @@ export function toApiUser(radek: DbUserRow): ApiUser {
     discordNick: radek.discordNick,
     role,
     authRole,
+    clenstvi: trio.clenstvi,
+    funkce: trio.funkce,
+    isAdmin: trio.isAdmin,
     stravaId: radek.stravaId,
     createdAt: radek.createdAt.toISOString(),
     updatedAt: radek.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Dual-write mirror: 3D trio → stará `role` (jediná hodnota).
+ * Pořadí je normativní: isAdmin → 'admin'; aktivní + vedení → 'vedeni';
+ * aktivní + rada → 'clen-rady'; aktivní → 'aktivni-clen'; jinak 'clen'.
+ * Čistá funkce bez DB — používá ji registr + PATCH users atomicky
+ * v témže UPDATE (trio + mirror role najednou, nikdy odděleně).
+ */
+export function trioNaRoli(profil: ClenskyProfil): Role {
+  if (profil.isAdmin) return "admin";
+  if (profil.clenstvi === "aktivni_clen" && profil.funkce === "vedeni")
+    return "vedeni";
+  if (profil.clenstvi === "aktivni_clen" && profil.funkce === "rada")
+    return "clen-rady";
+  if (profil.clenstvi === "aktivni_clen") return "aktivni-clen";
+  return "clen";
+}
+
+/** Bezpečné čtení 3D tria z DB řádku (neznámé hodnoty → bezpečný default). */
+function ctiTrioZRadku(radek: DbUserRow): ClenskyProfil {
+  const clenstvi: Clenstvi =
+    radek.clenstvi === "aktivni_clen" ? "aktivni_clen" : "clen";
+  const funkce: Funkce =
+    radek.funkce === "vedeni" || radek.funkce === "rada"
+      ? radek.funkce
+      : null;
+  return { clenstvi, funkce, isAdmin: radek.isAdmin };
 }
 
 /** True, když v systému ještě není žádný ADMIN (prvotní nastavení). */
@@ -125,7 +170,7 @@ export async function jeSystemBezAdmina(): Promise<boolean> {
   const admini = await db
     .select({ id: users.id })
     .from(users)
-    .where(sql`${users.role} = 'admin'`)
+    .where(sql`${users.isAdmin} = TRUE`)
     .limit(1);
   return admini.length === 0;
 }
@@ -168,18 +213,22 @@ export async function vyzadujPrihlaseni(
     return;
   }
   const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+  const trio = ctiTrioZRadku(radek);
   (req as AutentizovanyRequest).uzivatel = {
     id: radek.id,
     email: radek.email,
     role,
-    authRole: role === "admin" ? "ADMIN" : "USER",
+    authRole: trio.isAdmin ? "ADMIN" : "USER",
+    clenstvi: trio.clenstvi,
+    funkce: trio.funkce,
+    isAdmin: trio.isAdmin,
   };
   next();
 }
 
 /**
- * Middleware: vyžaduje session s authRole ADMIN.
- * Bez session → 401 NEPRIHLASEN, přihlášený USER → 403 ZAKAZANO.
+ * Middleware: vyžaduje session s čerstvým `is_admin = TRUE` z DB.
+ * Bez session → 401 NEPRIHLASEN, přihlášený bez admin příznaku → 403 ZAKAZANO.
  */
 export function vyzadujAdmina(
   req: Request,
@@ -189,8 +238,36 @@ export function vyzadujAdmina(
   void (async (): Promise<void> => {
     await vyzadujPrihlaseni(req, res, () => {
       const uzivatel = (req as AutentizovanyRequest).uzivatel;
-      if (uzivatel.authRole !== "ADMIN") {
+      if (!uzivatel.isAdmin) {
         posliChybu(res, "ZAKAZANO", "Tuhle akci může jen admin.");
+        return;
+      }
+      next();
+    });
+  })();
+}
+
+/**
+ * Middleware: dual-guard pro mutující expedice-routy.
+ * Projde `is_admin` NEBO `smiNaVypravy` z tria čteného čerstvě z DB
+ * (vyzadujPrihlaseni ho vždy načítá z řádku, nikdy z tokenu).
+ * Bez session → 401 NEPRIHLASEN, jinak bez práva → 403 ZAKAZANO.
+ */
+export function vyzadujSpravceVyprav(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      const uzivatel = (req as AutentizovanyRequest).uzivatel;
+      const profil: ClenskyProfil = {
+        clenstvi: uzivatel.clenstvi,
+        funkce: uzivatel.funkce,
+        isAdmin: uzivatel.isAdmin,
+      };
+      if (!uzivatel.isAdmin && !smiNaVypravy(profil)) {
+        posliChybu(res, "ZAKAZANO", "Tuhle akci může jen admin nebo aktivní člen.");
         return;
       }
       next();
