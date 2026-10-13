@@ -7,7 +7,7 @@
  * stav 'volno' | 'skoro plno' | 'proběhlá', datum DATE).
  */
 
-import { date, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { date, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
 
 export const expeditions = pgTable("expeditions", {
   id: text("id").primaryKey(),
@@ -23,6 +23,14 @@ export const expeditions = pgTable("expeditions", {
   kapacitaCelkem: integer("kapacita_celkem").notNull(),
   kapacitaPrihlaseno: integer("kapacita_prihlaseno").notNull().default(0),
   stav: text("stav").notNull(),
+  /** Ujeté/ušlé km ze spárované Strava aktivity (Fáze 4). NULL = nespárováno. */
+  km: real("km"),
+  /** Nastoupané metry ze spárované Strava aktivity. NULL = nespárováno. */
+  prevyseniM: integer("prevyseni_m"),
+  /** Strava aktivita spárovaná k výpravě (UNIQUE — jedna aktivita = jedna výprava). NULL = nespárováno. */
+  stravaActivityId: text("strava_activity_id").unique(),
+  /** Zakódovaná trasa (Strava polyline) pro heatmapu. NULL = bez trasy. */
+  trasaPolyline: text("trasa_polyline"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
