@@ -10,7 +10,9 @@ export interface ExpeditionPhotosProps {
   expeditionId: string;
   /** Fotky existují jen u proběhlé — jinde komponenta nic nekreslí. */
   probehla: boolean;
-  /** ADMIN zapisuje (URL + mazání), user jen čte. */
+  /** Fotku může přidat každý přihlášený (POST je za `vyzadujPrihlaseni`). */
+  prihlasen: boolean;
+  /** Mazání zůstává jen pro ADMIN. */
   isAdmin: boolean;
 }
 
@@ -26,6 +28,7 @@ type FotkyStav = "nacitani" | "hotovo" | "chyba";
 export default function ExpeditionPhotos({
   expeditionId,
   probehla,
+  prihlasen,
   isAdmin,
 }: ExpeditionPhotosProps): JSX.Element | null {
   const nadpisId: string = useId();
@@ -171,9 +174,9 @@ export default function ExpeditionPhotos({
               role="status"
               className="mt-2 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70"
             >
-              {isAdmin
-                ? "Zatím tu není žádná fotka — vlož první odkaz do kroniky níže."
-                : "Zatím tu není žádná fotka — vedoucí ji sem připíše po výpravě."}
+              {prihlasen
+                ? "Zatím tu není žádná fotka — vlož první odkaz níže."
+                : "Zatím tu není žádná fotka — účastníci ji sem dopíšou."}
             </p>
           ) : (
             <ul role="list" className="mt-2 grid grid-cols-2 gap-2">
@@ -271,7 +274,7 @@ export default function ExpeditionPhotos({
             </p>
           )}
 
-          {isAdmin && (
+          {prihlasen && (
             <form
               className="mt-3 rounded-2xl border border-inkoust/15 bg-papir/60 p-3"
               onSubmit={(e) => {

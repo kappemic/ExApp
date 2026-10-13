@@ -19,14 +19,9 @@ export default function DomuPage(): JSX.Element {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">ExApp · podzim 2026</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
           Domů
         </h1>
-        <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Nástěnka ExApp. Nejbližší výprava a rychlé odkazy na chat
-          a žebříčky.
-        </p>
       </header>
 
       <div className="grid grid-cols-1 gap-5 pt-6 lg:grid-cols-3">
@@ -141,7 +136,7 @@ export default function DomuPage(): JSX.Element {
         >
           <div>
             <h2 id="spravcovsky-nadpis" className="text-sm font-bold">
-              Správa oddílu
+              Správa klubu
             </h2>
             <p className="mt-0.5 text-sm text-inkoust/70">
               Jsi vedoucí — můžeš otevřít správu členů.
@@ -164,7 +159,7 @@ export default function DomuPage(): JSX.Element {
       >
         <p className="text-sm font-bold">Zatím tu není nic dalšího</p>
         <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
-          Novinky z oddílu a pozvánky na akce se tu objeví s dalšími kroky.
+          Novinky z klubu a pozvánky na akce se tu objeví s dalšími kroky.
         </p>
       </div>
     </main>

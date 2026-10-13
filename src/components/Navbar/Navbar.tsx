@@ -291,13 +291,8 @@ export function AppHeader(): JSX.Element {
           >
             E
           </span>
-          <span className="flex flex-col leading-tight">
-            <span className="text-sm font-extrabold tracking-tight text-inkoust">
-              ExApp
-            </span>
-            <span className="text-[11px] font-medium text-mech">
-              Klubové výpravy
-            </span>
+          <span className="text-sm font-extrabold tracking-tight text-inkoust">
+            ExApp
           </span>
         </Link>
 

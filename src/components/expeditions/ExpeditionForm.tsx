@@ -55,6 +55,13 @@ interface ExpeditionFormProps {
    * (tvar/reálnost zůstává). Default false — tvorba minulost dál blokuje.
    */
   povolitMinulost?: boolean;
+  /** Krok 16: id pro externí sticky footer (form="..."). */
+  id?: string;
+  /**
+   * Krok 16: skrýt interní akce Zrušit/Uložit — Upravit je renderuje
+   * jako sticky footer na úplném spodku (za Strava + docházkou).
+   */
+  skrytAkce?: boolean;
 }
 
 const DATUM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -224,6 +231,8 @@ export default function ExpeditionForm({
   onSubmit,
   onZrusit,
   povolitMinulost = false,
+  id,
+  skrytAkce = false,
 }: ExpeditionFormProps): JSX.Element {
   const [nazev, setNazev] = useState<string>(vychozi?.nazev ?? "");
   const [datum, setDatum] = useState<string>(vychozi?.datum ?? "");
@@ -322,7 +331,7 @@ export default function ExpeditionForm({
   const poleChybi = (pole: PoleExpedice): boolean => chyby[pole] !== undefined;
 
   return (
-    <form onSubmit={odesli} noValidate aria-label={nadpis}>
+    <form id={id} onSubmit={odesli} noValidate aria-label={nadpis}>
       {serverChyba !== null && (
         <p
           role="alert"
@@ -521,25 +530,27 @@ export default function ExpeditionForm({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={onZrusit}
-          disabled={odesilaSe}
-          title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-60"
-        >
-          Zrušit
-        </button>
-        <button
-          type="submit"
-          disabled={odesilaSe}
-          title={odesilaSe ? "Ukládání probíhá…" : odeslatPopisek}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust disabled:opacity-60"
-        >
-          {odesilaSe ? "Ukládám…" : odeslatPopisek}
-        </button>
-      </div>
+      {!skrytAkce && (
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onZrusit}
+            disabled={odesilaSe}
+            title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-60"
+          >
+            Zrušit
+          </button>
+          <button
+            type="submit"
+            disabled={odesilaSe}
+            title={odesilaSe ? "Ukládání probíhá…" : odeslatPopisek}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust disabled:opacity-60"
+          >
+            {odesilaSe ? "Ukládám…" : odeslatPopisek}
+          </button>
+        </div>
+      )}
     </form>
   );
 }

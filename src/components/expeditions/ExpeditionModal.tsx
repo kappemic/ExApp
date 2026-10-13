@@ -43,6 +43,8 @@ import ExpeditionForm, {
   type ExpeditionFormVychozi,
 } from "./ExpeditionForm";
 import ExpeditionPhotos from "./ExpeditionPhotos";
+import ExpeditionTrasaPrehled from "./ExpeditionTrasaPrehled";
+import StravaParovani from "./StravaParovani";
 
 export interface ExpeditionModalProps {
   expedice: Expedition;
@@ -295,7 +297,11 @@ export default function ExpeditionModal({
   }
 
   function normalizujJmeno(hodnota: string): string {
-    return hodnota.trim().toLowerCase();
+    return hodnota
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
   }
 
   const userIdUzEvidovanych = new Set<string>(
@@ -736,19 +742,33 @@ export default function ExpeditionModal({
                 )}
               </section>
 
-              {/* Fotky — jen proběhlá; ADMIN zapisuje, user čte (Krok 6). */}
+              {/* Ušlé — jen proběhlá (Krok 17: stavová brána dle kontraktu
+                  volno/skoro plno/proběhlá); u neproběhlé vůbec nerenderuj. */}
+              {probehla && (
+                <ExpeditionTrasaPrehled
+                  expeditionId={expedice.id}
+                  probehla={probehla}
+                  pocetUcastniku={
+                    ucastStav === "hotovo" ? ucastnici.length : expedice.kapacita.prihlaseno
+                  }
+                />
+              )}
+
+              {/* Fotky — jen proběhlá; přidat smí každý přihlášený,
+                  mazat jen admin (Krok 19: POST převeden z admina na USER). */}
               {probehla && (
                 <ExpeditionPhotos
                   expeditionId={expedice.id}
                   probehla={probehla}
+                  prihlasen={user !== null}
                   isAdmin={isAdmin}
                 />
               )}
 
-              {/* Prohlížecí režim: jen read-only seznam výše. Správa docházky je v Upravit. */}
+              {/* Prohlížecí režim: jen read-only výše. Kronika i trasa/Strava je v Upravit. */}
               {probehla && muzeSpravovatVypravy && (
                 <p role="status" className="mt-5 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-3 text-center text-[13px] text-inkoust/70">
-                  Kroniku upravíš v režimu Upravit — přidání ze seznamu uživatelů i odebrání je jen tam.
+                  Kroniku i trasu upravíš v režimu Upravit — přidání ze seznamu uživatelů, odebrání i párování je jen tam.
                 </p>
               )}
               {/* Správa výpravy (dual-guard): aktivní člen i bez admin příznaku */}
@@ -811,6 +831,7 @@ export default function ExpeditionModal({
           {rezim === "upravy" && (
             <div className="mt-4 space-y-5">
               <ExpeditionForm
+                id="upravit-expedici-form"
                 nadpis="Upravit výpravu"
                 odeslatPopisek="Uložit změny"
                 vychozi={vychoziUpravy}
@@ -820,7 +841,20 @@ export default function ExpeditionModal({
                 onSubmit={naOdeslatUpravu}
                 onZrusit={() => setRezim("prehled")}
                 povolitMinulost
+                skrytAkce
               />
+              {/* Propojení trasy/Stravy POUZE v editačním režimu — proběhlá + správa výprav (dual-guard). */}
+              {probehla && muzeSpravovatVypravy && (
+                <StravaParovani
+                  expeditionId={expedice.id}
+                  onSparovano={() => {
+                    void nacistiUcastniky(expedice.id);
+                  }}
+                  onOdpojeno={() => {
+                    void nacistiUcastniky(expedice.id);
+                  }}
+                />
+              )}
               {/* Správa docházky POUZE v editačním režimu — proběhlá + správa výprav, zdroj GET /api/users. */}
               {probehla && muzeSpravovatVypravy && (
                 <section
@@ -1048,6 +1082,28 @@ export default function ExpeditionModal({
                   </div>
                 </section>
               )}
+              {/* Krok 16: Zrušit/Uložit až na úplném spodku (za Strava + docházkou),
+                  sticky pro dlouhý formulář. Submit míří na form id výše. */}
+              <div className="sticky bottom-0 -mx-1 flex flex-col-reverse gap-2 border-t-2 border-inkoust bg-papir px-1 py-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setRezim("prehled")}
+                  disabled={odesilaSe}
+                  title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+                >
+                  Zrušit
+                </button>
+                <button
+                  type="submit"
+                  form="upravit-expedici-form"
+                  disabled={odesilaSe}
+                  title={odesilaSe ? "Ukládání probíhá…" : "Uložit změny"}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir disabled:opacity-60"
+                >
+                  {odesilaSe ? "Ukládám…" : "Uložit změny"}
+                </button>
+              </div>
             </div>
           )}
 

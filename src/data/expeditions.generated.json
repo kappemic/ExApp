@@ -1,7 +1,7 @@
 {
   "_meta": {
     "zdroj": "db-snapshot",
-    "generatedAt": "2026-10-07T17:07:48.745Z",
+    "generatedAt": "2026-10-12T20:05:29.231Z",
     "poznamka": "Build-time snapshot z Neon DB (scripts/sync-readmodel.ts). Bez secretů, pouze veřejná read data."
   },
   "expedice": [
@@ -9,10 +9,12 @@
       "id": "adrspach-broumovsko",
       "nazev": "Adršpašské skály a Broumovsko",
       "datum": "2026-09-05",
+      "datumDo": null,
       "sraz": "Adršpach, parkoviště, 9:00",
-      "popis": "Už proběhlo: víkend mezi skalními městy, přespání na faře v Teplicích nad Metují.",
+      "popis": "Už proběhlo: víkend mezi skalními městy, přespání na faře v Teplicích nad Metují. sadasd",
+      "trasaOdkaz": "",
       "kapacita": {
-        "prihlaseno": 12,
+        "prihlaseno": 2,
         "celkem": 14
       },
       "stav": "proběhlá"
@@ -21,8 +23,10 @@
       "id": "krivoklatsko-berounka",
       "nazev": "Křivoklátsko – údolím Berounky",
       "datum": "2026-09-19",
+      "datumDo": null,
       "sraz": "Křivoklát, nádraží, 9:00",
       "popis": "Už proběhlo: podzimní procházka údolím řeky s opékáním u ležení pod hradem.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 16,
         "celkem": 16
@@ -33,8 +37,10 @@
       "id": "sumava-trijezerska-slat",
       "nazev": "Podzimní Šumava – Tříjezerní slať",
       "datum": "2026-10-17",
+      "datumDo": "2026-10-19",
       "sraz": "Praha hl. n., 7:40",
       "popis": "Lehký okruh slatěmi a lesy kolem Modravy. Vhodné i pro nováčky, svačina z vlastních zásob.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 8,
         "celkem": 18
@@ -45,8 +51,10 @@
       "id": "cesky-raj-prachov",
       "nazev": "Český ráj – Prachovské skály",
       "datum": "2026-10-24",
+      "datumDo": null,
       "sraz": "Turnov, aut. nádraží, 9:00",
       "popis": "Smyčka mezi skalními vyhlídkami s výstupem na Přivýšinu. Návrat vlakem přes Jičín.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 14,
         "celkem": 16
@@ -57,8 +65,10 @@
       "id": "brdy-tok",
       "nazev": "Brdy – výšlap na Tok",
       "datum": "2026-11-07",
+      "datumDo": null,
       "sraz": "Příbram, aut. nádraží, 8:15",
       "popis": "Nejvyšší vrchol Brd po hřebeni přes Klobouček. Delší trasa, pevné boty nutné.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 5,
         "celkem": 20
@@ -69,8 +79,10 @@
       "id": "krkonose-snezka",
       "nazev": "Krkonoše – Sněžka přes Obří důl",
       "datum": "2026-11-21",
+      "datumDo": null,
       "sraz": "Pec pod Sněžkou, parkoviště, 7:30",
       "popis": "Náročná celodenní túra Obřím dolem na Sněžku a zpět přes Růžohorky. Jen pro zdatné.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 1,
         "celkem": 12
@@ -81,8 +93,10 @@
       "id": "podyji-vyhlidky",
       "nazev": "Podyjí – vinice a vyhlídky",
       "datum": "2026-12-05",
+      "datumDo": null,
       "sraz": "Znojmo, vlakové nádraží, 9:30",
       "popis": "Poklidná trasa nad Dyjí s výhledy na hrad Hardegg. Zakončení na punči ve Znojmě.",
+      "trasaOdkaz": "",
       "kapacita": {
         "prihlaseno": 3,
         "celkem": 15

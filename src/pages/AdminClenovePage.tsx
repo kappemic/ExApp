@@ -17,10 +17,10 @@ import {
 import type { UserListItem } from "../shared/api-types";
 
 const POPISKY_PANELU: Record<ClenoveTabId, string> = {
-  vsichni: "Všichni členové oddílu.",
+  vsichni: "Všichni členové klubu.",
   aktivni: "Členové s aktivní účastí.",
-  rada: "Členové oddílové rady.",
-  vedeni: "Vedoucí oddílu.",
+  rada: "Členové klubové rady.",
+  vedeni: "Vedoucí klubu.",
   clenove: "Základní členové bez aktivní účasti.",
 };
 
@@ -139,7 +139,7 @@ export default function AdminClenovePage(): JSX.Element {
           Členové
         </h1>
         <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Správa členů oddílu — živý seznam z databáze, role a zařazení.
+          Správa členů klubu — živý seznam z databáze, role a zařazení.
         </p>
 
         <AdminTaby
