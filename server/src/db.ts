@@ -13,9 +13,17 @@ import { clenove } from "../../drizzle/schema/clenove";
 import { expeditions } from "../../drizzle/schema/expeditions";
 import { participants } from "../../drizzle/schema/participants";
 import { registrationCodes } from "../../drizzle/schema/registration_codes";
+import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
 
-const schema = { users, registrationCodes, expeditions, clenove, participants };
+const schema = {
+  users,
+  registrationCodes,
+  expeditions,
+  clenove,
+  participants,
+  stravaTokens,
+};
 
 export type Db = NeonHttpDatabase<typeof schema>;
 
