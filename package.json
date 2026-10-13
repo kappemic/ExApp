@@ -8,6 +8,7 @@
     "sync": "tsx scripts/sync-readmodel.ts",
     "prebuild": "npm run sync",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "server:dev": "tsx watch server/src/index.ts",
     "server:start": "tsx server/src/index.ts",
@@ -16,6 +17,11 @@
     "postserver:build": "node -e \"require('fs').writeFileSync('dist-server/package.json', '{\\n  \\\"type\\\": \\\"commonjs\\\"\\n}')\"",
     "smoke:3b": "tsx scripts/smoke-3b.ts",
     "smoke:faze2": "tsx scripts/smoke-faze2.ts",
+    "smoke:faze3": "tsx scripts/smoke-faze3.ts",
+    "smoke:faze4": "tsx scripts/smoke-faze4.ts",
+    "smoke:faze5-discord": "tsx scripts/smoke-faze5-discord.ts",
+    "over-strava": "tsx scripts/over-strava.ts",
+    "seed:test-uzivatele": "tsx scripts/seed-test-uzivatele.ts",
     "test": "vitest run"
   },
   "repository": {
@@ -39,6 +45,7 @@
     "drizzle-orm": "^0.45.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "leaflet": "^1.9.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"
@@ -52,6 +59,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^24.10.8",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
