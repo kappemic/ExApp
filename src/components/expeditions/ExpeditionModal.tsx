@@ -42,6 +42,7 @@ import ExpeditionForm, {
   type ChybyExpedice,
   type ExpeditionFormVychozi,
 } from "./ExpeditionForm";
+import DiskuzeBox from "../chat/DiskuzeBox";
 import ExpeditionPhotos from "./ExpeditionPhotos";
 import ExpeditionTrasaPrehled from "./ExpeditionTrasaPrehled";
 import StravaParovani from "./StravaParovani";
@@ -741,6 +742,17 @@ export default function ExpeditionModal({
                   </>
                 )}
               </section>
+
+              {/* Diskuze — živé vlákno (GET PUBLIC čte i anonym,
+                  POST USER píše přihlášený). Vlastní sekce s nadpisem
+                  uvnitř DiskuzeBoxu (role=log + aria-live, composer
+                  44px+, optimistic insert s rollbackem). */}
+              <div className="mt-5 border-t border-dashed border-linka pt-4">
+                <DiskuzeBox
+                  idVypravy={expedice.id}
+                  nazevVypravy={expedice.nazev}
+                />
+              </div>
 
               {/* Ušlé — jen proběhlá (Krok 17: stavová brána dle kontraktu
                   volno/skoro plno/proběhlá); u neproběhlé vůbec nerenderuj. */}

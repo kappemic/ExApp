@@ -1,24 +1,10 @@
 {
   "_meta": {
     "zdroj": "db-snapshot",
-    "generatedAt": "2026-10-12T20:05:29.231Z",
+    "generatedAt": "2026-10-14T01:18:26.871Z",
     "poznamka": "Build-time snapshot z Neon DB (scripts/sync-readmodel.ts). Bez secretů, pouze veřejná read data."
   },
   "expedice": [
-    {
-      "id": "adrspach-broumovsko",
-      "nazev": "Adršpašské skály a Broumovsko",
-      "datum": "2026-09-05",
-      "datumDo": null,
-      "sraz": "Adršpach, parkoviště, 9:00",
-      "popis": "Už proběhlo: víkend mezi skalními městy, přespání na faře v Teplicích nad Metují. sadasd",
-      "trasaOdkaz": "",
-      "kapacita": {
-        "prihlaseno": 2,
-        "celkem": 14
-      },
-      "stav": "proběhlá"
-    },
     {
       "id": "krivoklatsko-berounka",
       "nazev": "Křivoklátsko – údolím Berounky",
@@ -28,10 +14,38 @@
       "popis": "Už proběhlo: podzimní procházka údolím řeky s opékáním u ležení pod hradem.",
       "trasaOdkaz": "",
       "kapacita": {
-        "prihlaseno": 16,
+        "prihlaseno": 5,
         "celkem": 16
       },
       "stav": "proběhlá"
+    },
+    {
+      "id": "2-vyprava-72d4597a",
+      "nazev": "2. vyprava",
+      "datum": "2026-10-13",
+      "datumDo": "2026-10-14",
+      "sraz": "sad",
+      "popis": "",
+      "trasaOdkaz": "",
+      "kapacita": {
+        "prihlaseno": 0,
+        "celkem": 0
+      },
+      "stav": "volno"
+    },
+    {
+      "id": "1-vyprava-36257c13",
+      "nazev": "1. vyprava",
+      "datum": "2026-10-13",
+      "datumDo": "2026-10-15",
+      "sraz": "adasd",
+      "popis": "",
+      "trasaOdkaz": "",
+      "kapacita": {
+        "prihlaseno": 2,
+        "celkem": 0
+      },
+      "stav": "volno"
     },
     {
       "id": "sumava-trijezerska-slat",
@@ -42,7 +56,7 @@
       "popis": "Lehký okruh slatěmi a lesy kolem Modravy. Vhodné i pro nováčky, svačina z vlastních zásob.",
       "trasaOdkaz": "",
       "kapacita": {
-        "prihlaseno": 8,
+        "prihlaseno": 1,
         "celkem": 18
       },
       "stav": "volno"
@@ -56,7 +70,7 @@
       "popis": "Smyčka mezi skalními vyhlídkami s výstupem na Přivýšinu. Návrat vlakem přes Jičín.",
       "trasaOdkaz": "",
       "kapacita": {
-        "prihlaseno": 14,
+        "prihlaseno": 0,
         "celkem": 16
       },
       "stav": "skoro plno"
