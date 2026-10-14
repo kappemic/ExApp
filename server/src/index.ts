@@ -28,7 +28,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import express, {
   type NextFunction,
   type Request,
@@ -40,12 +40,14 @@ import type {
   ApiFotka,
   ApiUcastnik,
   ApiSchuzka,
+  ApiZprava,
   ClenoveListResponse,
   ExpediceDetailResponse,
   ExpediceListResponse,
   FotkyListResponse,
   OdebratUcastnikaResponse,
   OdhlasitResponse,
+  PosliZpravuResponse,
   PrihlaseniResponse,
   PrihlasitNaVypravuResponse,
   PridatFotkuResponse,
@@ -57,6 +59,7 @@ import type {
   SmazatFotkuResponse,
   SmazatSchuzkuResponse,
   SmazatVyskytSchuzkyResponse,
+  SmazatZpravuResponse,
   StavVypravy,
   UcastniciListResponse,
   UpravitClenaResponse,
@@ -71,8 +74,9 @@ import type {
   VytvoritKodResponse,
   VytvoritOznameniResponse,
   VytvoritSchuzkuResponse,
+  ZpravyListResponse,
 } from "../../src/shared/api-types";
-import { VALIDACNI_ZPRAVY, STRAVA_NENI_NASTAVENA_ZPRAVA, jeSkolyTridyOdpoved, OZNAMENI_PATH } from "../../src/shared/api-types";
+import { VALIDACE, VALIDACNI_ZPRAVY, STRAVA_NENI_NASTAVENA_ZPRAVA, jeSkolyTridyOdpoved, OZNAMENI_PATH } from "../../src/shared/api-types";
 import {
   hashHesla,
   jeSystemBezAdmina,
@@ -127,6 +131,7 @@ import {
   validujParovaniAktivitu,
   validujRucniAktivitu,
   validujStravaCallback,
+  validujZpravu,
   jePlatnyStravaState,
 } from "./validace";
 import {
@@ -150,6 +155,7 @@ import {
   chybaKombinace3D,
   isKnownRole,
   mapujRoliNaProfil,
+  smiNaVypravy,
   type ClenskyProfil,
   type Clenstvi,
   type Funkce,
@@ -165,6 +171,8 @@ import { photos, type Photo } from "../../drizzle/schema/photos";
 import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
+import { zpravy } from "../../drizzle/schema/zpravy";
+import { ctiIpZRequestu, smiPoslatZpravu, toApiZprava } from "./diskuze";
 import { toApiSchuzka } from "./schuzky";
 import { agregujStatistiky, type StatistikaRadek } from "./statistiky";
 import {
@@ -3089,6 +3097,217 @@ app.get("/api/zebricky", (req: Request, res: Response) => {
     } catch {
       vnitrniChyba(res);
     }
+  })();
+});
+
+/* ------------------------------------------------------------------ */
+/* Fáze 5, Krok 4 — Diskuze k výpravě (vlákno zpráv, PRD §2.5).          */
+/* GET vlákna = PUBLIC (?limit default 50, cap 100 & cursor, řazeno      */
+/* created_at ASC + id ASC tie-break, nextCursor = id poslední zprávy).  */
+/* POST = USER (rate-limit 10/min/ip → 429 MOC_POZADAVKU; text se ukládá */
+/* raw trimnutý bez escapování — escapuje až render `escapujHtml`).      */
+/* DELETE detailu = autor NEBO dual-guard (ADMIN nebo aktivní člen;      */
+/* cizí → 403 ZAKAZANO), soft-delete (UPDATE smazano_at, GET filtruje    */
+/* smazano_at IS NULL). Smazání výpravy maže vlákno (CASCADE v DB).      */
+/* Chyby vždy jen ApiErrorResponse.                                      */
+/* ------------------------------------------------------------------ */
+
+/** `:zpravaId` z cesty — prázdné → volající vrátí 404 NENALEZENO. */
+function ctiIdZpravy(req: Request): string {
+  const surova: unknown = (req.params as Record<string, unknown>)["zpravaId"];
+  return typeof surova === "string" ? surova.trim() : "";
+}
+
+/** `?limit` vlákna — default 50, cap 100. Neplatné → null (route vrátí 422). */
+function ctiLimitZprav(dotaz: { limit?: unknown }): number | null {
+  const surova: unknown = dotaz.limit;
+  if (surova === undefined || surova === null) return VALIDACE.zpravyLimitDefault;
+  const cista: string = typeof surova === "number" ? String(surova) : typeof surova === "string" ? surova.trim() : "";
+  if (cista.length === 0) return VALIDACE.zpravyLimitDefault;
+  const cislo = Number(cista);
+  if (!Number.isInteger(cislo) || cislo < 1 || cislo > VALIDACE.zpravyLimitMax) return null;
+  return cislo;
+}
+
+/** `?cursor` vlákna — opaque id poslední zprávy. Prázdné = od začátku. */
+function ctiCursorZprav(dotaz: { cursor?: unknown }): string | null {
+  const surova: unknown = dotaz.cursor;
+  if (surova === undefined || surova === null) return null;
+  if (typeof surova !== "string") return null;
+  const ciste = surova.trim();
+  return ciste.length === 0 ? null : ciste;
+}
+
+/* GET /api/expeditions/:id/zpravy — PUBLIC vlákno pro modal. */
+app.get("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    const id = ctiIdVypravy(req);
+    if (id.length === 0) {
+      posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+      return;
+    }
+    const dotaz = req.query as { limit?: unknown; cursor?: unknown };
+    if (dotaz.cursor !== undefined && dotaz.cursor !== null && typeof dotaz.cursor !== "string") {
+      posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+        cursor: ["Kurzor musí být text."],
+      });
+      return;
+    }
+    const limit = ctiLimitZprav(dotaz);
+    if (limit === null) {
+      posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+        limit: ["Počet zpráv musí být od 1 do 100."],
+      });
+      return;
+    }
+    const cursor = ctiCursorZprav(dotaz);
+    try {
+      const db = getDb();
+      const vyprava = await db
+        .select({ id: expeditions.id })
+        .from(expeditions)
+        .where(eq(expeditions.id, id))
+        .limit(1);
+      if (vyprava.length === 0) {
+        posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+        return;
+      }
+      const radky = await db
+        .select()
+        .from(zpravy)
+        .where(and(eq(zpravy.expediceId, id), isNull(zpravy.smazanoAt)))
+        .orderBy(asc(zpravy.createdAt), asc(zpravy.id));
+      const vlakno: ApiZprava[] = [];
+      for (const radek of radky) {
+        const api = toApiZprava(radek);
+        if (api !== null) vlakno.push(api);
+      }
+      let start = 0;
+      if (cursor !== null) {
+        const idx = vlakno.findIndex((zprava) => zprava.id === cursor);
+        start = idx === -1 ? 0 : idx + 1;
+      }
+      const stranka = vlakno.slice(start, start + limit);
+      const zbyva = start + limit < vlakno.length;
+      const telo: ZpravyListResponse = {
+        zpravy: stranka,
+        nextCursor: zbyva && stranka.length > 0 ? (stranka[stranka.length - 1]?.id ?? null) : null,
+      };
+      res.json(telo);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
+});
+
+/* POST /api/expeditions/:id/zpravy — přihlášený (USER). → 201. */
+app.post("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const ip = ctiIpZRequestu(req);
+        if (!smiPoslatZpravu(ip)) {
+          posliChybu(res, "MOC_POZADAVKU", "Posíláš zprávy moc rychle. Počkej chvíli a zkus to znovu.");
+          return;
+        }
+        const overeni = validujZpravu(req.body as unknown);
+        if (!overeni.uspech || overeni.data === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+          return;
+        }
+        const id = ctiIdVypravy(req);
+        if (id.length === 0) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        try {
+          const db = getDb();
+          const nalezene = await db
+            .select({ id: expeditions.id })
+            .from(expeditions)
+            .where(eq(expeditions.id, id))
+            .limit(1);
+          if (nalezene.length === 0) {
+            posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+            return;
+          }
+          const autorId = (req as AutentizovanyRequest).uzivatel.id;
+          const vlozene = await db
+            .insert(zpravy)
+            .values({
+              expediceId: id,
+              autorId,
+              text: overeni.data.text,
+            })
+            .returning();
+          const nove = vlozene[0];
+          if (nove === undefined) throw new Error("prázdný returning");
+          const api = toApiZprava(nove);
+          if (api === null) {
+            vnitrniChyba(res);
+            return;
+          }
+          const telo: PosliZpravuResponse = { zprava: api };
+          res.status(201).json(telo);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* DELETE /api/expeditions/:id/zpravy/:zpravaId — autor nebo dual-guard (soft-delete). */
+app.delete("/api/expeditions/:id/zpravy/:zpravaId", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const id = ctiIdVypravy(req);
+        const zpravaId = ctiIdZpravy(req);
+        if (id.length === 0 || zpravaId.length === 0) {
+          posliChybu(res, "NENALEZENO", "Zpráva nenalezena.");
+          return;
+        }
+        try {
+          const db = getDb();
+          const nalezene = await db
+            .select()
+            .from(zpravy)
+            .where(and(eq(zpravy.id, zpravaId), eq(zpravy.expediceId, id)))
+            .limit(1);
+          const radek = nalezene[0];
+          if (radek === undefined || radek.smazanoAt !== null) {
+            posliChybu(res, "NENALEZENO", "Zpráva nenalezena.");
+            return;
+          }
+          const uzivatel = (req as AutentizovanyRequest).uzivatel;
+          const jeAutor: boolean = radek.autorId !== null && radek.autorId === uzivatel.id;
+          const profil: ClenskyProfil = {
+            clenstvi: uzivatel.clenstvi,
+            funkce: uzivatel.funkce,
+            isAdmin: uzivatel.isAdmin,
+          };
+          const jeSpravce: boolean = uzivatel.isAdmin || smiNaVypravy(profil);
+          if (!jeAutor && !jeSpravce) {
+            posliChybu(res, "ZAKAZANO", "Tuhle zprávu smazat nemůžeš.");
+            return;
+          }
+          const smazane = await db
+            .update(zpravy)
+            .set({ smazanoAt: new Date() })
+            .where(and(eq(zpravy.id, zpravaId), eq(zpravy.expediceId, id)))
+            .returning({ id: zpravy.id });
+          if (smazane.length === 0) {
+            posliChybu(res, "NENALEZENO", "Zpráva nenalezena.");
+            return;
+          }
+          const telo: SmazatZpravuResponse = { ok: true };
+          res.json(telo);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
   })();
 });
 
