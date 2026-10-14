@@ -199,3 +199,102 @@ Relevant files: `src/pages/VypravyPage.tsx`, `src/components/kalendar/`,
   commitů v další session (viz `git status --short --branch`).
 - **Další krok:** rest Strava OAuth dle checklistu v `TODO_STRAVA.md`; pak
   Fáze 5 (Discord) dle `AGENTS.md`.
+
+## 9. Fáze 5 — FINÁLNÍ BRÁNA (Krok close-2 — ověřeno 2026-10-14, tester, UZAVŘENO)
+
+- **Close-2 live PASS po nasazení migrace 0009 (tato session, čerstvé důkazy):**
+  - Migrace `drizzle/migrations/0009_faze5_diskuze.sql` nasazena (dle kontextu
+    `public.zpravy` existuje); živý BFF `:3001` restartován s routami diskuze.
+  - `GET /api/health` → **200** `{ok:true}` (PASS).
+  - `GET /api/expeditions/krivoklatsko-berounka/zpravy` → **200**
+    `{"zpravy":[],"nextCursor":null}` (PASS — dříve 500 před migrací, nyní
+    zelené; prázdné vlákno = korektní stav bez zpráv).
+  - Guardy: `POST :id/zpravy` bez session → **401 `NEPRIHLASEN`** (PASS);
+    `DELETE :id/zpravy/:uuid` bez session → **401** (PASS);
+    `GET :id/zpravy` neznámé id → **404 `NENALEZENO`** (PASS).
+  - Testy: **738/738 zelených** (`npm test` → `vitest run`, 39 souborů) (PASS).
+  - TSC: **obě čisté** (`npx tsc --noEmit` → `TSC-KLIENT-OK`,
+    `npx tsc -p server --noEmit` → `TSC-SERVER-OK`) (PASS).
+  - Smoke `npm run smoke:faze5-discord`: **4 PASS, 0 FAIL, 2 SKIP, ÚSPĚCH**
+    (login-větve SKIP bez `SMOKE_ADMIN_*` — dle guardů skriptu, ne chyba) (PASS).
+  - Reálný Discord webhook E2E zůstává vědomý skip — viz `TODO_DISCORD.md`
+    (fail-open bez reálné URL, doručení embedu do kanálu neověřeno, neblokuje
+    uzavření diskuze ani guardů).
+- **Verdikt: Fáze 5 UZAVŘENA (close-2).** Diskuze živě 200 + guardy 401/404,
+  testy 738/738, obě tsc čisté, smoke ÚSPĚCH. Níže 3 atomické commity + push.
+
+- **Rozsah (3 body dle `AGENTS.md`):**
+  1. **Discord webhook service — HOTOVO (kód + testy):**
+     `server/src/discord.ts` (`sestavEmbedNovaVyprava`, `posliDiscordEmbed`
+     fire-and-forget s timeoutem 5 s, allowlist prefixů `discord.com` /
+     `discordapp.com`, bez URL/secretu v logu). `DISCORD_WEBHOOK_URL` jen
+     serverové env (`.env.local`, nikdy `VITE_*`, nikdy do bundlu).
+  2. **Notifikace při nové výpravě / oznámení — HOTOVO (kód), ŽIVĚ ČÁSTEČNĚ:**
+     `POST /api/expeditions` (dual-guard `vyzadujSpravceVyprav` → 201) i
+     `POST /api/oznameni` (dual-guard) volají `upozorniDiscordBezBlokovani`
+     (fail-open: bez URL / neplatná URL / pád fetch = tichý skip, request
+     nikdy nepadne). Smoke `npm run smoke:faze5-discord`: **4 PASS, 0 FAIL,
+     2 SKIP** (login-větve SKIP bez `SMOKE_ADMIN_EMAIL`/`SMOKE_ADMIN_HESLO` —
+     `POST` s loginem → 201 + Discord mock živě NEověřen).
+  3. **Diskuze k výpravám — KÓD + TESTY HOTOVO, ŽIVĚ FAIL (blokuje uzavření):**
+     Schéma `drizzle/schema/zpravy.ts` + idempotentní migrace
+     `drizzle/migrations/0009_faze5_diskuze.sql` (jen `CREATE TABLE/INDEX IF
+     NOT EXISTS` + `DO $$` re-assert FK/CHECK, žádný DROP/DELETE/UPDATE);
+     `server/src/diskuze.ts` (`toApiZprava` fail-safe, rate-limit 10/min/ip
+     in-memory + `resetDiskuzeLimitu`); validace `validujZpravu` (trim,
+     1–1000 znaků, české hlášky); routy v `server/src/index.ts` (pracovní
+     strom, NEcommitnuto): `GET :id/zpravy` PUBLIC (limit default 50/cap 100
+     + cursor, filtr `smazano_at IS NULL`, řazení `created_at,id` ASC),
+     `POST :id/zpravy` `vyzadujPrihlaseni` → 201 (429 `MOC_POZADAVKU` při
+     limitu), `DELETE :id/zpravy/:zpravaId` autor NEBO dual-guard
+     (soft-delete `smazano_at`); UI `src/components/chat/DiskuzeBox.tsx` +
+     `ZpravaBublina.tsx`, `src/lib/format-cas.ts` (`formatCasKratce`,
+     re-exporty `formatCasZpravy`/`formatCasNastenky`), `ChatPage` nástěnka.
+- **Důkazy (čerstvé, tato session):**
+  - Testy: **738/738 zelených** (`npm test` → `vitest run`, 39 souborů;
+    diskuze/discord jádro: `discord` 24, `diskuze-validace` 21,
+    `zpravy-schema` 14, `diskuze-api` 19, `diskuze-box` 34 — vysoko nad
+    cílem „538 + ~30 nových").
+  - TSC: **obě čisté** (`npx tsc --noEmit` → `TSC-KLIENT-OK`,
+    `npx tsc -p server --noEmit` → `TSC-SERVER-OK`, strict, žádné nové `any`).
+  - Živě `:3001`: `GET /api/health` → 200 `{ok:true}`; `POST :id/zpravy`
+    bez session → **401**; `DELETE :id/zpravy/:uuid` bez session → **401**;
+    `GET :id/zpravy` neznámé id → **404**; `GET /api/expeditions/<existuje>/
+    zpravy` → **500 `VNITRNI_CHYBA` (FAIL)**.
+  - Příčina FAIL: tabulka `zpravy` v Neonu **neexistuje**
+    (`get_database_tables`: 9 tabulek — `clenove`, `expeditions`,
+    `meeting_exceptions`, `meetings`, `participants`, `photos`,
+    `registration_codes`, `strava_tokens`, `users`; migrace `0009`
+    nenasazena na tuto větev DB). Jednotkové/integrační testy diskuze tím
+    nejsou dotčeny (mock/validace), ale živé vlákno bez migrace nepojede.
+- **Secrety / guardy:** `.env.local` jen klíče (hodnoty redakovány),
+  `.env.example` jen placeholdery; klient `src/**` bez secretů (jen 2
+  komentáře); `git diff --staged` scan na `DISCORD_WEBHOOK`/`STRAVA_*`/
+  `DATABASE_URL`/`JWT_SECRET` čistý; admin operace guardnuté
+  (`POST /api/expeditions`, `POST /api/oznameni`, `DELETE zpravy` =
+  dual-guard; `POST zpravy` = `vyzadujPrihlaseni`; čtení vláken PUBLIC).
+- **Git (NIC nepushnuto, NIC necommitnuto — jen připraveno):** branch `main`
+  (`main...origin/main [ahead 16]` — Fáze 3–5 v 16 commitech); pracovní strom
+  necommitnutý: modifikováno (5): `index.html`,
+  `server/src/index.ts` (+221 diskuze-routy), `ExpeditionModal.tsx`,
+  `expeditions.generated.json`, `ChatPage.tsx`; untracked (4):
+  `src/components/chat/` (2 soubory), `src/lib/format-cas.ts`,
+  `tests/diskuze-box.test.tsx` (+ tento `HANDOFF.md`, `TODO_DISCORD.md`).
+  `logs/` ignorováno (`.gitignore`), v `git status` se neobjevuje.
+  Návrh 3 atomických commitů (NEPOUŠTĚT bez souhlasu, nepushovat):
+  `git add server/src/discord.ts server/src/index.ts server/src/diskuze.ts
+  server/src/validace.ts tests/discord.test.ts && git commit -m "feat(server):
+  Discord notifikace + diskuze API (guardy, rate-limit)"`;
+  `git add drizzle/schema/zpravy.ts drizzle/migrations/0009_faze5_diskuze.sql
+  drizzle/schema/index.ts && git commit -m "feat(db): vlakno diskuze zpravy
+  (migrace 0009)"`;
+  `git add src/components/chat/ src/lib/format-cas.ts src/pages/ChatPage.tsx
+  src/components/expeditions/ExpeditionModal.tsx tests/diskuze-box.test.tsx
+  tests/diskuze-api.test.ts tests/diskuze-validace.test.ts
+  tests/zpravy-schema.test.ts && git commit -m "feat(klient): diskuze k
+  vyprave + nastenka (format-cas)"` — POZOR: nejdřív nasadit migraci 0009
+  a přeměřit živý smoke (viz níže), commity až po zelené.
+- **Verdikt (close-2): Fáze 5 UZAVŘENA.** Migrace `0009` nasazena, živě
+  `GET :id/zpravy` 200 + guardy 401/404 + `GET /api/health` 200, testy 738/738,
+  obě tsc čisté, smoke `faze5-discord` ÚSPĚCH (4 PASS / 2 SKIP bez admin env).
+  Reálný webhook E2E = vědomý skip — viz `TODO_DISCORD.md`.
