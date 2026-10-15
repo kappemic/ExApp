@@ -1,10 +1,32 @@
-import { useCallback, useEffect, useId, useState, type JSX } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 import {
   nactiFotky,
-  pridejFotku,
+  nastavNahledFotky,
+  pridejFotkuSouborem,
   smazFotku,
+  urlSouboruFotky,
+  vyberNahledFotky,
   type ApiFotka,
 } from "../../lib/expedition-fotky";
+import ConfirmDialog from "../kalendar/ConfirmDialog";
+import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
+import MazaniVyberVrstva from "../fotky/MazaniVyberVrstva";
+import PapirObal from "../fotky/PapirObal";
+import { useFotkyMazani } from "../../hooks/useFotkyMazani";
+import {
+  idsFotekKeSmazani,
+  nadpisPotvrzeniMazaniFotek,
+  popisPotvrzeniMazaniFotek,
+} from "../../lib/fotky-mazani";
+import FotkyLightbox, { jeFotkyLightboxOtevreny } from "./FotkyLightbox";
+import {
+  fotkyHoverBgLinka,
+  fotkyHoverBgSmrkPlne,
+  fotkyHoverOpacity,
+  fotkyMrizkaDlazdice,
+  fotkyTlacitkoZaklad,
+} from "../fotky/fotky-ui";
 
 export interface ExpeditionPhotosProps {
   expeditionId: string;
@@ -12,45 +34,51 @@ export interface ExpeditionPhotosProps {
   probehla: boolean;
   /** Fotku může přidat každý přihlášený (POST je za `vyzadujPrihlaseni`). */
   prihlasen: boolean;
-  /** Mazání zůstává jen pro ADMIN. */
+  /** Highlight and delete are ADMIN only. */
   isAdmin: boolean;
+  /** Cover id changed (load, pick, upload, delete). Optional. */
+  onZmenaNahledu?: (fotkaId: string | null) => void;
 }
 
 type FotkyStav = "nacitani" | "hotovo" | "chyba";
+const FOCUSOVATELNE =
+  'a[href], button:not([disabled]), textarea, input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Deníková kronika fotek k proběhlé výpravě (Krok 6, minimum Fáze 2).
- * URL režim (src/config/storage.ts): admin vloží https:// odkaz + popis,
- * server uloží jen URL do `photos`. Binární upload (Neon Object Storage)
- * později použije stejné endpointy — tohle UI se nemění.
- * Neproběhlá výprava → nic (fotky patří až do archivu po uzavření).
+ * Closed expedition shows one highlight photo. That preview is not a control.
+ * The gallery sheet lists every photo, uploads, and (admin only) deletes.
+ * An admin sets the highlight from the lightbox. `<img>` uses the app stream
+ * URL so a private R2 bucket still renders.
  */
 export default function ExpeditionPhotos({
   expeditionId,
   probehla,
   prihlasen,
   isAdmin,
+  onZmenaNahledu,
 }: ExpeditionPhotosProps): JSX.Element | null {
   const nadpisId: string = useId();
-  const urlPoleId: string = useId();
-  const popisPoleId: string = useId();
+  const dialogNadpisId: string = useId();
+  const souborPoleId: string = useId();
 
   const [stav, setStav] = useState<FotkyStav>("nacitani");
   const [fotky, setFotky] = useState<ApiFotka[]>([]);
   const [chyba, setChyba] = useState<string | null>(null);
+  const [galerieOtevrena, setGalerieOtevrena] = useState<boolean>(false);
 
-  const [url, setUrl] = useState<string>("");
-  const [popis, setPopis] = useState<string>("");
-  const [chybaUrl, setChybaUrl] = useState<string | null>(null);
-  const [chybaPopisu, setChybaPopisu] = useState<string | null>(null);
+  const souborRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const zavritRef = useRef<HTMLButtonElement>(null);
+  const [soubory, setSoubory] = useState<File[]>([]);
+  const [chybaSouboru, setChybaSouboru] = useState<string | null>(null);
   const [odesilaSe, setOdesilaSe] = useState<boolean>(false);
   const [formChyba, setFormChyba] = useState<string | null>(null);
 
-  const [mazaneId, setMazaneId] = useState<string | null>(null);
-  const [mazatChyba, setMazatChyba] = useState<string | null>(null);
-  const [potvrditSmazani, setPotvrditSmazani] = useState<string | null>(null);
-  /** Rozbité URL (onError) — místo tichého schování viditelný náhradní stav. */
+  const [nastavujeId, setNastavujeId] = useState<string | null>(null);
+  const [nahledChyba, setNahledChyba] = useState<string | null>(null);
+  /** Broken stream (onError) — visible fallback instead of a silent hole. */
   const [rozbite, setRozbite] = useState<Record<string, boolean>>({});
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
 
   const nacist = useCallback(async (): Promise<void> => {
     setStav("nacitani");
@@ -66,90 +94,417 @@ export default function ExpeditionPhotos({
     setStav("hotovo");
   }, [expeditionId]);
 
+  const smazJednu = useCallback(
+    async (fotkaId: string): Promise<{ ok: true } | { ok: false; chyba: string }> => {
+      const vysledek = await smazFotku(expeditionId, fotkaId);
+      return vysledek.ok ? { ok: true } : { ok: false, chyba: vysledek.chyba };
+    },
+    [expeditionId],
+  );
+
+  const poSmazani = useCallback(
+    async (smazaneIds: readonly string[], _potvrzeni: unknown): Promise<void> => {
+      const smazane = new Set(smazaneIds);
+      setLightboxId((aktualni) =>
+        aktualni !== null && smazane.has(aktualni) ? null : aktualni,
+      );
+      const obnoveno = await nactiFotky(expeditionId);
+      if (!obnoveno.ok) {
+        setFotky((prev) => prev.filter((fotka) => !smazane.has(fotka.id)));
+        return;
+      }
+      setFotky(obnoveno.data.fotky);
+      setRozbite({});
+    },
+    [expeditionId],
+  );
+
+  const mazani = useFotkyMazani(fotky, smazJednu, poSmazani);
+  const resetMazaniFotek = mazani.resetMazani;
+  const mazaciRezimRef = useRef(mazani.mazaciRezim);
+  const zrusMazaniRef = useRef(mazani.zrusMazani);
+  mazaciRezimRef.current = mazani.mazaciRezim;
+  zrusMazaniRef.current = mazani.zrusMazani;
+
   useEffect(() => {
+    setGalerieOtevrena(false);
+    setLightboxId(null);
     if (!probehla) return;
     void nacist();
   }, [probehla, nacist]);
 
+  useEffect(() => {
+    if (stav !== "hotovo") return;
+    onZmenaNahledu?.(vyberNahledFotky(fotky)?.id ?? null);
+  }, [stav, fotky, onZmenaNahledu]);
+
+  useEffect(() => {
+    if (!galerieOtevrena) return;
+    const predchoziFocus: Element | null = document.activeElement;
+    if (mazaciRezimRef.current) {
+      const koren: HTMLDivElement | null = dialogRef.current;
+      const prvni: HTMLElement | null =
+        koren?.querySelector<HTMLElement>(FOCUSOVATELNE) ?? null;
+      prvni?.focus();
+    } else {
+      zavritRef.current?.focus();
+    }
+
+    function naStiskKlavesy(udalost: KeyboardEvent): void {
+      if (jeFotkyLightboxOtevreny()) return;
+      if (udalost.key === "Escape") {
+        udalost.preventDefault();
+        udalost.stopPropagation();
+        if (mazaciRezimRef.current) {
+          zrusMazaniRef.current();
+          return;
+        }
+        setGalerieOtevrena(false);
+        resetMazaniFotek();
+        return;
+      }
+      if (udalost.key !== "Tab") return;
+      const koren: HTMLDivElement | null = dialogRef.current;
+      if (koren === null) return;
+      const prvky: HTMLElement[] = Array.from(
+        koren.querySelectorAll<HTMLElement>(FOCUSOVATELNE),
+      );
+      if (prvky.length === 0) return;
+      const prvni: HTMLElement | undefined = prvky[0];
+      const posledni: HTMLElement | undefined = prvky[prvky.length - 1];
+      if (prvni === undefined || posledni === undefined) return;
+      if (udalost.shiftKey && document.activeElement === prvni) {
+        udalost.preventDefault();
+        udalost.stopPropagation();
+        posledni.focus();
+      } else if (!udalost.shiftKey && document.activeElement === posledni) {
+        udalost.preventDefault();
+        udalost.stopPropagation();
+        prvni.focus();
+      }
+    }
+
+    window.addEventListener("keydown", naStiskKlavesy, true);
+    return () => {
+      window.removeEventListener("keydown", naStiskKlavesy, true);
+      if (predchoziFocus instanceof HTMLElement) predchoziFocus.focus();
+    };
+  }, [galerieOtevrena, mazani.mazaciRezim, resetMazaniFotek]);
+
   if (!probehla) return null;
 
+  const nahled: ApiFotka | null = stav === "hotovo" ? vyberNahledFotky(fotky) : null;
+  const pocet: string = stav === "hotovo" ? String(fotky.length) : "…";
+  const potvrzeniPocet =
+    mazani.potvrzeni === null
+      ? 0
+      : idsFotekKeSmazani(fotky, mazani.vybrane, mazani.potvrzeni).length;
+
   async function naPridat(): Promise<void> {
-    setChybaUrl(null);
-    setChybaPopisu(null);
+    setChybaSouboru(null);
     setFormChyba(null);
-    const cisteUrl: string = url.trim();
-    if (cisteUrl.length === 0) {
-      setChybaUrl("Vlož odkaz na fotku (https://).");
+    if (soubory.length === 0) {
+      setChybaSouboru("Vyber jednu nebo víc fotek.");
       return;
     }
     setOdesilaSe(true);
-    const vysledek = await pridejFotku(expeditionId, cisteUrl, popis.trim());
-    setOdesilaSe(false);
-    if (!vysledek.ok) {
-      if (vysledek.chybyPoli !== undefined) {
-        const hlaskaUrl: string | undefined = vysledek.chybyPoli["url"];
-        const hlaskaPopis: string | undefined = vysledek.chybyPoli["popis"];
-        if (hlaskaUrl !== undefined) setChybaUrl(hlaskaUrl);
-        if (hlaskaPopis !== undefined) setChybaPopisu(hlaskaPopis);
-        if (hlaskaUrl === undefined && hlaskaPopis === undefined) {
-          setFormChyba(vysledek.chyba);
-        }
+    const nove: ApiFotka[] = [];
+    const selhani: string[] = [];
+    for (const soubor of soubory) {
+      const vysledek = await pridejFotkuSouborem(expeditionId, soubor, "");
+      if (vysledek.ok) {
+        nove.push(vysledek.data.fotka);
       } else {
-        setFormChyba(vysledek.chyba);
+        const detail = vysledek.chybyPoli?.["soubor"] ?? vysledek.chyba;
+        selhani.push(`${soubor.name}: ${detail}`);
       }
-      return;
     }
-    setFotky((prev) => [...prev, vysledek.data.fotka]);
-    setUrl("");
-    setPopis("");
+    setOdesilaSe(false);
+    if (nove.length > 0) setFotky((prev) => [...prev, ...nove]);
+    if (selhani.length > 0) {
+      setFormChyba(selhani.join(" "));
+      setSoubory(soubory.filter((soubor) => selhani.some((radek) => radek.startsWith(`${soubor.name}:`))));
+    } else {
+      setSoubory([]);
+      if (souborRef.current !== null) souborRef.current.value = "";
+    }
   }
 
-  async function naSmazat(fotkaId: string): Promise<void> {
-    setMazatChyba(null);
-    setMazaneId(fotkaId);
-    const vysledek = await smazFotku(expeditionId, fotkaId);
-    setMazaneId(null);
-    if (!vysledek.ok) {
-      setMazatChyba(vysledek.chyba);
+  function zavriGalerii(): void {
+    if (mazani.mazaciRezim) {
+      mazani.zrusMazani();
       return;
     }
-    setPotvrditSmazani(null);
-    setFotky((prev) => prev.filter((f) => f.id !== fotkaId));
+    setGalerieOtevrena(false);
+    resetMazaniFotek();
   }
+
+  function zavriGaleriiNatvrdo(): void {
+    setGalerieOtevrena(false);
+    resetMazaniFotek();
+  }
+
+  async function naNahled(fotkaId: string): Promise<void> {
+    setNahledChyba(null);
+    setNastavujeId(fotkaId);
+    const vysledek = await nastavNahledFotky(expeditionId, fotkaId);
+    setNastavujeId(null);
+    if (!vysledek.ok) {
+      setNahledChyba(vysledek.chyba);
+      return;
+    }
+    setFotky(vysledek.data.fotky);
+  }
+
+  const galerie =
+    galerieOtevrena && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-3 sm:items-center"
+            onMouseDown={zavriGalerii}
+          >
+            <div
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={dialogNadpisId}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="max-h-[92vh] w-full max-w-lg touch-manipulation overflow-y-auto overscroll-contain rounded-lg border-2 border-inkoust bg-papir shadow-denik"
+            >
+              <div
+                className={`sticky top-0 z-10 flex gap-2 border-b-2 bg-papir/95 px-3 py-2.5 shadow-denik backdrop-blur-sm sm:px-4 sm:py-3 ${
+                  mazani.mazaciRezim
+                    ? "flex-col items-stretch border-jantar/60 bg-jantar/5"
+                    : "flex-wrap items-center justify-between border-inkoust"
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <h3 id={dialogNadpisId} className="text-base font-bold text-balance text-inkoust">
+                    {mazani.mazaciRezim
+                      ? "Mazání fotek"
+                      : `Fotky z výpravy (${fotky.length})`}
+                  </h3>
+                  {mazani.mazaciRezim ? (
+                    <p className="mt-0.5 text-sm text-inkoust/75">Vyber fotky, pak potvrď smazání.</p>
+                  ) : null}
+                </div>
+                <div
+                  className={
+                    mazani.mazaciRezim
+                      ? "flex w-full min-w-0 flex-col gap-2"
+                      : "flex flex-wrap items-center justify-end gap-2"
+                  }
+                >
+                  <FotkyMazaciHlavicka
+                    isAdmin={isAdmin}
+                    maFotky={fotky.length > 0}
+                    mazaciRezim={mazani.mazaciRezim}
+                    vybranyPocet={mazani.vybrane.size}
+                    mazeSe={mazani.mazeSe}
+                    onZacniMazani={mazani.zacniMazani}
+                    onZrusMazani={mazani.zrusMazani}
+                    onSmazatVybrane={() => {
+                      mazani.otevriPotvrzeni("vybrane");
+                    }}
+                    onSmazatVse={() => {
+                      mazani.otevriPotvrzeni("vse");
+                    }}
+                  />
+                  {!mazani.mazaciRezim ? (
+                    <button
+                      ref={zavritRef}
+                      type="button"
+                      onClick={zavriGaleriiNatvrdo}
+                      aria-label="Zavřít galerii"
+                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust`}
+                    >
+                      Zavřít
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="p-3">
+                {fotky.length === 0 ? (
+                  <p
+                    role="status"
+                    className="rounded-2xl border border-dashed border-inkoust/25 bg-papir p-4 text-center text-sm text-inkoust/70"
+                  >
+                    {prihlasen
+                      ? "Zatím tu není žádná fotka — přidej ji níže."
+                      : "Zatím tu není žádná fotka."}
+                  </p>
+                ) : (
+                  <ul role="list" className="grid grid-cols-2 gap-2">
+                    {fotky.map((fotka, poradi) => {
+                      const jeNahled: boolean = fotka.jeNahled;
+                      const vybrana: boolean = mazani.vybrane.has(fotka.id);
+                      const rozbita: boolean = rozbite[fotka.id] === true;
+                      const popisekFotky = `Otevřít fotku ${poradi + 1} z ${fotky.length}`;
+                      return (
+                        <li key={fotka.id} className="min-w-0">
+                          {mazani.mazaciRezim ? (
+                            <button
+                              type="button"
+                              aria-pressed={vybrana}
+                              aria-label="Vybrat fotku ke smazání"
+                              onClick={() => {
+                                mazani.prepniVyber(fotka.id);
+                              }}
+                              className={`group ${fotkyMrizkaDlazdice} ${
+                                vybrana
+                                  ? "border-jantar ring-2 ring-jantar/30"
+                                  : jeNahled
+                                    ? "border-inkoust"
+                                    : "border-inkoust/40"
+                              }`}
+                            >
+                              <ObrazekFotky
+                                expeditionId={expeditionId}
+                                fotkaId={fotka.id}
+                                rozbita={rozbita}
+                                bezOdkazu
+                                onRozbita={() => {
+                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                                }}
+                                className="absolute inset-0 h-full w-full object-cover"
+                              />
+                              <MazaniVyberVrstva vybrana={vybrana} />
+                            </button>
+                          ) : rozbita ? (
+                            <div
+                              className={`${fotkyMrizkaDlazdice} border-inkoust/40`}
+                              aria-current={jeNahled ? "true" : undefined}
+                            >
+                              <ObrazekFotky
+                                expeditionId={expeditionId}
+                                fotkaId={fotka.id}
+                                rozbita
+                                onRozbita={() => {
+                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                                }}
+                                className="absolute inset-0 h-full w-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setLightboxId(fotka.id)}
+                              aria-label={popisekFotky}
+                              aria-current={jeNahled ? "true" : undefined}
+                              className={`${fotkyMrizkaDlazdice} ${
+                                jeNahled ? "border-inkoust" : "border-inkoust/40"
+                              }`}
+                            >
+                              <ObrazekFotky
+                                expeditionId={expeditionId}
+                                fotkaId={fotka.id}
+                                rozbita={false}
+                                onRozbita={() => {
+                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                                }}
+                                className="absolute inset-0 h-full w-full object-cover"
+                              />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {nahledChyba !== null && (
+                  <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
+                    {nahledChyba}
+                  </p>
+                )}
+                {mazani.mazatChyba !== null && (
+                  <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
+                    {mazani.mazatChyba}
+                  </p>
+                )}
+
+                {prihlasen && (
+                  <form
+                    className="mt-3 rounded-2xl border border-inkoust/15 bg-papir p-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void naPridat();
+                    }}
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
+                      Přidat fotku
+                    </p>
+                    <label htmlFor={souborPoleId} className="sr-only">
+                      Fotky
+                    </label>
+                    <input
+                      id={souborPoleId}
+                      ref={souborRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={(e) => {
+                        setSoubory(Array.from(e.currentTarget.files ?? []));
+                      }}
+                      aria-invalid={chybaSouboru !== null}
+                      aria-describedby={chybaSouboru !== null ? `${souborPoleId}-chyba` : undefined}
+                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-full file:border-2 file:border-inkoust file:bg-papir file:px-4 file:text-sm file:font-bold"
+                    />
+                    {soubory.length > 0 && (
+                      <p className="mt-1 text-[13px] text-inkoust/70">
+                        {soubory.length === 1
+                          ? soubory[0]?.name
+                          : soubory.length < 5
+                            ? `${soubory.length} fotky`
+                            : `${soubory.length} fotek`}
+                      </p>
+                    )}
+                    {chybaSouboru !== null && (
+                      <p
+                        id={`${souborPoleId}-chyba`}
+                        role="alert"
+                        className="mt-1 text-[13px] font-semibold text-red-800"
+                      >
+                        {chybaSouboru}
+                      </p>
+                    )}
+                    {formChyba !== null && (
+                      <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
+                        {formChyba}
+                      </p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={odesilaSe}
+                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrkPlne} mt-3 w-full rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir disabled:opacity-60`}
+                    >
+                      {odesilaSe ? "Nahrávám…" : "Nahrát fotky"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <section aria-labelledby={nadpisId} className="mt-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3
-          id={nadpisId}
-          className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60"
-        >
-          Fotky z výpravy ({stav === "hotovo" ? fotky.length : "…"})
-        </h3>
-        {stav === "hotovo" && (
-          <button
-            type="button"
-            onClick={() => void nacist()}
-            className="min-h-[44px] min-w-[44px] rounded-full px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
-          >
-            Obnovit
-          </button>
-        )}
-      </div>
+      <h3
+        id={nadpisId}
+        className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60"
+      >
+        Fotky z výpravy
+      </h3>
 
       {stav === "nacitani" && (
         <div
-          className="mt-2 grid grid-cols-2 gap-2"
+          className="mt-2 h-40 animate-pulse rounded-2xl border-2 border-inkoust/15 bg-inkoust/10 motion-reduce:animate-none"
           aria-busy="true"
           aria-label="Načítám fotky"
-        >
-          {[0, 1].map((i) => (
-            <div
-              key={i}
-              className="h-28 animate-pulse rounded-2xl bg-inkoust/10 motion-reduce:animate-none"
-            />
-          ))}
-        </div>
+        />
       )}
 
       {stav === "chyba" && (
@@ -160,7 +515,7 @@ export default function ExpeditionPhotos({
           <button
             type="button"
             onClick={() => void nacist()}
-            className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir"
+            className={`${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} mt-3 rounded-full border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir [@media(hover:hover)_and_(pointer:fine)]:hover:bg-inkoust/90`}
           >
             Zkusit znovu
           </button>
@@ -168,198 +523,118 @@ export default function ExpeditionPhotos({
       )}
 
       {stav === "hotovo" && (
-        <>
-          {fotky.length === 0 ? (
-            <p
-              role="status"
-              className="mt-2 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70"
-            >
-              {prihlasen
-                ? "Zatím tu není žádná fotka — vlož první odkaz níže."
-                : "Zatím tu není žádná fotka — účastníci ji sem dopíšou."}
-            </p>
-          ) : (
-            <ul role="list" className="mt-2 grid grid-cols-2 gap-2">
-              {fotky.map((fotka) => {
-                const mazeSe: boolean = mazaneId === fotka.id;
-                const potvrzeno: boolean = potvrditSmazani === fotka.id;
-                const jeRozbita: boolean = rozbite[fotka.id] === true;
-                return (
-                  <li
-                    key={fotka.id}
-                    className="overflow-hidden rounded-2xl border border-inkoust/15 bg-papir/70"
-                  >
-                    {jeRozbita ? (
-                      <div className="flex h-28 w-full flex-col items-center justify-center px-2 text-center">
-                        <p
-                          role="status"
-                          className="text-[12px] font-semibold text-inkoust/70"
-                        >
-                          Fotku se nepodařilo načíst.
-                        </p>
-                        <a
-                          href={fotka.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex min-h-[44px] items-center justify-center px-3 text-[12px] font-bold text-smrk underline underline-offset-2"
-                        >
-                          Otevřít odkaz
-                        </a>
-                      </div>
-                    ) : (
-                      <img
-                        src={fotka.url}
-                        alt={
-                          fotka.popis.trim().length > 0
-                            ? fotka.popis
-                            : "Fotka z výpravy"
-                        }
-                        loading="lazy"
-                        className="h-28 w-full object-cover"
-                        onError={() => {
-                          setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
-                        }}
-                      />
-                    )}
-                    {fotka.popis.trim().length > 0 && (
-                      <p className="truncate px-2 pt-1 text-[12px] text-inkoust/70">
-                        {fotka.popis}
-                      </p>
-                    )}
-                    {isAdmin && (
-                      <div className="px-2 pb-2 pt-1">
-                        {!potvrzeno ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMazatChyba(null);
-                              setPotvrditSmazani(fotka.id);
-                            }}
-                            aria-label={`Smazat fotku ${fotka.popis.trim().length > 0 ? `„${fotka.popis}"` : ""}`.trim()}
-                            className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-red-800/50 px-3 text-[12px] font-bold text-red-800 motion-safe:transition-colors motion-safe:hover:bg-red-800 motion-safe:hover:text-papir"
-                          >
-                            Smazat
-                          </button>
-                        ) : (
-                          <span className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void naSmazat(fotka.id)}
-                              disabled={mazeSe}
-                              className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-3 text-[12px] font-bold text-papir disabled:opacity-60"
-                            >
-                              {mazeSe ? "Mažu…" : "Ano, smazat"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPotvrditSmazani(null)}
-                              disabled={mazeSe}
-                              className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-inkoust px-3 text-[12px] font-bold disabled:opacity-60"
-                            >
-                              Nechat
-                            </button>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {mazatChyba !== null && (
-            <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-              {mazatChyba}
-            </p>
-          )}
-
-          {prihlasen && (
-            <form
-              className="mt-3 rounded-2xl border border-inkoust/15 bg-papir/60 p-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void naPridat();
-              }}
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
-                Přidat fotku (odkaz)
-              </p>
-              <label
-                htmlFor={urlPoleId}
-                className="mt-2 block text-[13px] font-semibold"
-              >
-                Odkaz na fotku
-              </label>
-              <input
-                id={urlPoleId}
-                type="url"
-                inputMode="url"
-                autoComplete="off"
-                enterKeyHint="go"
-                maxLength={2048}
-                placeholder="https://…"
-                value={url}
-                onChange={(e) => setUrl(e.currentTarget.value)}
-                aria-invalid={chybaUrl !== null}
-                aria-describedby={chybaUrl !== null ? `${urlPoleId}-chyba` : undefined}
-                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-base"
-              />
-              {chybaUrl !== null && (
-                <p
-                  id={`${urlPoleId}-chyba`}
-                  role="alert"
-                  className="mt-1 text-[13px] font-semibold text-red-800"
-                >
-                  {chybaUrl}
-                </p>
-              )}
-              <label
-                htmlFor={popisPoleId}
-                className="mt-3 block text-[13px] font-semibold"
-              >
-                Popis <span className="font-normal text-inkoust/60">(nepovinný)</span>
-              </label>
-              <input
-                id={popisPoleId}
-                type="text"
-                maxLength={500}
-                enterKeyHint="done"
-                placeholder="Tábořiště při západu slunce…"
-                value={popis}
-                onChange={(e) => setPopis(e.currentTarget.value)}
-                aria-invalid={chybaPopisu !== null}
-                aria-describedby={chybaPopisu !== null ? `${popisPoleId}-chyba` : undefined}
-                className="mt-1 min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-base"
-              />
-              {chybaPopisu !== null && (
-                <p
-                  id={`${popisPoleId}-chyba`}
-                  role="alert"
-                  className="mt-1 text-[13px] font-semibold text-red-800"
-                >
-                  {chybaPopisu}
-                </p>
-              )}
-              {formChyba !== null && (
-                <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-                  {formChyba}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={odesilaSe}
-                className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:opacity-60"
-              >
-                {odesilaSe ? "Přidávám…" : "Přidat fotku"}
-              </button>
-              <p className="mt-2 text-center text-[12px] text-inkoust/60">
-                Ukládá se jen odkaz — binární upload (Neon Storage) přijde později.
-              </p>
-            </form>
-          )}
-        </>
+        <div className="mt-2 overflow-hidden rounded-2xl border-2 border-inkoust bg-papir">
+          <PapirObal
+            src={nahled !== null ? urlSouboruFotky(expeditionId, nahled.id) : null}
+            alt="Fotka z výpravy"
+            className="max-h-72 min-h-40 w-full"
+          />
+        </div>
       )}
+
+      {stav === "hotovo" && (
+        <button
+          type="button"
+          onClick={() => {
+            setNahledChyba(null);
+            setGalerieOtevrena(true);
+          }}
+          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} mt-3 w-full rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold text-inkoust`}
+        >
+          Všechny fotky ({pocet})
+        </button>
+      )}
+
+      {galerie}
+      {lightboxId !== null ? (
+        <FotkyLightbox
+          expeditionId={expeditionId}
+          pocatecniId={lightboxId}
+          fotky={fotky}
+          onZavrit={() => setLightboxId(null)}
+          isAdmin={isAdmin}
+          nastavujeNahled={nastavujeId !== null}
+          nahledChyba={nahledChyba}
+          onHighlight={(fotkaId) => void naNahled(fotkaId)}
+          mazaciRezim={mazani.mazaciRezim}
+          mazeSe={mazani.mazeSe}
+          vybranyPocet={mazani.vybrane.size}
+          onZacniMazani={() => {
+            setLightboxId(null);
+            mazani.zacniMazani();
+          }}
+          onZrusMazani={mazani.zrusMazani}
+          onSmazatVybrane={() => {
+            mazani.otevriPotvrzeni("vybrane");
+          }}
+          onSmazatVse={() => {
+            mazani.otevriPotvrzeni("vse");
+          }}
+        />
+      ) : null}
+      {mazani.potvrzeni !== null ? (
+        <ConfirmDialog
+          otevreno
+          nadpis={nadpisPotvrzeniMazaniFotek(mazani.potvrzeni, true)}
+          popis={popisPotvrzeniMazaniFotek(mazani.potvrzeni, potvrzeniPocet, true)}
+          potvrditPopisek="Ano, smazat"
+          zrusitPopisek="Ponechat"
+          probiha={mazani.mazeSe}
+          probihaPopisek="Mažu…"
+          chyba={mazani.mazatChyba}
+          onPotvrdit={() => {
+            void mazani.provedMazani();
+          }}
+          onZrusit={mazani.zavriPotvrzeni}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ObrazekFotky({
+  expeditionId,
+  fotkaId,
+  rozbita,
+  onRozbita,
+  className,
+  bezOdkazu = false,
+}: {
+  expeditionId: string;
+  fotkaId: string;
+  rozbita: boolean;
+  onRozbita: () => void;
+  className: string;
+  /** Skip the fallback link when the image sits inside another button. */
+  bezOdkazu?: boolean;
+}): JSX.Element {
+  const src: string = urlSouboruFotky(expeditionId, fotkaId);
+  if (rozbita) {
+    return (
+      <div className="flex h-28 w-full flex-col items-center justify-center bg-papir px-2 text-center">
+        <p role="status" className="text-[12px] font-semibold text-inkoust/70">
+          Fotku se nepodařilo načíst.
+        </p>
+        {bezOdkazu ? null : (
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-[44px] touch-manipulation items-center justify-center px-3 text-[12px] font-bold text-smrk underline underline-offset-2"
+          >
+            Otevřít odkaz
+          </a>
+        )}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt="Fotka z výpravy"
+      loading="lazy"
+      className={className}
+      onError={onRozbita}
+    />
   );
 }

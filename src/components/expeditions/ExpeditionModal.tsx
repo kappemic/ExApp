@@ -43,7 +43,11 @@ import ExpeditionForm, {
   type ExpeditionFormVychozi,
 } from "./ExpeditionForm";
 import DiskuzeBox from "../chat/DiskuzeBox";
+import NeprectenaTecka from "../chat/NeprectenaTecka";
 import ExpeditionPhotos from "./ExpeditionPhotos";
+import { jeFotkyLightboxOtevreny } from "./FotkyLightbox";
+import VypravaNahled from "./VypravaNahled";
+import { useNahledFotkaId } from "../../hooks/useNahledFotkaId";
 import ExpeditionTrasaPrehled from "./ExpeditionTrasaPrehled";
 import StravaParovani from "./StravaParovani";
 
@@ -53,6 +57,18 @@ export interface ExpeditionModalProps {
   /** Propíše účast / úpravu / uzavření do seznamu (kapacita, stav). */
   onAktualizace: (nova: Expedition) => void;
   onSmazana: (id: string) => void;
+  /**
+   * Step 3 — tečka nepřečtené diskuze ze sdílené mapy rodiče
+   * (`useUnreadExpeditions` žije jen ve VypravyPage, modal vlastní
+   * poller nemá — jeden zdroj pravdy pro kartu + nástěnku + modal).
+   */
+  neprectenaDiskuze?: boolean;
+  /**
+   * Step 3 — deep-link (`/vypravy?vyprava=<id>`): po otevření doscrollovat
+   * na sekci Diskuze + dát jí focus (mobil OK). Běžné otevření z karty
+   * nechává `false` — detail začíná odshora jako dosud.
+   */
+  startNaDiskuzi?: boolean;
 }
 
 type Rezim = "prehled" | "upravy" | "ruseni" | "uzavirani";
@@ -61,7 +77,15 @@ type UcastStav = "nacitani" | "hotovo" | "chyba";
 const FOCUSOVATELNE =
   'a[href], button:not([disabled]), textarea, input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function prevedExpedici(api: ApiExpedice): Expedition {
+function prevedExpedici(
+  api: ApiExpedice,
+  predchoziNahled: string | null | undefined,
+): Expedition {
+  const stravaId: string | null =
+    typeof api.stravaActivityId === "string" ? api.stravaActivityId : null;
+  const maKm: boolean = typeof api.km === "number";
+  const nahled =
+    api.nahledFotkaId !== undefined ? api.nahledFotkaId : predchoziNahled;
   return {
     id: api.id,
     nazev: api.nazev,
@@ -72,6 +96,14 @@ function prevedExpedici(api: ApiExpedice): Expedition {
     trasaOdkaz: api.trasaOdkaz,
     kapacita: { prihlaseno: api.kapacita.prihlaseno, celkem: api.kapacita.celkem },
     stav: api.stav,
+    // Step 4 — stav párování z detailu (expedice-level): Strava id NEBO
+    // zapsané km (ruční zápis nese km bez Strava id). Vidí i neúčastník —
+    // bez čtení osobních statistik. Rozlišení zdroje drží StravaParovani
+    // (`rozhodniZdrojPripojeni`): Strava id → „Odpojit aktivitu",
+    // km bez id → „Smazat ruční zápis". Účet („Odpojit účet") jen v profilu.
+    jeSparovano: stravaId !== null || maKm,
+    stravaActivityId: stravaId,
+    ...(nahled !== undefined ? { nahledFotkaId: nahled } : {}),
   };
 }
 
@@ -93,6 +125,8 @@ export default function ExpeditionModal({
   onZavrit,
   onAktualizace,
   onSmazana,
+  neprectenaDiskuze = false,
+  startNaDiskuzi = false,
 }: ExpeditionModalProps): JSX.Element {
   const { user, isAdmin, muzeSpravovatVypravy } = useAuth();
   const nadpisId: string = useId();
@@ -104,6 +138,11 @@ export default function ExpeditionModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const krizekRef = useRef<HTMLButtonElement>(null);
   const vyberUzivateleRef = useRef<HTMLSelectElement>(null);
+  /* Step 3 — cíl deep-linku (sekce Diskuze). Mount-only: modal se pro každou
+     výpravu montuje znovu (`key={vybrana.id}`), pozdější aktualizace rodiče
+     (účast, pairing) scroll ani focus znovu nehýbou. */
+  const diskuzeRef = useRef<HTMLElement>(null);
+  const startNaDiskuziRef = useRef<boolean>(startNaDiskuzi);
   /* onZavrit držíme v refu — focus efekt smí běžet jen při mountu.
      Jinak každá aktualizace rodiče (např. přidání účastníka →
      onAktualizace → nový render) refocusne křížek a scrollne
@@ -144,8 +183,22 @@ export default function ExpeditionModal({
   const [potvrzOdebraniId, setPotvrzOdebraniId] = useState<string | null>(null);
   const [odebiraId, setOdebiraId] = useState<string | null>(null);
 
+  const [nahledZGalerie, setNahledZGalerie] = useState<string | null | undefined>(
+    undefined,
+  );
+  const fotkaId = useNahledFotkaId(
+    expedice.id,
+    nahledZGalerie !== undefined ? nahledZGalerie : expedice.nahledFotkaId,
+  );
+  const onZmenaNahledu = useCallback((dalsiId: string | null): void => {
+    setNahledZGalerie(dalsiId);
+  }, []);
+
   const probehla: boolean = jeProbehla(expedice);
   const probiha: boolean = !probehla && jeProbihajici(expedice);
+  /* Step 3 — tečka na záložce Diskuze ze sdílené mapy rodiče
+     (synchronně s kartou + nástěnkou, bez vlastního polleru). */
+  const diskuzeNeprectena: boolean = neprectenaDiskuze;
   const bezOmezeni: boolean = jeBezOmezeni(expedice);
   const procenta: number = obsazenostProcenta(expedice);
   const volna: number = volnaMista(expedice);
@@ -163,7 +216,7 @@ export default function ExpeditionModal({
     setUcastnici(vysledek.data.ucastnici);
     setDochazka(new Set(vysledek.data.ucastnici.map((u) => u.id)));
     setUcastStav("hotovo");
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
   }, []);
 
   const nacistiUzivatele = useCallback(async (): Promise<void> => {
@@ -210,11 +263,16 @@ export default function ExpeditionModal({
      aktualizaci by házel scroll dialogu nahoru (viz onZavritRef). */
   useEffect(() => {
     const predchoziFocus: Element | null = document.activeElement;
-    krizekRef.current?.focus();
+    /* Step 3 — deep-link cílí Diskuzi (vlastní efekt níže); běžné otevření
+       drží dosavadní focus na křížku. */
+    if (!startNaDiskuziRef.current) {
+      krizekRef.current?.focus();
+    }
     const puvodniOverflow: string = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     function naStiskKlavesy(udalost: KeyboardEvent): void {
+      if (jeFotkyLightboxOtevreny()) return;
       if (udalost.key === "Escape") {
         udalost.stopPropagation();
         onZavritRef.current();
@@ -247,6 +305,31 @@ export default function ExpeditionModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* Step 3 — deep-link: otevření z Nástěnky / přímé URL doscrolluje na
+     Diskuzi + dá jí focus. Mobil OK (start bloku, dialog je vlastní
+     scroll-kontejner). Reduced-motion → bez smooth animace. Focus drží
+     `preventScroll`, aby po doscrollování už nic neskákalo; mobilní
+     klávesnice nevyskočí (focus míří na sekci, ne na textarea). */
+  useEffect(() => {
+    if (!startNaDiskuziRef.current) return;
+    const cil: HTMLElement | null = diskuzeRef.current;
+    if (cil === null) return;
+    const snizitPohyb: boolean =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ramec: number = window.requestAnimationFrame(() => {
+      cil.scrollIntoView({
+        block: "start",
+        behavior: snizitPohyb ? "auto" : "smooth",
+      });
+      cil.focus({ preventScroll: true });
+    });
+    return () => {
+      window.cancelAnimationFrame(ramec);
+    };
+  }, []);
+
   function naKlikBackdropu(udalost: MouseEvent<HTMLDivElement>): void {
     if (udalost.target === udalost.currentTarget) onZavrit();
   }
@@ -266,7 +349,7 @@ export default function ExpeditionModal({
       setAkceChyba(vysledek.chyba);
       return;
     }
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
     await nacistiUcastniky(expedice.id);
   }
 
@@ -279,7 +362,7 @@ export default function ExpeditionModal({
       setAkceChyba(vysledek.chyba);
       return;
     }
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
     await nacistiUcastniky(expedice.id);
   }
 
@@ -339,7 +422,7 @@ export default function ExpeditionModal({
       obnovScrollPoPrekresleni(pozice);
       return;
     }
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
     setSpravaZprava(`„${vysledek.data.ucastnik.jmeno}“ je zapsán v kronice.`);
     setVybranyUzivatelId("");
     setFiltrUzivatelu("");
@@ -368,7 +451,7 @@ export default function ExpeditionModal({
       obnovScrollPoPrekresleni(pozice);
       return;
     }
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
     setSpravaZprava(
       odebirany === undefined
         ? "Účastník byl odebrán z kroniky."
@@ -392,7 +475,7 @@ export default function ExpeditionModal({
         else setServerChyba(vysledek.chyba);
         return;
       }
-      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
       setRezim("prehled");
     })();
   }
@@ -435,7 +518,7 @@ export default function ExpeditionModal({
         setUzavriChyba(vysledek.chyba);
         return;
       }
-      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice));
+      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
       setUcastnici(vysledek.data.ucastnici);
       setRezim("prehled");
     })();
@@ -475,49 +558,21 @@ export default function ExpeditionModal({
         aria-modal="true"
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border-2 border-inkoust bg-papir shadow-denik"
+        /* chat-scroll-fix: dialog je jediný vnější scroll detailu.
+           Diskuze (DiskuzeBox `data-vlakno-scroll`) má vlastní vnitřní
+           scroll-kartu max-h-80 — scroll detailu celým vláknem jen odjede,
+           chat nikoho nenásleduje. `overscroll-contain` brání propadu. */
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg border-2 border-inkoust bg-papir shadow-denik"
       >
         <div className="relative border-b-2 border-inkoust bg-linka/70">
-          <div
-            aria-hidden="true"
-            className="relative h-36 w-full overflow-hidden"
-          >
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)",
-              }}
+          <div className="relative h-36 w-full overflow-hidden">
+            <VypravaNahled
+              expeditionId={expedice.id}
+              fotkaId={fotkaId}
+              probehla={probehla}
             />
-            <svg
-              viewBox="0 0 400 180"
-              preserveAspectRatio="xMidYMax slice"
-              className={`absolute inset-x-0 bottom-0 h-full w-full text-inkoust ${probehla ? "opacity-50 grayscale" : ""}`}
-            >
-              <path
-                d="M0 150 L90 70 L150 130 L220 45 L300 130 L350 85 L400 130 L400 180 L0 180 Z"
-                fill="none"
-                stroke="currentColor"
-                strokeOpacity="0.35"
-                strokeWidth="2.5"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M0 165 L110 100 L190 155 L270 90 L340 155 L400 120 L400 180 L0 180 Z"
-                fill="currentColor"
-                fillOpacity="0.16"
-                stroke="currentColor"
-                className="text-smrk"
-                strokeOpacity="0.45"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span className="absolute bottom-2 right-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70">
-              {probehla ? "archiv · exapp" : "exapp"}
-            </span>
           </div>
-          <div className="absolute left-4 top-4">
+          <div className="absolute left-4 top-4 z-10">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-inkoust/25 bg-papir/90 px-3 py-1 text-[11px] font-bold backdrop-blur">
               <span
                 aria-hidden="true"
@@ -531,12 +586,11 @@ export default function ExpeditionModal({
             type="button"
             onClick={onZavrit}
             aria-label="Zavřít detail výpravy"
-            className="absolute right-4 top-4 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir text-xl font-extrabold leading-none shadow-razitko motion-safe:transition-colors motion-safe:hover:bg-linka"
+            className="absolute right-4 top-4 z-10 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir text-xl font-extrabold leading-none shadow-razitko motion-safe:transition-colors motion-safe:hover:bg-linka"
           >
             <span aria-hidden="true">×</span>
           </button>
         </div>
-
         <div className="p-5 sm:p-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
             {nadpisRezim}
@@ -746,13 +800,31 @@ export default function ExpeditionModal({
               {/* Diskuze — živé vlákno (GET PUBLIC čte i anonym,
                   POST USER píše přihlášený). Vlastní sekce s nadpisem
                   uvnitř DiskuzeBoxu (role=log + aria-live, composer
-                  44px+, optimistic insert s rollbackem). */}
-              <div className="mt-5 border-t border-dashed border-linka pt-4">
+                  44px+, optimistic insert s rollbackem). Step 3: cíl
+                  deep-linku (`id="diskuze"`, focusovatelná pro doscroll). */}
+              <section
+                ref={diskuzeRef}
+                id="diskuze"
+                tabIndex={-1}
+                aria-label={`Diskuze k výpravě ${expedice.nazev}`}
+                data-deep-link-cil="diskuze"
+                className="mt-5 scroll-mt-4 border-t border-dashed border-linka pt-4 focus-visible:outline-3 focus-visible:outline-smrk focus-visible:outline-offset-2"
+              >
+                {diskuzeNeprectena && (
+                  <p className="mb-2 flex min-h-[24px] items-center gap-2 text-[13px] font-bold text-red-800">
+                    <NeprectenaTecka
+                      viditelna={diskuzeNeprectena}
+                      velikost="nadpis"
+                      nazevVypravy={expedice.nazev}
+                    />
+                    <span>Nové zprávy v diskuzi</span>
+                  </p>
+                )}
                 <DiskuzeBox
                   idVypravy={expedice.id}
                   nazevVypravy={expedice.nazev}
                 />
-              </div>
+              </section>
 
               {/* Ušlé — jen proběhlá (Krok 17: stavová brána dle kontraktu
                   volno/skoro plno/proběhlá); u neproběhlé vůbec nerenderuj. */}
@@ -774,6 +846,7 @@ export default function ExpeditionModal({
                   probehla={probehla}
                   prihlasen={user !== null}
                   isAdmin={isAdmin}
+                  onZmenaNahledu={onZmenaNahledu}
                 />
               )}
 
@@ -855,10 +928,14 @@ export default function ExpeditionModal({
                 povolitMinulost
                 skrytAkce
               />
-              {/* Propojení trasy/Stravy POUZE v editačním režimu — proběhlá + správa výprav (dual-guard). */}
+              {/* Propojení trasy/Stravy POUZE v editačním režimu — proběhlá + správa výprav (dual-guard).
+                  Step 4: popisky se nesmí plést — Strava aktivita „Odpojit aktivitu",
+                  ruční km „Smazat ruční zápis" s confirmem, účet „Odpojit účet" jen v profilu. */}
               {probehla && muzeSpravovatVypravy && (
                 <StravaParovani
                   expeditionId={expedice.id}
+                  jeSparovano={expedice.jeSparovano ?? false}
+                  stravaActivityId={expedice.stravaActivityId ?? null}
                   onSparovano={() => {
                     void nacistiUcastniky(expedice.id);
                   }}

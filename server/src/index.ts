@@ -28,7 +28,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import express, {
   type NextFunction,
   type Request,
@@ -45,6 +45,7 @@ import type {
   ExpediceDetailResponse,
   ExpediceListResponse,
   FotkyListResponse,
+  NastavitNahledResponse,
   OdebratUcastnikaResponse,
   OdhlasitResponse,
   PosliZpravuResponse,
@@ -74,10 +75,18 @@ import type {
   VytvoritKodResponse,
   VytvoritOznameniResponse,
   VytvoritSchuzkuResponse,
+  DiskuzeMetaResponse,
+  OznacPrecteniResponse,
   ZpravyListResponse,
+  KonverzaceListResponse,
+  PosliGlobalZpravuResponse,
+  ApiKonverzace,
+  KanalDiskuze,
 } from "../../src/shared/api-types";
-import { VALIDACE, VALIDACNI_ZPRAVY, STRAVA_NENI_NASTAVENA_ZPRAVA, jeSkolyTridyOdpoved, OZNAMENI_PATH } from "../../src/shared/api-types";
+import { jeKanalDiskuze } from "../../src/shared/api-types";
+import { VALIDACE, VALIDACNI_ZPRAVY, STRAVA_NEDOSTUPNA_ZPRAVA, STRAVA_NENI_NASTAVENA_ZPRAVA, jeSkolyTridyOdpoved, OZNAMENI_PATH } from "../../src/shared/api-types";
 import {
+  ctiVolitelnehoUzivatele,
   hashHesla,
   jeSystemBezAdmina,
   nastavSessionCookie,
@@ -92,6 +101,20 @@ import {
   type AutentizovanyRequest,
 } from "./auth";
 import { posliChybu } from "./chyby";
+import {
+  FOTKA_TELO_MAX_BAJTU,
+  FOTKY_NEJSOU_NASTAVENE_ZPRAVA,
+  contentTypeProPriponu,
+  ctiR2Nastaveni,
+  klicFotky,
+  klicZVerejneUrl,
+  nactiObjektR2,
+  rozpoznajObrazek,
+  rozdelMultipart,
+  smazObjektR2,
+  ulozFotkuDoR2,
+  type ChybaSouboru,
+} from "./r2-fotky";
 import { parseAllowedOrigins } from "./cors";
 import {
   DISCORD_BARVA_NOVA_VYPRAVA,
@@ -141,6 +164,7 @@ import {
   ctiStravaClientId,
   ctiStravaRedirectUri,
   jeRealneClientId,
+  jeStravaNedostupnaChyba,
   nactiVsechnyStravaAktivity,
   oznacSparovane,
   rozhodniOdpojeni,
@@ -172,10 +196,30 @@ import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
 import { zpravy } from "../../drizzle/schema/zpravy";
-import { ctiIpZRequestu, smiPoslatZpravu, toApiZprava } from "./diskuze";
+import { diskuzePrecteni } from "../../drizzle/schema/diskuze_precteni";
+import {
+  jeKonverzaceKlic,
+  konverzaceKlicExpedice,
+  konverzacePrecteni,
+} from "../../drizzle/schema/konverzace_precteni";
+import {
+  anonymniDiskuzeMeta,
+  ctiIpZRequestu,
+  jeVlaknoNeprectene,
+  seskupKonverzace,
+  slozZobrazovaneJmeno,
+  smiPoslatZpravu,
+  smiPsatKanal,
+  toApiZprava,
+  type ProfilProJmeno,
+} from "./diskuze";
+import { registrujAlba } from "./alba-routes";
+import { softSmazFotku } from "./fotky-trash";
 import { toApiSchuzka } from "./schuzky";
 import { agregujStatistiky, type StatistikaRadek } from "./statistiky";
 import {
+  nactiMapuNahledu,
+  sNahledFotkaId,
   spocitejUcastniky,
   synchronizujPocet,
   toApiExpedice,
@@ -523,21 +567,24 @@ app.get("/api/expeditions", (req: Request, res: Response) => {
       }
 
       const db = getDb();
-      const radky =
+      // Cover ids in one query so the card grid does not fetch N photo lists.
+      const [radky, nahledy] = await Promise.all([
         stav === undefined
-          ? await db.select().from(expeditions).orderBy(asc(expeditions.datum))
-          : await db
+          ? db.select().from(expeditions).orderBy(asc(expeditions.datum))
+          : db
               .select()
               .from(expeditions)
               .where(eq(expeditions.stav, stav))
-              .orderBy(asc(expeditions.datum));
+              .orderBy(asc(expeditions.datum)),
+        nactiMapuNahledu(db),
+      ]);
       const vysledek: ApiExpedice[] = [];
       for (const radek of radky) {
         // Vždy čerstvý COUNT z participants (ne cache sloupec) — číslo
         // na kartách musí sedět se seznamem v detailu. Řádků jsou jednotky.
         const pocet = await spocitejUcastniky(db, radek.id);
         const api = apiExpediceSPoctem(radek, pocet);
-        if (api !== null) vysledek.push(api);
+        if (api !== null) vysledek.push(sNahledFotkaId(api, nahledy));
       }
       if (page === undefined || pageSize === undefined) {
         const telo: ExpediceListResponse = { expedice: vysledek };
@@ -996,6 +1043,8 @@ async function nactiExpediciSDetailem(
 
   const expedice = apiExpediceSPoctem(radek, prihlasky.length);
   if (expedice === null) return null;
+  const nahledy = await nactiMapuNahledu(db, [id]);
+  expedice.nahledFotkaId = nahledy.get(id) ?? null;
   // Krok 20: veřejný detail nese i ušlé kilometry výpravy (expedice-level,
   // takže je vidí i ti, kdo na ní nebyli). null = administrace ještě
   // nedopsala kilometry. Nové pole je aditivní — klient si ho volí.
@@ -1011,6 +1060,26 @@ function vnitrniChyba(res: Response): void {
   if (!res.headersSent) {
     posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
   }
+}
+
+/**
+ * Výpadek Stravy (timeout / síť / 5xx) → 502 STRAVA_NEDOSTUPNA,
+ * jinak slepá 500. Log je strukturovaný a bez secretů
+ * (jen event + endpoint — nikdy token, secret ani tělo odpovědi).
+ * 401 / 403 / 409 větve tím nejsou dotčeny — volá se jen z `catch`.
+ */
+function stravaNedostupnaNeboVnitrniChyba(
+  res: Response,
+  chyba: unknown,
+  endpoint: string,
+): void {
+  if (res.headersSent) return;
+  if (jeStravaNedostupnaChyba(chyba)) {
+    console.warn(JSON.stringify({ event: "strava_nedostupna", endpoint }));
+    posliChybu(res, "STRAVA_NEDOSTUPNA", STRAVA_NEDOSTUPNA_ZPRAVA);
+    return;
+  }
+  vnitrniChyba(res);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1810,6 +1879,7 @@ function toApiFotka(radek: Photo): ApiFotka {
     url: radek.url,
     popis: radek.popis,
     createdAt: radek.createdAt.toISOString(),
+    jeNahled: radek.jeNahled,
   };
 }
 
@@ -1841,7 +1911,7 @@ app.get("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
       const radky = await db
         .select()
         .from(photos)
-        .where(eq(photos.expeditionId, id))
+        .where(and(eq(photos.expeditionId, id), isNull(photos.smazanoAt)))
         .orderBy(asc(photos.createdAt));
       const telo: FotkyListResponse = { fotky: radky.map(toApiFotka) };
       res.json(telo);
@@ -1851,14 +1921,134 @@ app.get("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
   })();
 });
 
+function hlaskaSouboru(duvod: ChybaSouboru): { pole: string; text: string } {
+  switch (duvod) {
+    case "velikost":
+      return { pole: "soubor", text: "Fotka může mít nejvýš 8 MB." };
+    case "format":
+      return { pole: "soubor", text: "Vyber fotku ve formátu JPEG, PNG nebo WebP." };
+    case "popis":
+      return { pole: "popis", text: "Popis může mít nejvýš 500 znaků." };
+    case "chybi":
+      return { pole: "soubor", text: "Vyber fotku z telefonu nebo počítače." };
+  }
+}
+
+function ctiSuroveTelo(req: Request, maxBajtu: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const kusy: Buffer[] = [];
+    let nacteno = 0;
+    req.on("data", (dil: Buffer) => {
+      nacteno += dil.length;
+      if (nacteno > maxBajtu) {
+        reject(new Error("velikost"));
+        req.destroy();
+        return;
+      }
+      kusy.push(dil);
+    });
+    req.on("end", () => resolve(Buffer.concat(kusy)));
+    req.on("error", () => reject(new Error("cteni")));
+  });
+}
+
 /* POST /api/expeditions/:id/fotky — každý přihlášený, jen proběhlá. → 201. */
+/* multipart/form-data (pole `soubor` + volitelný `popis`) uloží soubor do R2. */
+/* JSON `{ url, popis }` zůstává pro starší klienty. */
 app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
   vyzadujPrihlaseni(req, res, () => {
     void (async (): Promise<void> => {
-      const overeni = validujFotku(req.body as unknown);
-      if (!overeni.uspech || overeni.data === null) {
-        posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
-        return;
+      const contentType = req.header("content-type") ?? "";
+      const jeSoubor = contentType.includes("multipart/form-data");
+      let urlKUlozeni = "";
+      let popisKUlozeni = "";
+      let klicR2: string | null = null;
+      const nastaveniR2 = ctiR2Nastaveni(process.env);
+      if (jeSoubor) {
+        if (nastaveniR2 === null) {
+          posliChybu(res, "FOTKY_NEJSOU_NASTAVENE", FOTKY_NEJSOU_NASTAVENE_ZPRAVA);
+          return;
+        }
+        let telo: Buffer;
+        try {
+          telo = await ctiSuroveTelo(req, FOTKA_TELO_MAX_BAJTU);
+        } catch (chyba: unknown) {
+          const velikost = chyba instanceof Error && chyba.message === "velikost";
+          const hlaska = hlaskaSouboru(velikost ? "velikost" : "chybi");
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            [hlaska.pole]: [hlaska.text],
+          });
+          return;
+        }
+        const rozdelene = rozdelMultipart(telo, contentType);
+        if (!rozdelene.ok) {
+          const hlaska = hlaskaSouboru(rozdelene.duvod);
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            [hlaska.pole]: [hlaska.text],
+          });
+          return;
+        }
+        const pripona = rozpoznajObrazek(rozdelene.fotka.bajty);
+        if (pripona === null) {
+          const hlaska = hlaskaSouboru("format");
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            [hlaska.pole]: [hlaska.text],
+          });
+          return;
+        }
+        popisKUlozeni = rozdelene.fotka.popis;
+        const idProKlic = ctiIdVypravy(req);
+        const klic = klicFotky(idProKlic, pripona);
+        if (klic === null) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        let vyprava: { stav: string } | undefined;
+        try {
+          const dbPred = getDb();
+          const existuje = await dbPred
+            .select({ stav: expeditions.stav })
+            .from(expeditions)
+            .where(eq(expeditions.id, idProKlic))
+            .limit(1);
+          vyprava = existuje[0];
+        } catch {
+          vnitrniChyba(res);
+          return;
+        }
+        if (vyprava === undefined) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        if (vyprava.stav !== "proběhlá") {
+          posliChybu(
+            res,
+            "VYPRAVA_UZAVRENA",
+            "Fotky jdou přidat až k proběhlé výpravě. Nejdřív ji uzavři s docházkou.",
+          );
+          return;
+        }
+        klicR2 = klic;
+        try {
+          urlKUlozeni = await ulozFotkuDoR2(
+            nastaveniR2,
+            klic,
+            rozdelene.fotka.bajty,
+            contentTypeProPriponu(pripona),
+          );
+        } catch {
+          klicR2 = null;
+          vnitrniChyba(res);
+          return;
+        }
+      } else {
+        const overeni = validujFotku(req.body as unknown);
+        if (!overeni.uspech || overeni.data === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+          return;
+        }
+        urlKUlozeni = overeni.data.url;
+        popisKUlozeni = overeni.data.popis;
       }
       const id = ctiIdVypravy(req);
       if (id.length === 0) {
@@ -1890,8 +2080,8 @@ app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
           .insert(photos)
           .values({
             expeditionId: id,
-            url: overeni.data.url,
-            popis: overeni.data.popis,
+            url: urlKUlozeni,
+            popis: popisKUlozeni,
             uploadedBy: adminId,
           })
           .returning();
@@ -1900,13 +2090,20 @@ app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
         const telo: PridatFotkuResponse = { fotka: toApiFotka(nove) };
         res.status(201).json(telo);
       } catch {
+        if (klicR2 !== null && nastaveniR2 !== null) {
+          try {
+            await smazObjektR2(nastaveniR2, klicR2);
+          } catch {
+            // The DB row was not stored; a leftover object is preferable to a 500 loop.
+          }
+        }
         vnitrniChyba(res);
       }
     })();
   });
 });
 
-/* DELETE /api/expeditions/:id/fotky/:fotkaId — jen ADMIN. */
+/* DELETE /api/expeditions/:id/fotky/:fotkaId — jen ADMIN (soft-delete → Koš). */
 app.delete("/api/expeditions/:id/fotky/:fotkaId", (req: Request, res: Response) => {
   vyzadujAdmina(req, res, () => {
     void (async (): Promise<void> => {
@@ -1918,15 +2115,149 @@ app.delete("/api/expeditions/:id/fotky/:fotkaId", (req: Request, res: Response) 
       }
       try {
         const db = getDb();
-        const smazane = await db
-          .delete(photos)
+        const nalezene = await db
+          .select()
+          .from(photos)
           .where(and(eq(photos.id, fotkaId), eq(photos.expeditionId, id)))
-          .returning({ id: photos.id });
-        if (smazane.length === 0) {
+          .limit(1);
+        const puvodni = nalezene[0];
+        if (puvodni === undefined || puvodni.smazanoAt !== null) {
+          posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+          return;
+        }
+        const uspech = await softSmazFotku(db, { druh: "vyprava", radek: puvodni });
+        if (!uspech) {
           posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
           return;
         }
         const telo: SmazatFotkuResponse = { ok: true };
+        res.json(telo);
+      } catch {
+        vnitrniChyba(res);
+      }
+    })();
+  });
+});
+
+/** Legacy pasted URL, or null when the value is not a plain https address. */
+function jeVnejsiHttps(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.username.length === 0 && parsed.password.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/* GET /api/expeditions/:id/fotky/:fotkaId/soubor — PUBLIC bytes.
+   Our R2 object is streamed with server credentials. A legacy https URL
+   (klicZVerejneUrl === null) redirects. Secrets and object keys are not logged. */
+app.get("/api/expeditions/:id/fotky/:fotkaId/soubor", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    const id = ctiIdVypravy(req);
+    const fotkaId = ctiIdFotky(req);
+    if (id.length === 0 || fotkaId.length === 0) {
+      posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+      return;
+    }
+    try {
+      const db = getDb();
+      const nalezene = await db
+        .select({ url: photos.url })
+        .from(photos)
+        .where(and(eq(photos.id, fotkaId), eq(photos.expeditionId, id)))
+        .limit(1);
+      const radek = nalezene[0];
+      if (radek === undefined) {
+        posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+        return;
+      }
+      const nastaveniR2 = ctiR2Nastaveni(process.env);
+      const klic =
+        nastaveniR2 === null ? null : klicZVerejneUrl(radek.url, nastaveniR2.publicBaseUrl);
+      if (klic === null || nastaveniR2 === null) {
+        if (jeVnejsiHttps(radek.url)) {
+          res.redirect(302, radek.url);
+          return;
+        }
+        posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+        return;
+      }
+      const objekt = await nactiObjektR2(nastaveniR2, klic);
+      res.status(200);
+      res.setHeader("Content-Type", objekt.contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Content-Length", objekt.bajty.length);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.end(objekt.bajty);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
+});
+
+/* POST /api/expeditions/:id/fotky/:fotkaId/nahled — jen ADMIN, jen proběhlá.
+   Sets this photo, then clears every other highlight of the same expedition. */
+app.post("/api/expeditions/:id/fotky/:fotkaId/nahled", (req: Request, res: Response) => {
+  vyzadujAdmina(req, res, () => {
+    void (async (): Promise<void> => {
+      const id = ctiIdVypravy(req);
+      const fotkaId = ctiIdFotky(req);
+      if (id.length === 0 || fotkaId.length === 0) {
+        posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+        return;
+      }
+      try {
+        const db = getDb();
+        const vypravy = await db
+          .select({ id: expeditions.id, stav: expeditions.stav })
+          .from(expeditions)
+          .where(eq(expeditions.id, id))
+          .limit(1);
+        const vyprava = vypravy[0];
+        if (vyprava === undefined) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        if (vyprava.stav !== "proběhlá") {
+          posliChybu(
+            res,
+            "VYPRAVA_UZAVRENA",
+            "Náhled jde vybrat jen u proběhlé výpravy.",
+          );
+          return;
+        }
+        const existuje = await db
+          .select({ id: photos.id })
+          .from(photos)
+          .where(and(eq(photos.id, fotkaId), eq(photos.expeditionId, id)))
+          .limit(1);
+        if (existuje.length === 0) {
+          posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+          return;
+        }
+        const nastavene = await db
+          .update(photos)
+          .set({ jeNahled: true })
+          .where(and(eq(photos.id, fotkaId), eq(photos.expeditionId, id)))
+          .returning({ id: photos.id });
+        if (nastavene.length === 0) {
+          posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
+          return;
+        }
+        await db
+          .update(photos)
+          .set({ jeNahled: false })
+          .where(and(eq(photos.expeditionId, id), ne(photos.id, fotkaId)));
+        const radky = await db
+          .select()
+          .from(photos)
+          .where(eq(photos.expeditionId, id))
+          .orderBy(asc(photos.createdAt));
+        const telo: NastavitNahledResponse = {
+          fotkaId,
+          fotky: radky.map(toApiFotka),
+        };
         res.json(telo);
       } catch {
         vnitrniChyba(res);
@@ -2557,8 +2888,12 @@ app.get("/api/strava/neparovane", (req: Request, res: Response) => {
             celkem,
           };
           res.json(telo);
-        } catch {
-          vnitrniChyba(res);
+        } catch (chyba) {
+          stravaNedostupnaNeboVnitrniChyba(
+            res,
+            chyba,
+            "GET /api/strava/neparovane",
+          );
         }
       })();
     });
@@ -2665,8 +3000,12 @@ app.post("/api/expeditions/:id/strava-parovani", (req: Request, res: Response) =
           aktivita: toApiAktivitaZRadku(zapsano),
         };
         res.json(telo);
-      } catch {
-        vnitrniChyba(res);
+      } catch (chyba) {
+        stravaNedostupnaNeboVnitrniChyba(
+          res,
+          chyba,
+          "POST /api/expeditions/:id/strava-parovani",
+        );
       }
     })();
   });
@@ -3138,6 +3477,53 @@ function ctiCursorZprav(dotaz: { cursor?: unknown }): string | null {
   return ciste.length === 0 ? null : ciste;
 }
 
+/* ------------------------------------------------------------------ */
+/* Step 2 — jména z JOINu `users` (bez extra fetch z klienta).          */
+/* Jeden batched SELECT pro celé vlákno (žádné N+1) → `authorName`       */
+/* (jmeno+prijmeni, fallback discordNick/email; SET NULL drží snapshot). */
+/* ------------------------------------------------------------------ */
+
+/** Batched JOIN autorů pro vlákno (jeden SELECT, žádné N+1). */
+async function nactiJmenaAutoru(
+  db: Db,
+  autorIds: ReadonlyArray<string>,
+): Promise<Map<string, ProfilProJmeno>> {
+  const mapa = new Map<string, ProfilProJmeno>();
+  const unikatni: string[] = [...new Set(autorIds)];
+  if (unikatni.length === 0) return mapa;
+  const radky = await db
+    .select({
+      id: users.id,
+      jmeno: users.jmeno,
+      prijmeni: users.prijmeni,
+      discordNick: users.discordNick,
+      email: users.email,
+    })
+    .from(users)
+    .where(inArray(users.id, unikatni));
+  for (const radek of radky) {
+    mapa.set(radek.id, {
+      jmeno: radek.jmeno,
+      prijmeni: radek.prijmeni,
+      discordNick: radek.discordNick,
+      email: radek.email,
+    });
+  }
+  return mapa;
+}
+
+/** `?channel` globálu — `dulezite` | `general`; neplatné → null (route 422). */
+function ctiKanalGlobalu(dotaz: { channel?: unknown }): KanalDiskuze | null | undefined {
+  const surova: unknown = dotaz.channel;
+  if (surova === undefined || surova === null) return undefined;
+  if (typeof surova !== "string") return null;
+  const ciste = surova.trim();
+  if (!jeKanalDiskuze(ciste)) return null;
+  const kanal: KanalDiskuze = ciste as KanalDiskuze;
+  if (kanal === "expedice") return null;
+  return kanal;
+}
+
 /* GET /api/expeditions/:id/zpravy — PUBLIC vlákno pro modal. */
 app.get("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
   void (async (): Promise<void> => {
@@ -3177,9 +3563,17 @@ app.get("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
         .from(zpravy)
         .where(and(eq(zpravy.expediceId, id), isNull(zpravy.smazanoAt)))
         .orderBy(asc(zpravy.createdAt), asc(zpravy.id));
+      const jmena = await nactiJmenaAutoru(
+        db,
+        radky
+          .map((radek) => radek.autorId)
+          .filter((hodnota): hodnota is string => typeof hodnota === "string"),
+      );
       const vlakno: ApiZprava[] = [];
       for (const radek of radky) {
-        const api = toApiZprava(radek);
+        const profil: ProfilProJmeno | null =
+          typeof radek.autorId === "string" ? (jmena.get(radek.autorId) ?? null) : null;
+        const api = toApiZprava(radek, profil);
         if (api !== null) vlakno.push(api);
       }
       let start = 0;
@@ -3232,17 +3626,40 @@ app.post("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
             return;
           }
           const autorId = (req as AutentizovanyRequest).uzivatel.id;
+          const autorRadky = await db
+            .select({
+              jmeno: users.jmeno,
+              prijmeni: users.prijmeni,
+              discordNick: users.discordNick,
+              email: users.email,
+            })
+            .from(users)
+            .where(eq(users.id, autorId))
+            .limit(1);
+          const autorProfil: ProfilProJmeno | null =
+            autorRadky[0] === undefined
+              ? null
+              : {
+                  jmeno: autorRadky[0].jmeno,
+                  prijmeni: autorRadky[0].prijmeni,
+                  discordNick: autorRadky[0].discordNick,
+                  email: autorRadky[0].email,
+                };
+          const snapshot: string =
+            autorProfil === null ? "" : slozZobrazovaneJmeno(autorProfil);
           const vlozene = await db
             .insert(zpravy)
             .values({
               expediceId: id,
+              kanal: "expedice",
               autorId,
+              autorJmeno: snapshot,
               text: overeni.data.text,
             })
             .returning();
           const nove = vlozene[0];
           if (nove === undefined) throw new Error("prázdný returning");
-          const api = toApiZprava(nove);
+          const api = toApiZprava(nove, autorProfil);
           if (api === null) {
             vnitrniChyba(res);
             return;
@@ -3310,6 +3727,420 @@ app.delete("/api/expeditions/:id/zpravy/:zpravaId", (req: Request, res: Response
     });
   })();
 });
+
+/* ------------------------------------------------------------------ */
+/* Step 2 — Globální kanály + přehled konverzací (kontrakt §19).          */
+/* GET konverzace i GET/POST globálu = PUBLIC čtení (viz PRISTUP_         */
+/* KONVERZACE); POST globálu = USER + guard kanálu (`dulezite` jen       */
+/* vedeni/rada/admin, jinak 403 ZAKAZANO; `general` každý přihlášený).   */
+/* POST read = USER, upsert `konverzace_precteni` (key v body, čas razí   */
+/* server, userId VŽDY ze session). U vláken výprav drží read i legacy   */
+/* `diskuze_precteni`, aby staré badge nesvítily. Chyby jen ApiError.    */
+/* ------------------------------------------------------------------ */
+
+/* GET /api/diskuze/zpravy?channel=dulezite|general — PUBLIC globál. */
+app.get("/api/diskuze/zpravy", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    const dotaz = req.query as { channel?: unknown; limit?: unknown; cursor?: unknown };
+    const kanal = ctiKanalGlobalu(dotaz);
+    if (kanal === null || kanal === undefined) {
+      posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+        channel: ["Kanál musí být „dulezite“, nebo „general“."],
+      });
+      return;
+    }
+    const limit = ctiLimitZprav(dotaz);
+    if (limit === null) {
+      posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+        limit: ["Počet zpráv musí být od 1 do 100."],
+      });
+      return;
+    }
+    if (dotaz.cursor !== undefined && dotaz.cursor !== null && typeof dotaz.cursor !== "string") {
+      posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+        cursor: ["Kurzor musí být text."],
+      });
+      return;
+    }
+    const cursor = ctiCursorZprav(dotaz);
+    try {
+      const db = getDb();
+      const radky = await db
+        .select()
+        .from(zpravy)
+        .where(and(eq(zpravy.kanal, kanal), isNull(zpravy.expediceId), isNull(zpravy.smazanoAt)))
+        .orderBy(asc(zpravy.createdAt), asc(zpravy.id));
+      const jmena = await nactiJmenaAutoru(
+        db,
+        radky
+          .map((radek) => radek.autorId)
+          .filter((hodnota): hodnota is string => typeof hodnota === "string"),
+      );
+      const vlakno: ApiZprava[] = [];
+      for (const radek of radky) {
+        const profil: ProfilProJmeno | null =
+          typeof radek.autorId === "string" ? (jmena.get(radek.autorId) ?? null) : null;
+        const api = toApiZprava(radek, profil);
+        if (api !== null) vlakno.push(api);
+      }
+      let start = 0;
+      if (cursor !== null) {
+        const idx = vlakno.findIndex((zprava) => zprava.id === cursor);
+        start = idx === -1 ? 0 : idx + 1;
+      }
+      const stranka = vlakno.slice(start, start + limit);
+      const zbyva = start + limit < vlakno.length;
+      const telo: ZpravyListResponse = {
+        zpravy: stranka,
+        nextCursor: zbyva && stranka.length > 0 ? (stranka[stranka.length - 1]?.id ?? null) : null,
+      };
+      res.json(telo);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
+});
+
+/* POST /api/diskuze/zpravy {channel, text} — USER + guard kanálu. → 201. */
+app.post("/api/diskuze/zpravy", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const ip = ctiIpZRequestu(req);
+        if (!smiPoslatZpravu(ip)) {
+          posliChybu(res, "MOC_POZADAVKU", "Posíláš zprávy moc rychle. Počkej chvíli a zkus to znovu.");
+          return;
+        }
+        const telo: unknown = req.body as unknown;
+        const kanalSurovy: unknown =
+          typeof telo === "object" && telo !== null
+            ? (telo as Record<string, unknown>)["channel"]
+            : undefined;
+        if (!jeKanalDiskuze(kanalSurovy) || kanalSurovy === "expedice") {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            channel: ["Kanál musí být „dulezite“, nebo „general“."],
+          });
+          return;
+        }
+        const kanal: KanalDiskuze = kanalSurovy as KanalDiskuze;
+        const overeni = validujZpravu(telo);
+        if (!overeni.uspech || overeni.data === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+          return;
+        }
+        const uzivatel = (req as AutentizovanyRequest).uzivatel;
+        if (!smiPsatKanal({ funkce: uzivatel.funkce, isAdmin: uzivatel.isAdmin }, kanal)) {
+          posliChybu(res, "ZAKAZANO", "Důležité zprávy může psát jen vedení, rada nebo admin.");
+          return;
+        }
+        try {
+          const db = getDb();
+          const autorRadky = await db
+            .select({
+              jmeno: users.jmeno,
+              prijmeni: users.prijmeni,
+              discordNick: users.discordNick,
+              email: users.email,
+            })
+            .from(users)
+            .where(eq(users.id, uzivatel.id))
+            .limit(1);
+          const autorProfil: ProfilProJmeno | null =
+            autorRadky[0] === undefined
+              ? null
+              : {
+                  jmeno: autorRadky[0].jmeno,
+                  prijmeni: autorRadky[0].prijmeni,
+                  discordNick: autorRadky[0].discordNick,
+                  email: autorRadky[0].email,
+                };
+          const snapshot: string =
+            autorProfil === null ? "" : slozZobrazovaneJmeno(autorProfil);
+          const vlozene = await db
+            .insert(zpravy)
+            .values({
+              expediceId: null,
+              kanal,
+              autorId: uzivatel.id,
+              autorJmeno: snapshot,
+              text: overeni.data.text,
+            })
+            .returning();
+          const nove = vlozene[0];
+          if (nove === undefined) throw new Error("prázdný returning");
+          const api = toApiZprava(nove, autorProfil);
+          if (api === null) {
+            vnitrniChyba(res);
+            return;
+          }
+          const odpoved: PosliGlobalZpravuResponse = { zprava: api };
+          res.status(201).json(odpoved);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* GET /api/diskuze/konverzace — PUBLIC přehled (anonym unreadCount 0). */
+app.get("/api/diskuze/konverzace", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    try {
+      const db = getDb();
+      const radky = await db
+        .select()
+        .from(zpravy)
+        .where(isNull(zpravy.smazanoAt))
+        .orderBy(asc(zpravy.createdAt), asc(zpravy.id));
+      const jmena = await nactiJmenaAutoru(
+        db,
+        radky
+          .map((radek) => radek.autorId)
+          .filter((hodnota): hodnota is string => typeof hodnota === "string"),
+      );
+      const vlakno: ApiZprava[] = [];
+      for (const radek of radky) {
+        const profil: ProfilProJmeno | null =
+          typeof radek.autorId === "string" ? (jmena.get(radek.autorId) ?? null) : null;
+        const api = toApiZprava(radek, profil);
+        if (api !== null) vlakno.push(api);
+      }
+      const session = await ctiVolitelnehoUzivatele(req);
+      let precteni: Record<string, string> = {};
+      if (session !== null) {
+        const globalni = await db
+          .select({
+            key: konverzacePrecteni.conversationKey,
+            lastReadAt: konverzacePrecteni.lastReadAt,
+          })
+          .from(konverzacePrecteni)
+          .where(eq(konverzacePrecteni.userId, session.id));
+        const vlakna = await db
+          .select({
+            expediceId: diskuzePrecteni.expediceId,
+            lastReadAt: diskuzePrecteni.lastReadAt,
+          })
+          .from(diskuzePrecteni)
+          .where(eq(diskuzePrecteni.userId, session.id));
+        const mapa: Record<string, string> = {};
+        for (const radek of vlakna) {
+          mapa[konverzaceKlicExpedice(radek.expediceId)] = radek.lastReadAt.toISOString();
+        }
+        for (const radek of globalni) {
+          mapa[radek.key] = radek.lastReadAt.toISOString();
+        }
+        precteni = mapa;
+      }
+      const seskupene: ApiKonverzace[] = seskupKonverzace(vlakno, precteni);
+      const hotove: ApiKonverzace[] = [...seskupene];
+      const klice = new Set(hotove.map((konverzace) => konverzace.key));
+      const globalniKanals: ReadonlyArray<KanalDiskuze> = ["dulezite", "general"];
+      for (const kanal of globalniKanals) {
+        if (!klice.has(kanal)) {
+          hotove.push({
+            key: kanal,
+            expeditionId: null,
+            channel: kanal,
+            lastMessage: null,
+            unreadCount: 0,
+          });
+        }
+      }
+      hotove.sort((a, b) => (a.key > b.key ? 1 : a.key < b.key ? -1 : 0));
+      if (session === null) {
+        for (const konverzace of hotove) konverzace.unreadCount = 0;
+      }
+      const telo: KonverzaceListResponse = { konverzace: hotove };
+      res.json(telo);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
+});
+
+/* POST /api/diskuze/konverzace/read {key} — USER, idempotentní upsert. */
+app.post("/api/diskuze/konverzace/read", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const telo: unknown = req.body as unknown;
+        const klicSurovy: unknown =
+          typeof telo === "object" && telo !== null
+            ? (telo as Record<string, unknown>)["key"]
+            : undefined;
+        if (typeof klicSurovy !== "string" || !jeKonverzaceKlic(klicSurovy.trim())) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            key: ["Neznámá konverzace."],
+          });
+          return;
+        }
+        const key: string = klicSurovy.trim();
+        try {
+          const db = getDb();
+          if (key.startsWith("expedice:")) {
+            const slug = key.slice("expedice:".length);
+            if (!(await existujeVyprava(db, slug))) {
+              posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+              return;
+            }
+          }
+          const userId: string = (req as AutentizovanyRequest).uzivatel.id;
+          const ted = new Date();
+          await db
+            .insert(konverzacePrecteni)
+            .values({ userId, conversationKey: key, lastReadAt: ted })
+            .onConflictDoUpdate({
+              target: [konverzacePrecteni.userId, konverzacePrecteni.conversationKey],
+              set: { lastReadAt: ted },
+            });
+          if (key.startsWith("expedice:")) {
+            const slug = key.slice("expedice:".length);
+            await db
+              .insert(diskuzePrecteni)
+              .values({ userId, expediceId: slug, lastReadAt: ted })
+              .onConflictDoUpdate({
+                target: [diskuzePrecteni.userId, diskuzePrecteni.expediceId],
+                set: { lastReadAt: ted },
+              });
+          }
+          const odpoved: OznacPrecteniResponse = { lastReadAt: ted.toISOString() };
+          res.json(odpoved);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* ------------------------------------------------------------------ */
+/* Step 1 — Diskuze unread: meta + read (HANDOFF §10, kontrakt §18).      */
+/* GET meta = PUBLIC (anonym: lastReadAt null, unread false).             */
+/* POST read = USER (idempotentní upsert, userId VŽDY ze session —        */
+/* nikdy z body/query; tělo se ignoruje, čas razí server). Neznámá        */
+/* expedice → 404 NENALEZENO. Odpovědi jen ISO + boolean (žádný secret).  */
+/* ------------------------------------------------------------------ */
+
+/** MAX(created_at) viditelných zpráv vlákna; null = prázdné vlákno. */
+async function ctiLatestZpravy(db: Db, id: string): Promise<string | null> {
+  const nalezene = await db
+    .select({ createdAt: zpravy.createdAt })
+    .from(zpravy)
+    .where(and(eq(zpravy.expediceId, id), isNull(zpravy.smazanoAt)))
+    .orderBy(asc(zpravy.createdAt));
+  let latest: string | null = null;
+  for (const radek of nalezene) {
+    const iso: string = radek.createdAt.toISOString();
+    if (latest === null || iso > latest) latest = iso;
+  }
+  return latest;
+}
+
+/** Značka uživatele pro expedici; null = nikdy nečetl. */
+async function ctiLastRead(
+  db: Db,
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const nalezene = await db
+    .select({ lastReadAt: diskuzePrecteni.lastReadAt })
+    .from(diskuzePrecteni)
+    .where(
+      and(
+        eq(diskuzePrecteni.userId, userId),
+        eq(diskuzePrecteni.expediceId, id),
+      ),
+    )
+    .limit(1);
+  const radek = nalezene[0];
+  if (radek === undefined) return null;
+  return radek.lastReadAt.toISOString();
+}
+
+/** True = expedice existuje (hlídá 404 před čtením vlákna/značky). */
+async function existujeVyprava(db: Db, id: string): Promise<boolean> {
+  const nalezene = await db
+    .select({ id: expeditions.id })
+    .from(expeditions)
+    .where(eq(expeditions.id, id))
+    .limit(1);
+  return nalezene.length > 0;
+}
+
+/* GET /api/expeditions/:id/discussion/meta — PUBLIC badge pro tečku. */
+app.get("/api/expeditions/:id/discussion/meta", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    const id = ctiIdVypravy(req);
+    if (id.length === 0) {
+      posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+      return;
+    }
+    try {
+      const db = getDb();
+      if (!(await existujeVyprava(db, id))) {
+        posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+        return;
+      }
+      const latest: string | null = await ctiLatestZpravy(db, id);
+      // Volitelné přihlášení — anonym (null) se nepersonalizuje (unread false).
+      const session = await ctiVolitelnehoUzivatele(req);
+      if (session === null) {
+        const telo: DiskuzeMetaResponse = anonymniDiskuzeMeta(latest);
+        res.json(telo);
+        return;
+      }
+      const lastRead: string | null = await ctiLastRead(db, session.id, id);
+      const telo: DiskuzeMetaResponse = {
+        latestMessageAt: latest,
+        lastReadAt: lastRead,
+        unread: jeVlaknoNeprectene(latest, lastRead),
+      };
+      res.json(telo);
+    } catch {
+      vnitrniChyba(res);
+    }
+  })();
+});
+
+/* POST /api/expeditions/:id/discussion/read — USER, idempotentní upsert. */
+app.post("/api/expeditions/:id/discussion/read", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const id = ctiIdVypravy(req);
+        if (id.length === 0) {
+          posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+          return;
+        }
+        try {
+          const db = getDb();
+          if (!(await existujeVyprava(db, id))) {
+            posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
+            return;
+          }
+          const userId: string = (req as AutentizovanyRequest).uzivatel.id;
+          const ted = new Date();
+          await db
+            .insert(diskuzePrecteni)
+            .values({ userId, expediceId: id, lastReadAt: ted })
+            .onConflictDoUpdate({
+              target: [diskuzePrecteni.userId, diskuzePrecteni.expediceId],
+              set: { lastReadAt: ted },
+            });
+          const telo: OznacPrecteniResponse = {
+            lastReadAt: ted.toISOString(),
+          };
+          res.json(telo);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+registrujAlba(app);
 
 app.use("/api", (_req: Request, res: Response) => {
   posliChybu(res, "NENALEZENO", "Tahle stránka API neexistuje.");

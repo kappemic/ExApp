@@ -1,6 +1,13 @@
-import type { JSX, ReactNode } from "react";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import NeprectenaTecka from "../chat/NeprectenaTecka";
+import {
+  popisekNeprectenych,
+  spocitejNeprectene,
+  useUnreadExpeditions,
+} from "../../hooks/useUnreadExpeditions";
 import { useAuth } from "../../hooks/useAuth";
+import { getExpeditions, getExpeditionsSync } from "../../lib/expeditions-api";
 
 type IkonaProps = {
   className?: string;
@@ -59,6 +66,17 @@ function IkonaZebricky(props: IkonaProps): JSX.Element {
   );
 }
 
+function IkonaFotky(props: IkonaProps): JSX.Element {
+  return (
+    <ZakladIkony {...props}>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.4" />
+      <path d="m6.5 16.5 3.4-3.4a1 1 0 0 1 1.4 0L14 15.5" />
+      <path d="m13 14.2 1.2-1.2a1 1 0 0 1 1.4 0L20.5 17" />
+    </ZakladIkony>
+  );
+}
+
 function IkonaChat(props: IkonaProps): JSX.Element {
   return (
     <ZakladIkony {...props}>
@@ -108,14 +126,23 @@ type PolozkaNavigace = {
 const DESKTOP_POLOZKY: PolozkaNavigace[] = [
   { to: "/", popisek: "Domů", end: true, Ikona: IkonaDomu },
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
+  { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
   { to: "/chat", popisek: "Chat", Ikona: IkonaChat },
   { to: "/profil", popisek: "Profil", Ikona: IkonaProfil },
 ];
 
+/**
+ * Spodní lišta (mobil, běžný člen): přesně 5 položek — Chat záměrně chybí.
+ * Chat je v `AppHeader` jako ikona (`lg:hidden`, 44px target + badge).
+ * Důvod: šest a více ikon na úzkém displeji zmenšuje popisky a tap-targety;
+ * nepřečtené diskuze sdílí stejný `pocetNeprectenych` jako desktop TopBar.
+ * Admin položky (Kódy, Členové) se přidávají až v `MobileBar` — mimo tento seznam.
+ */
 const MOBIL_POLOZKY: PolozkaNavigace[] = [
   { to: "/", popisek: "Domů", end: true, Ikona: IkonaDomu },
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
+  { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
   { to: "/profil", popisek: "Profil", Ikona: IkonaProfil },
 ];
@@ -132,8 +159,60 @@ const KODY_POLOZKA: PolozkaNavigace = {
   Ikona: IkonaKody,
 };
 
-/** Počet nepřečtených zpráv – pouze statické UI, žádný fetch. */
-const NEPRECTENYCH_ZPRAV = 3;
+/**
+ * Badge nepřečtené diskuze pro navigaci (Krok 2 — jediný zdroj pravdy
+ * je `useUnreadExpeditions`, polling 30 s + event `exapp:discussion-read`).
+ *
+ * Id seznam: synchronní snapshot hned (`getExpeditionsSync`, okamžitý
+ * render bez čekání) + tichý upgrade na živá data z BFF (`getExpeditions`,
+ * vzor ChatPage) — bez refetche se badge drží snapshotu.
+ * Součet: `spocitejNeprectene(mapa)` — tečka svítí jen když > 0,
+ * zhasne eventem bez refreshi (hook sám).
+ */
+function useIdsVypravProBadge(): string[] {
+  const [ids, setIds] = useState<string[]>(() =>
+    getExpeditionsSync().data.map((vyprava) => vyprava.id),
+  );
+  useEffect(() => {
+    let zive = true;
+    void (async (): Promise<void> => {
+      try {
+        const cerstve = await getExpeditions();
+        if (!zive || cerstve.source !== "db") return;
+        setIds(cerstve.data.map((vyprava) => vyprava.id));
+      } catch {
+        /* Offline — zůstává snapshot, badge drží poslední pravdu. */
+      }
+    })();
+    return () => {
+      zive = false;
+    };
+  }, []);
+  return useMemo(() => ids, [ids]);
+}
+
+/** Dynamický label: „Chat“ vs „Chat, 3 nepřečtené zprávy“. */
+function popisekChat(pocet: number): string {
+  if (pocet <= 0) return "Chat";
+  return `Chat, ${popisekNeprectenych(pocet)}`;
+}
+
+/**
+ * Červená tečka u Chatu — reuse `NeprectenaTecka` (8px `nadpis`,
+ * red-800 na papíru + bílý kroužek `ring-papir` + tmavý obrys,
+ * takže není jen barvou; `pointer-events-none` drží 44px tap-target).
+ * Pozice: absolutně vpravo nahoře u ikony, mobil i desktop stejně.
+ */
+function ChatTecka({ popisek }: { popisek: string }): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute -right-1.5 -top-1.5 flex shrink-0"
+    >
+      <NeprectenaTecka viditelna velikost="nadpis" nazevVypravy={popisek} />
+    </span>
+  );
+}
 
 /**
  * Jediný zdroj pro viditelnost admin položek v navigaci.
@@ -176,33 +255,48 @@ function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
   );
 }
 
-export function TopBar(): JSX.Element {
+export function TopBar({
+  pocetNeprectenych = 0,
+}: {
+  pocetNeprectenych?: number;
+} = {}): JSX.Element {
   const videtAdmin = useVidetAdmin();
   const polozky: PolozkaNavigace[] = [
     ...DESKTOP_POLOZKY,
     ...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : []),
   ];
+  const maNeprectene: boolean = pocetNeprectenych > 0;
 
   return (
     <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex">
-      {polozky.map(({ to, popisek, end, Ikona }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) => tridyDesktopOdkazu(isActive)}
-        >
-          {({ isActive }) => (
-            <span className="flex flex-col items-center gap-1">
-              <span className="flex items-center gap-2">
-                <Ikona />
-                <span>{popisek}</span>
+      {polozky.map(({ to, popisek, end, Ikona }) => {
+        const jeChat: boolean = to === "/chat";
+        const label: string = jeChat ? popisekChat(pocetNeprectenych) : popisek;
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            aria-label={jeChat ? label : undefined}
+            className={({ isActive }) => tridyDesktopOdkazu(isActive)}
+          >
+            {({ isActive }) => (
+              <span className="flex flex-col items-center gap-1">
+                <span className="flex items-center gap-2">
+                  <span className="relative inline-flex shrink-0 [touch-action:manipulation]">
+                    <Ikona />
+                    {jeChat && maNeprectene && (
+                      <ChatTecka popisek={popisek} />
+                    )}
+                  </span>
+                  <span>{popisek}</span>
+                </span>
+                <Indikátor aktivni={isActive} />
               </span>
-              <Indikátor aktivni={isActive} />
-            </span>
-          )}
-        </NavLink>
-      ))}
+            )}
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }
@@ -274,15 +368,20 @@ function AuthCluster(): JSX.Element | null {
   );
 }
 
-export function AppHeader(): JSX.Element {
+export function AppHeader({
+  pocetNeprectenych = 0,
+}: {
+  pocetNeprectenych?: number;
+} = {}): JSX.Element {
   const { user } = useAuth();
   const prihlasen = user !== null;
+  const maNeprectene: boolean = pocetNeprectenych > 0;
   return (
     <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
           to="/"
-          className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1"
+          className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           aria-label="ExApp – domů"
         >
           <span
@@ -296,30 +395,27 @@ export function AppHeader(): JSX.Element {
           </span>
         </Link>
 
-        <TopBar />
+        <TopBar pocetNeprectenych={pocetNeprectenych} />
 
         <div className="flex items-center gap-1">
           <AuthCluster />
           {prihlasen && (
             <NavLink
-                to="/chat"
-                aria-label={`Chat, ${NEPRECTENYCH_ZPRAV} nepřečtené zprávy`}
-                className={({ isActive }: { isActive: boolean }) =>
-                  `relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2.5 transition-colors lg:hidden ${
-                    isActive
-                      ? "font-bold text-smrk"
-                      : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
-                  }`
-                }
-              >
+              to="/chat"
+              aria-label={popisekChat(pocetNeprectenych)}
+              className={({ isActive }: { isActive: boolean }) =>
+                `relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
+                  isActive
+                    ? "font-bold text-smrk"
+                    : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
+                }`
+              }
+            >
+              <span className="relative inline-flex shrink-0">
                 <IkonaChat />
-                <span
-                  aria-hidden="true"
-                  className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-jantar px-1 text-[10px] font-bold leading-none text-papir"
-                >
-                  {NEPRECTENYCH_ZPRAV}
-                </span>
-              </NavLink>
+                {maNeprectene && <ChatTecka popisek="Chat" />}
+              </span>
+            </NavLink>
           )}
         </div>
       </div>
@@ -331,12 +427,18 @@ export default function Navbar(): JSX.Element | null {
   const { user, isLoading } = useAuth();
   // Varianta A: odhlášený nevidí vůbec nic — ani logo, ani TopBar/MobileBar.
   // Během načítání session (isLoading) taky nic nerenderujeme, ať neproblikne navigace.
+  // Badge se počítá až pro přihlášené (hook pod podmínkou — anonym má unread false).
+  const idsProBadge: string[] = useIdsVypravProBadge();
+  const mapa: Map<string, boolean> = useUnreadExpeditions(idsProBadge, {
+    povoleno: !isLoading && user !== null,
+  });
+  const pocet: number = spocitejNeprectene(mapa);
   if (isLoading || user === null) {
     return null;
   }
   return (
     <>
-      <AppHeader />
+      <AppHeader pocetNeprectenych={pocet} />
       <MobileBar />
     </>
   );

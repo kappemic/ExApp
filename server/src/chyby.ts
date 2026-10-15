@@ -6,7 +6,8 @@
  * - 400 poškozený požadavek, 401 nepřihlášen / špatné heslo / neplatný kód,
  * - 403 bez práva, 404 nenalezeno, 409 e-mail obsazen / duplicitní přihláška /
  *   plná kapacita / akce na proběhlé výpravě, 410 kód expiroval,
- * - 422 nevalidní vstup, 500 neočekávaná chyba (bez interních detailů).
+ * - 422 nevalidní vstup, 500 neočekávaná chyba (bez interních detailů),
+ * - 502 Strava nedostupná (timeout / síť / 5xx Stravy), 503 chybí CLIENT_ID.
  */
 
 import type { Response } from "express";
@@ -25,7 +26,9 @@ const HTTP_STATUS: Record<ApiErrorCode, number> = {
   UZ_PRIHLASEN: 409,
   KAPACITA_PLNA: 409,
   VYPRAVA_UZAVRENA: 409,
+  STRAVA_NEDOSTUPNA: 502,
   STRAVA_NENI_NASTAVENA: 503,
+  FOTKY_NEJSOU_NASTAVENE: 503,
   MOC_POZADAVKU: 429,
   VNITRNI_CHYBA: 500,
 };

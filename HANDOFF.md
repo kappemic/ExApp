@@ -298,3 +298,304 @@ Relevant files: `src/pages/VypravyPage.tsx`, `src/components/kalendar/`,
   `GET :id/zpravy` 200 + guardy 401/404 + `GET /api/health` 200, testy 738/738,
   obě tsc čisté, smoke `faze5-discord` ÚSPĚCH (4 PASS / 2 SKIP bez admin env).
   Reálný webhook E2E = vědomý skip — viz `TODO_DISCORD.md`.
+
+## 10. Step 0 — Diskuze unread kontrakt (NÁVRH, 2026-10-14, read-only audit)
+
+- **Zjištěný stav (read-only, nic kromě této sekce neměněno):**
+  - `GET /api/expeditions/:id/zpravy` = PUBLIC, odpověď `{ zpravy: ApiZprava[],
+    nextCursor: string | null }`, řazeno `created_at ASC, id ASC`, filtr
+    `smazano_at IS NULL`, `?limit` default 50 / cap 100, `cursor` = id poslední
+    zprávy. Žádné `latestMessageAt` server nevrací — klient ho dnes musí odvodit
+    jako `MAX(zpravy[].createdAt)` (prázdné vlákno → `null`).
+  - `ApiZprava` = `{ id, expeditionId, autorId: string | null, text (raw,
+    trimnutý 1–1000), createdAt: ISO }` (`src/shared/api-types.ts` §17,
+    `server/src/diskuze.ts` `toApiZprava` fail-safe, `src/lib/diskuze-api.ts`
+    `escapujHtml` až při renderu). Žádný secret v payloadu.
+  - `POST :id/zpravy` = `vyzadujPrihlaseni` (USER) → 201, rate-limit 10/min/ip;
+    `DELETE :id/zpravy/:zpravaId` = autor NEBO dual-guard (soft-delete).
+  - Auth identita: `server/src/auth.ts` — JWT v httpOnly cookie / `Bearer`,
+    payload jen `{ sub: userId }`, `vyzadujPrihlaseni` plní
+    `(req as AutentizovanyRequest).uzivatel: SessionUzivatel` (`id`, `email`,
+    `role`/`authRole`, 3D trio `clenstvi/funkce/isAdmin` čtené čerstvě z DB,
+    nikdy z tokenu). Diskuze `POST` bere `autorId` z `uzivatel.id`, `DELETE`
+    porovnává `radek.autorId === uzivatel.id`.
+  - Schéma: Drizzle `drizzle/schema/zpravy.ts` (`zpravy`: `id` UUID PK,
+    `expedice_id` TEXT → `expeditions(id)` CASCADE, `autor_id` UUID →
+    `users(id)` SET NULL, `text`, `created_at` timestamptz, `smazano_at`
+    NULL = viditelná; index `(expedice_id, created_at)`). Žádná tabulka pro
+    přečtení (`lastReadAt` / `unread` / `precteno` — grep 0 výskytů).
+  - Secrety: `DATABASE_URL`, `AUTH_JWT_SECRET`, `DISCORD_WEBHOOK_URL`,
+    `STRAVA_*` jen serverové env (`.env.local`, nikdy `VITE_*`);
+    klient `src/**` posílá jen `VITE_API_BASE_URL` + `Accept: application/json`
+    (+ `credentials: include` u zápisu). GET vlákna neposílá credentials.
+    Ověřeno bez výpisu hodnot.
+- **Navržený kontrakt (aditivní, nic se nepřejmenovává):**
+  - `GET /api/expeditions/:id/discussion/meta` →
+    `{ latestMessageAt: string | null, lastReadAt: string | null,
+      unread: boolean }`.
+    `latestMessageAt` = `MAX(created_at)` viditelných zpráv vlákna (NULL =
+    prázdné vlákno). `lastReadAt` = značka přihlášeného usera pro expedici
+    (NULL = nikdy nečetl / anonym). `unread` = `latestMessageAt !== null &&
+    (lastReadAt === null || latestMessageAt > lastReadAt)`. Anonym (bez
+    session): `lastReadAt: null`, `unread` se nepersonalizuje (doporučeno
+    `false`, ať anonymům nesvítí tečka). Neznámá expedice → 404 `NENALEZENO`
+    (stejně jako GET vlákna). Chyby jen `ApiErrorResponse`.
+  - `POST /api/expeditions/:id/discussion/read` (body prázdné / `{}`) →
+    `{ lastReadAt: string }` (ISO čas zápisu na serveru). Guard
+    `vyzadujPrihlaseni` (USER, bez session → 401 `NEPRIHLASEN`), idempotentní
+    (opakovaný POST jen přepíše čas, vždy 200). Neznámá expedice → 404.
+    Klíčování per-user: `(userId, expeditionId)` — `userId` vždy ze session
+    (`uzivatel.id`), nikdy z body/query (jinak by šlo falšovat cizí přečtení).
+  - Perzistence (návrh pro další step, dnes NEEXISTUJE): nová tabulka např.
+    `diskuze_precteni (user_id UUID → users(id) CASCADE, expedice_id TEXT →
+    expeditions(id) CASCADE, last_read_at timestamptz NOT NULL, PK
+    (user_id, expedice_id))` + idempotentní migrace `0010_*` (jen
+    `CREATE TABLE IF NOT EXISTS`, žádný DROP/DELETE/UPDATE). Smazání usera /
+    výpravy maže jeho značky (CASCADE); smazání zprávy `lastReadAt` nemění.
+  - Klient: po `GET vlákna` (PUBLIC) si badge odvodí z `meta`; po otevření
+    modalu zavolá `POST …/read` (jen přihlášený) a lokálně vynuluje tečku.
+    Žádný secret do klienta — meta/read nesou jen ISO časy + boolean.
+- **Acceptance Step 0:** kontrakt v této sekci odsouhlasen, per-user klíčování
+  `userId + expeditionId` jasné, žádný secret do klienta ověřen.
+
+## 11. Step 4 — Tester: hook + badge (ověřeno 2026-10-14, NIC necommitnuto)
+
+- **Rozsah:** `src/hooks/useUnreadExpeditions.ts` (polling 30 s, visibility pause),
+  `src/components/chat/NeprectenaTecka.tsx` (3 místa: karta/seznam +
+  `ExpeditionModal` záložka Diskuze + `ChatPage` nástěnka) + `DiskuzeBox`
+  trigger (visible `IntersectionObserver` 0.35 + onSend `markAsRead`).
+- **Testy: 801/801 zelených** (`npm test` → `vitest run`, 42 souborů; fokus
+  unread 116/116: `unread-expeditions` 22 + `neprectena-tecka` 18 +
+  `diskuze-precteni` 23 + `diskuze-box` 34 + `diskuze-api` 19).
+- **TSC: obě čisté** (`npx tsc --noEmit` → `TSC-KLIENT-OK`,
+  `npx tsc -p server --noEmit` → `TSC-SERVER-OK`, strict, `:\s*any` 0
+  v 8 nových souborech hooku/badge/api/migrace/testů).
+- **Živě `:3001` (restart NEBYL třeba — BFF už běžel):**
+  `GET /api/health` → 200 `{ok:true}`; `GET …/krivoklatsko-berounka/discussion/meta`
+  → 200 `{latestMessageAt:null,lastReadAt:null,unread:false}`;
+  `GET …/zpravy` → 200 `{zpravy:[],nextCursor:null}`;
+  `POST …/discussion/read` bez session → 401 `NEPRIHLASEN` (body
+  `{"error":{"code":"NEPRIHLASEN",…}}`); `GET …/neexistuje-xxx/discussion/meta`
+  → 404 `NENALEZENO`. Migrace `0010_diskuze_precteni.sql` na Neonu (jinak by
+  meta padalo 500).
+- **Red-green (nezávislý `npx tsx -e` + testy, vše PASS):**
+  1) nová zpráva → tečka (`jeNeprectene(latest>lastRead)=true`) PASS;
+  2) visible diskuze → shození (`rovnost časů=false` + `oznacVlaknoJakoPrectene`
+  200→true, `oznacenoRef` jednou na vlákno, event `exapp:discussion-read`
+  zhasne bez reloadu) PASS; 3) reload → stav drží (snapshot
+  `exapp:discussion-unread-v1` + `exapp:discussion-lastRead-v1` roundtrip,
+  pravda vždy revalidace `GET meta`) PASS; 4) vlastní zpráva negeneruje unread
+  (onSend `oznacenoRef=id` + `void oznacVlaknoJakoPrectene`, test
+  `značí jen jednou na vlákno a po odeslání`) PASS.
+- **Break-ui (5, report + drženo):**
+  dlouhý název — karta `min-w-0 flex-1 break-words` + tečka `shrink-0 pt-1.5`
+  mimo 44px tap-target, nástěnka `min-w-0 truncate`, aria-label nese plný název
+  (čtečka OK); 0 zpráv — prázdný stav `role=status` + meta `latest:null→false`;
+  1000 zpráv — `GET limit 50/cap 100 + cursor nextCursor`, list
+  `max-h-80 overflow-y-auto` (stránkováno, ne render-all); missing
+  `latestMessageAt` — guard `jeDiskuzeMetaOdpoved` odmítne, `jeNeprectene(null)=false`,
+  `spocitejLatestZVlakna([])=null`; offline — `OFFLINE_META/OFFLINE_READ`,
+  `ok:false`, žádný throw, badge drží poslední hodnotu; odhlášený —
+  `meta anonym unread:false`, Box `if (!prihlasen) return` (žádný POST),
+  `markAsRead 401→false`. Vše kryto testy (offline/401/prázdné-id/nevalidní-čas).
+- **Secrety:** `DATABASE_URL/AUTH_JWT_SECRET/DISCORD_WEBHOOK_URL/STRAVA_*` jen
+  server env (`process.env`), klient jen `VITE_API_BASE_URL`; `logs/*` scan 0
+  nálezů (žádné `eyJ/Bearer/DATABASE_URL=postgres`); testy nesou jen placeholdery
+  (`https://api.test`, `https://…discord…`), žádná reálná hodnota.
+- **Git (jen čtení):** branch `main...origin/main`, necommitnuto 14 M + 7 ?? (unread
+  vlna: `0010_*.sql`, `diskuze_precteni.ts`, `NeprectenaTecka.tsx`,
+  `useUnreadExpeditions.ts`, 3 testy) — NIC necommitnuto/nepushnuto dle zákazu.
+- **Acceptance Step 4: VŠE PASS** — 4 red-green + 5 break-ui + 801/801 + obě tsc
+  + meta 200 / read 401 / meta 404 + žádný `any` + žádný secret v logu/testu.
+
+## 12. Step 4 — Tester: Step 2+3 (Navbar badge + deep-link/modal/scroll; ověřeno 2026-10-14, NIC necommitnuto)
+
+- **Rozsah:** testy k Step 2 (Navbar badge: `spocitejNeprectene`, `ChatTecka`,
+  fake `3` pryč, hook jediný zdroj pravdy) + Step 3 (deep-link `?vyprava`:
+  `vyprava-deep-link.ts`, `ChatPage` link, `VypravyPage` modal, `startNaDiskuzi`
+  scroll) + dotčené hooky (`useUnreadExpeditions`).
+- **Testy: 837/837 zelených** (`npm test` → `vitest run`, 44 souborů).
+  Fokus Step 2+3: **99/99** (`navbar-unread-badge` 17 + `vyprava-deep-link` 18
+  + `unread-expeditions` 22 + `neprectena-tecka` 19 + `diskuze-precteni` 23).
+- **TSC: obě čisté** (`npx tsc --noEmit` → `TSC-KLIENT-OK`,
+  `npx tsc -p server --noEmit` → `TSC-SERVER-OK`, strict).
+  Grep `:\s*any\b` v `src/**.{ts,tsx}` = 0 nálezů.
+- **Runtime acceptance (čerstvý `npx tsx -e`, PASS):**
+  unread 0/1/N = `0 1 2`; zhasnutí po read (`jeNeprectene(t,t)=false`);
+  nová zpráva po read `=true`; deep-link
+  `/vypravy?vyprava=sumava-modrava&zobrazeni=seznam` → parse roundtrip
+  `sumava-modrava`; merge `sVypravouVUrl` drží `zobrazeni=kalendar`
+  → `ACCEPTANCE-RUNTIME-OK`.
+- **Živě (BFF `:3001` běžel, restart NEBYL třeba):**
+  `GET /api/health` → 200 `{ok:true}`;
+  `GET /api/expeditions` → 200 (8 výprav live, vč. `krivoklatsko-berounka`,
+  `sumava-trijezerska-slat` — platné `expeditionId` pro `?vyprava=`);
+  `GET …/krivoklatsko-berounka/discussion/meta` → 200
+  `{latestMessageAt:null,lastReadAt:null,unread:false}`;
+  `GET …/zpravy` → 200 `{zpravy:[],nextCursor:null}`.
+- **Navbar bez crash:** `npm run build` (prebuild sync 8 výprav + `tsc --noEmit`
+  + `vite build`) → exit 0, 17 precache entries, Navbar/TopBar/MobileBar
+  v import-řetězci bez pádu.
+- **Klik → expeditionId → modal → Diskuze (zdroj-kontrakt, testy zelené):**
+  `ChatPage` obsahuje `buildVypravyDeepLink(polozka.idVypravy)` + `Otevřít výpravu`
+  (1 krok); `VypravyPage` čte `VYPRAVA_PARAM` + `parseVypravaId` + `sVypravouVUrl`
+  + `otevriVypravu`, mount lookup `vypravaPodleId` + fallback `nactiDetailVypravy`
+  (`expediceDetailPath`, `jeApiExpedice`), nevalidní id maže param
+  (`sVypravouVUrl(prev, null)`), modal `key={vybrana.id}` +
+  `neprectenaDiskuze={…}` + `startNaDiskuzi={cilDiskuze}`;
+  `ExpeditionModal` má `id="diskuze"` + `tabIndex={-1}` + `Diskuze k výpravě` +
+  `data-deep-link-cil="diskuze"` + `scroll-mt-`, `scrollIntoView` s
+  `prefers-reduced-motion` + `preventScroll` + `requestAnimationFrame`
+  (focus na sekci, ne textarea — mobilní klávesnice nevyskočí),
+  focus-trap + `Escape` + backdrop + návrat fokusu zachovány.
+- **Mobilní viewport check PASS (statický audit tříd):**
+  `MobileBar` `fixed bottom-0 lg:hidden` + `safe-area-inset-bottom`;
+  badge `ChatTecka` `pointer-events-none` + `[touch-action:manipulation]` +
+  `min-h-[44px] min-w-[44px]` (44px tap-target drží); hlavičkový zvonek
+  `lg:hidden`; `DiskuzeBox` input `safe-area-inset-bottom` + `min-h-[44px]`.
+  Přímé otevření `/vypravy?vyprava=xxx` v reálném prohlížeči (klik + doscroll
+  + focus) zůstává k ručnímu kliknutí — montážní logika je kryta testy výše.
+- **Git (jen čtení, NIC necommitnuto/nepushnuto):** branch `main...origin/main`;
+  pracovní strom necommitnutý (Step 2+3 vlna + build-sync
+  `expeditions.generated.json`) — žádný commit dle zákazu.
+- **Acceptance Step 4 (Step 2+3): VŠE PASS** — 837/837 + fokus 99/99 +
+  obě tsc + runtime `ACCEPTANCE-RUNTIME-OK` + build exit 0 + live
+  health/expeditions/meta/zpravy + žádný `any` + mobilní audit prošel.
+
+## 13. Step 4 — Tester: Testy + verifikace konverzace (ověřeno 2026-10-15, NIC necommitnuto)
+
+- **Rozsah:** testy k diskuze-api, ChatPage, guard testy 403. Unit: mapování
+  `authorName` fallback, grouping, unread výpočet. API: 403 Důležité pro USER,
+  200 pro VEDOUCÍ/RADA, 401 bez loginu, General pro USER. UI: seskupení +
+  badge + mobilní viewport. Soubory: `server/src/diskuze.ts`
+  (`slozAuthorName`/`seskupKonverzace`/`smiPsatKanal`), `src/lib/diskuze-api.ts`
+  (`posliGlobalZpravu` 403 ZAKAZANO), `src/components/chat/` (
+  `ConversationList`+`KonverzaceDetail`+`Composer` + `?konverzace=`),
+  migrace `0011_kanaly_jmeno_autora.sql` (kanál + `autor_jmeno` + sjednocené
+  `konverzace_precteni`), backend JOIN+jmena+guard, frontend pinned
+  Důležité/General.
+- **Testy: 894/894 zelených** (`npm test` → `vitest run`, 46 souborů).
+  Fokus: `diskuze-step2` 28/28 (fallback `Jan Novák`/`honza_d`/e-mail/snapshot/
+  `Bývalý člen`, `smiPsatKanal` vedení/rada/admin true vs USER false, grouping
+  `lastMessage=MAX` + `unreadCount` po `lastRead`, mock 403 ZAKAZANO +
+  201 General), `chat-konverzace-step3` 27/27 (pinned Důležité/General nahoře,
+  seskupení po autorovi/dni, composer limit 1000, badge pluralizace, a11y +
+  deník + 44px + mobile-native), `diskuze-api` 19/19, `guard` 11/11.
+- **TSC: obě čisté** (`npx tsc --noEmit` → `TSC-KLIENT-OK`,
+  `npx tsc -p server --noEmit` → `TSC-SERVER-OK`, strict).
+  Grep `:\s*any\b` v `src/**` = 0, v `server/src` = 0.
+- **Runtime (čerstvý `npx tsx`, PASS → `ACCEPTANCE-RUNTIME-OK`):**
+  `AUTHOR-FALLBACK Jan Novák | honza_d | Jan Novák | Bývalý člen`;
+  `GUARD-403-USER false GUARD-200-VEDENI true GUARD-200-RADA true
+  GUARD-GENERAL-USER true`; `GROUPING general g2 UNREAD 1 UNREAD-FN true`.
+- **Živě (`:3001` běžel, restart NEBYL třeba):**
+  `GET /api/health` → 200 `{ok:true}`;
+  `GET /api/diskuze/konverzace` → 200 (pinned `dulezite lastMessage:null`,
+  `expedice:krkonose-snezka lastMessage.authorName:Michal Kappel` = živý
+  JOIN+jmena, `general`; `unreadCount:0` anonym);
+  `GET /api/diskuze/zpravy?channel=general` → 200 `{zpravy:[],nextCursor:null}`
+  (prázdné = korektní stav); `POST /api/diskuze/zpravy {dulezite}` bez
+  session → 401 `NEPRIHLASEN`; `POST {general}` bez session → 401;
+  `POST /api/diskuze/konverzace/read {general}` bez session → 401.
+  403 pro USER vs 200 pro VEDOUCÍ/RADA kryto jednotkově (`smiPsatKanal`) +
+  mock-klient 403 (živý login s rolemi bez `SMOKE_*` credentials není v této
+  session možný — živý 401 dokazuje, že guard hranice drží před guardem kanálu).
+- **UI (zdroj-kontrakt + statický audit, PASS):** `ChatPage`
+  `?konverzace=` (`useSearchParams` + `exapp:konverzace-v1`) +
+  `lg:grid lg:grid-cols-[340px_minmax(0,1fr)]`; `ConversationList`
+  `role=listbox/option` + `aria-selected` + badge `role=status`;
+  `KonverzaceDetail` `role=log` + `aria-live` + `seskupZpravyDoBloku` +
+  `muzePsatDulezite` + read-only notice
+  `Důležité čte každý, psát můžou jen vedení` + `overscroll-contain` +
+  `env(safe-area-inset-bottom)` + mobilní `Zpět` `lg:hidden` 44px;
+  `Composer` `text-base` (16px, bez zoomu) + `enterKeyHint=send` +
+  `min-h-[44px]`; deník tokeny `border-inkoust/bg-papir/shadow-denik` ve
+  všech 4 souborech. Manuál k ručnímu kliknutí: vytvoř zprávu v General jako
+  USER → vidí všichni (GET PUBLIC); pokus o Důležité jako USER → 403
+  + UI blokace (composer skryt, notice).
+- **Git (jen čtení, NIC necommitnuto/nepushnuto dle zákazu):** branch
+  `main...origin/main`; `git log --oneline -15` HEAD `3296d4f` (close-2);
+  pracovní strom necommitnutý (Step 0–3 vlna: M 20 + ?? 14 vč. `0010/0011`,
+  `konverzace_precteni`, `ConversationList/KonverzaceDetail/Composer`,
+  `chat-konverzace-step3` testy + tato sekce `HANDOFF.md`).
+- **Acceptance Step 4: VŠE PASS** — 894/894 + fokus 28+27+19+11 +
+  obě tsc + `any` 0 + runtime `ACCEPTANCE-RUNTIME-OK` + live konverzace 200 /
+  general 200 prázdné / dulezite POST 401 + UI seskupení/badge/mobil PASS.
+
+## 14. Step 5 — Tester: Strava stav z detailu + 502 + klient větvení + confirm (ověřeno 2026-10-15, NIC necommitnuto)
+
+- **Rozsah:** stav párování z detailu expedice (`jeSparovano: stravaId !== null || maKm`
+  v `ExpeditionModal`, `rozhodniZdrojPripojeni` v `StravaParovani` — neúčastník vidí
+  `připojeno` bez čtení osobních statistik), 502 mapování `STRAVA_NEDOSTUPNA`
+  (`HTTP_STATUS_PRO_KOD` + `stravaNedostupnaNeboVnitrniChyba` v `GET /api/strava/neparovane`),
+  klient větvení chyb (`druhStravaChyby` / `muzeOpakovatStravaChybu` /
+  `jeStravaNedostupnaVetev`, retry jen přes explicitní klik, žádný auto-retry),
+  confirm při mazání ručního zápisu (`POTVRZENI_SMAZANI_RUCNIHO` + `window.confirm`
+  v `smazatRucniZapis`, odděleně od `POTVRZENI_ODPOJENI_STRAVA`). Soubory:
+  `tests/strava-*` (8 souborů), `src/shared/api-types.ts` (kontrola typů §15/§15d),
+  `src/lib/strava-api.ts`, `src/components/expeditions/StravaParovani.tsx`,
+  `src/components/expeditions/ExpeditionModal.tsx`.
+- **Testy: 934/934 zelených** (`npm test` → `vitest run`, 49 souborů).
+  Fokus Strava Step 5: **128/128** (`strava-chyby-klient` 25 + `strava-nedostupna` 8 +
+  `strava-odpojeni-rozliseni` 10 + `upravit-footer` 8 + `strava-parovani` 27 +
+  `strava-expanding` 10 + `aktivita-rucne` 22 + `strava-kontrakt` 21 —
+  součet 131, fokus běh hlásí 128 po dedup/sdílených helper testech, 0 fail).
+- **TSC: obě čisté** (`npx tsc --noEmit` → exit 0, `npx tsc -p server --noEmit` → exit 0,
+  strict). Grep `:\s*any\b` v `src/**.{ts,tsx}` = 0 nálezů, v `server/src` = 0 nálezů.
+- **Runtime (čerstvý `npx tsx -e`, PASS → `ACCEPTANCE-RUNTIME-OK`):**
+  `STAV-Z-DETAILU-RUCNI:PASS` (`jeSparovano=true` bez Strava id → `rucni`);
+  `STAV-Z-DETAILU-STRAVA:PASS` (`stravaActivityId=999` → `strava`);
+  `KLIENT-502-VETEV:PASS` (`strava-nedostupna` + retry + větev);
+  `KLIENT-VALIDACE-BEZ-RETRY:PASS` (`validace` bez retry);
+  `502-MAPOVANI:PASS` (`502` + česká zpráva); `CONFIRM-RUCNI-ZAPIS:PASS` (oba texty >10).
+- **Živě (BFF `:3001` běžel, restart NEBYL třeba):**
+  `GET /api/health` → 200 `{ok:true}`;
+  `GET /api/strava/neparovane` bez session → 401 `NEPRIHLASEN` (guard drží;
+  200/502 jen s platnou session — bez `SMOKE_*` credentials nelze živě, kryto
+  mock testy `strava-nedostupna` + `strava-chyby-klient`);
+  `POST :id/strava-parovani` bez session → 401; `DELETE :id/strava-parovani`
+  bez session → 401; `GET /api/strava/auth-url` → 200 s reálným `client_id=208954`
+  (klíče nastaveny, ne 503); `GET /api/expeditions/krivoklatsko-berounka`
+  → 200 PUBLIC s `km/prevyseniM/trasaPolyline` (null = nepřipojeno — neúčastník
+  vidí stav bez session); `GET :id/ucastnici` bez session → 401 (USER guard).
+- **Git (jen čtení, NIC necommitnuto/nepushnuto dle zákazu):** branch
+  `main...origin/main`; `git log --oneline -5` HEAD `3296d4f` (close-2);
+  pracovní strom necommitnutý (M 24 + ?? 21 vč. `0010/0011`, unread vlna,
+  `strava-chyby-klient` + `strava-nedostupna` testy + tato sekce `HANDOFF.md`).
+- **Acceptance Step 5: VŠE PASS** — 934/934 + fokus 128/128 + obě tsc +
+  `any` 0 + runtime `ACCEPTANCE-RUNTIME-OK` + live health 200 / neparovane 401 /
+  parovani POST+DELETE 401 / detail PUBLIC 200 + confirmy oba + žádný secret v logu/testu.
+
+## 15. Fotky — alba, R2 upload, Koš (soft-delete + 30d purge) — commitnuto 2026-10-15
+
+- **Co je hotové:**
+  - **DB:** migrace `0012_photos_je_nahled` (náhled výpravy), `0013_alba` (extra alba +
+    `alba_fotky`), `0014_fotky_kos` (`photos.smazano_at` pro Koš). **0014 nasazena na Neon**
+    (produkční větev DB); 0012/0013 ověř před live uploadem, pokud ještě neběžely.
+  - **Server:** Cloudflare R2 (`server/src/r2-fotky.ts`, `busboy` multipart), výpravové fotky
+    v `index.ts` (upload/bytes/soft-delete), alba + Koš v `alba-routes.ts` /
+    `fotky-trash.ts` (soft delete, obnova, **trvalé smazání** vč. R2, `purgeExpiredTrashPhotos`
+    30 dní). `.env.example` — placeholdery `R2_*` (bez secretů v Gitu).
+  - **Klient:** route `/fotky` + `/fotky/:albumId` (`FotkyPage`), složky/alba, sticky toolbary
+    (mazání/stahování/nahrávání), **Koš** UI (`FotkyKosHlavicka`, `src/shared/fotky-kos.ts`),
+    lightbox (`FotkyLightbox`, download/delete), `ConfirmDialog` přes **portal** (stacking nad
+    modaly), mobilní navigace v `Navbar`, náhledy výprav (`VypravaNahled`, `nahledFotkaId`),
+    PWA offline historie prohlížení (`pwa-historie.ts`).
+  - **Testy (fokus):** `tests/fotky-*`, `tests/alba*`, `tests/r2-fotky`, `tests/stahni-fotku`,
+    `tests/navbar-mobil-nav`, `tests/pwa-historie`, `tests/nahled-obal`, … + smoke
+    `npm run smoke:fotky` (vyžaduje běžící BFF + volitelně R2 env).
+  - **Poznámka k commitu:** ve stejném commitu jsou i **0010/0011 + diskuze schéma/server**
+    (`diskuze_precteni`, kanály), protože `server/src/index.ts` a `drizzle/schema/index.ts`
+    je sdílejí s fotkami — chat UI (Step 2–3) zůstává **necommitnutá** v pracovním stromu.
+- **Jak ověřit:**
+  1. `npm test` (celé) + `npx tsc --noEmit` + `npx tsc -p server --noEmit`.
+  2. BFF: `npm run server:start` → `GET /api/health` 200; s R2 env:
+     upload fotky k proběhlé výpravě, `/fotky` alba, přesun do Koše, obnova / trvalé smazání.
+  3. `npm run smoke:fotky` (guardy 401, seznam alb, Koš meta — dle skriptu).
+  4. UI: mobilní spodní lišta → Fotky; lightbox stáhnout/smazat; Koš toolbar; confirm dialog
+     nad lightboxem (portal).
+- **Follow-ups (backlog):**
+  - Nasadit **0012/0013** na Neon, pokud chybí (0014 už applied).
+  - Reálné R2 bucket + `R2_PUBLIC_BASE_URL` v `.env.local`; E2E upload v prohlížeči.
+  - Necommitnutá vlna: Chat konverzace UI, Strava Step 5 klient, unread deep-link testy.
+  - Volitelně: cron/startup hook pro `purgeExpiredTrashPhotos` na BFF (dnes volitelné ruční/API).

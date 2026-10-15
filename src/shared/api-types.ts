@@ -95,6 +95,8 @@ export interface ApiUser {
  * - 410 KOD_EXPIROVANY — kód expiroval (vypršel čas 10 min)
  * - 422 VALIDATION_ERROR — vstup neprošel validací na hranici
  * - 500 VNITRNI_CHYBA — neočekávaná chyba (bez interních detailů)
+ * - 502 STRAVA_NEDOSTUPNA — Strava API je nedostupné (timeout / síť / 5xx)
+ *   (aditivně: GET /api/strava/neparovane místo slepé 500)
  * - 503 STRAVA_NENI_NASTAVENA — chybí reálné STRAVA_CLIENT_ID
  *   (Krok 7b, aditivně: GET /api/strava/auth-url nikdy nevrací mock URL)
  */
@@ -111,7 +113,9 @@ export type ApiErrorCode =
   | "UZ_PRIHLASEN"
   | "KAPACITA_PLNA"
   | "VYPRAVA_UZAVRENA"
+  | "STRAVA_NEDOSTUPNA"
   | "STRAVA_NENI_NASTAVENA"
+  | "FOTKY_NEJSOU_NASTAVENE"
   | "MOC_POZADAVKU"
   | "VNITRNI_CHYBA";
 
@@ -332,6 +336,21 @@ export interface ApiExpedice {
      * null = bez trasy.
      */
     trasaPolyline?: string | null;
+    /**
+     * Strava id připojené aktivity (Krok 16 fix, aditivně optional).
+     * Kopie `expeditions.strava_activity_id` z detailu
+     * (`GET /api/expeditions/:id/ucastnici` → `expedice`).
+     * string = připojeno přes Stravu, null/undefined = bez Strava id
+     * (ruční zápis nese jen `km`, nespárováno nese nic).
+     */
+    stravaActivityId?: string | null;
+    /**
+     * Id náhledové fotky pro obálku karty a hlavičku detailu.
+     * Aditivní: string = fotka (`je_nahled`, jinak nejstarší), null = výprava
+     * fotku nemá. Chybí-li pole (starší snapshot), klient si náhled smí
+     * dohledat sám a nesmí na to čekat celá stránka.
+     */
+    nahledFotkaId?: string | null;
     stav: StavVypravy;
   }
 
@@ -528,7 +547,9 @@ export const HTTP_STATUS_PRO_KOD: Record<ApiErrorCode, number> = {
   UZ_PRIHLASEN: 409,
   KAPACITA_PLNA: 409,
   VYPRAVA_UZAVRENA: 409,
+  STRAVA_NEDOSTUPNA: 502,
   STRAVA_NENI_NASTAVENA: 503,
+  FOTKY_NEJSOU_NASTAVENE: 503,
   MOC_POZADAVKU: 429,
   VNITRNI_CHYBA: 500,
 } as const;
@@ -540,6 +561,14 @@ export const HTTP_STATUS_PRO_KOD: Record<ApiErrorCode, number> = {
  */
 export const STRAVA_NENI_NASTAVENA_ZPRAVA =
   "Strava propojení není na serveru nastavené (chybí číselné STRAVA_CLIENT_ID). Zkontroluj STRAVA_CLIENT_ID v server env a pro reálný flow vypni MOCK." as const;
+
+/**
+ * Česká zpráva pro 502 STRAVA_NEDOSTUPNA (aditivně).
+ * Jediný zdroj pravdy — server ji posílá v `ApiErrorResponse`,
+ * klient podle `code` ukáže opakování. Bez secretů a bez detailů Stravy.
+ */
+export const STRAVA_NEDOSTUPNA_ZPRAVA =
+  "Strava je teď nedostupná. Zkus to prosím později." as const;
 
 /* ------------------------------------------------------------------ */
 /* 8) Krok 2 — Expedice CRUD + účast + uzavření (NÁVRH, neimplementováno) */
@@ -927,6 +956,8 @@ export interface ApiFotka {
   url: string;
   popis: string;
   createdAt: string;
+  /** One highlight per expedition. False until someone picks it. */
+  jeNahled: boolean;
 }
 
 /** Seznam fotek pro modal/historii (PUBLIC — čte i nepřihlášený). */
@@ -948,6 +979,28 @@ export interface PridatFotkuResponse {
 /** Smazání fotky (jen ADMIN). Idempotentní: opakovaný DELETE → 404. */
 export interface SmazatFotkuResponse {
   ok: true;
+}
+
+/** Streams the stored object through the app (public). Legacy https URL redirects. */
+export function fotkaSouborPath(
+  id: string,
+  fotkaId: string,
+): `/api/expeditions/${string}/fotky/${string}/soubor` {
+  return `/api/expeditions/${id}/fotky/${fotkaId}/soubor`;
+}
+
+/** Logged-in member sets the highlight on a finished expedition. */
+export function fotkaNahledPath(
+  id: string,
+  fotkaId: string,
+): `/api/expeditions/${string}/fotky/${string}/nahled` {
+  return `/api/expeditions/${id}/fotky/${fotkaId}/nahled`;
+}
+
+/** Highlight update. `fotky` is the expedition list, oldest first. */
+export interface NastavitNahledResponse {
+  fotkaId: string;
+  fotky: ApiFotka[];
 }
 
 /** Vzory cest Kroku 6 pro matici oprávnění (odděleně jako Krok 2). */
@@ -1574,7 +1627,24 @@ export function jeApiExpedice(hodnota: unknown): hodnota is ApiExpedice {
   ) {
     return false;
   }
+  const stravaActivityId: unknown = zaznam["stravaActivityId"];
+  if (
+    typeof stravaActivityId !== "string" &&
+    stravaActivityId !== null &&
+    stravaActivityId !== undefined
+  ) {
+    return false;
+  }
+  if (!jeVolitelneNahledFotkaId(zaznam["nahledFotkaId"])) return false;
   return true;
+}
+
+/** `nahledFotkaId` smí chybět, být null, nebo neprázdný string. */
+export function jeVolitelneNahledFotkaId(
+  hodnota: unknown,
+): hodnota is string | null | undefined {
+  if (hodnota === undefined || hodnota === null) return true;
+  return typeof hodnota === "string" && hodnota.length > 0;
 }
 
 export function jeApiAktivita(hodnota: unknown): hodnota is ApiAktivita {
@@ -2210,12 +2280,34 @@ export function zpravaDetailPath(
   return `/api/expeditions/${id}/zpravy/${zpravaId}`;
 }
 
+/**
+ * Kanál diskuze (Step 2, kopie DB CHECK `zpravy_kanal_check` + `KANALY_ZPRAVY`).
+ * `expedice` = vlákno výpravy (`expedice_id` NOT NULL), zbytek = globál (NULL).
+ */
+export type KanalDiskuze = "expedice" | "dulezite" | "general";
+
+/** Guard kanálu (hranice API ho použije při validaci POST). */
+export function jeKanalDiskuze(hodnota: unknown): hodnota is KanalDiskuze {
+  return (
+    hodnota === "expedice" || hodnota === "dulezite" || hodnota === "general"
+  );
+}
+
 /** Jedna zpráva vlákna — kopie řádku `zpravy` (text raw, bez escapování). */
 export interface ApiZprava {
   id: string;
-  expeditionId: string;
+  /** NULL = globální kanál (`dulezite` / `general`), string = vlákno výpravy. */
+  expeditionId: string | null;
   /** Autor zprávy; null = účet mezitím smazán (SET NULL, vlákno zůstává). */
   autorId: string | null;
+  /**
+   * Zobrazované jméno z JOINu `users` (Step 2, bez extra fetch z klienta).
+   * `jmeno + prijmeni`, fallback `discordNick`, pak `email`, pak snapshot
+   * `autor_jmeno`, jinak `Bývalý člen`. Vždy neprázdné.
+   */
+  authorName: string;
+  /** Kanál zprávy (kopie DB CHECK `zpravy_kanal_check`). */
+  channel: KanalDiskuze;
   /** Tělo zprávy raw (trimnuté, 1–1000 znaků) — escapuje až render. */
   text: string;
   createdAt: string;
@@ -2310,14 +2402,19 @@ export function jeApiZprava(hodnota: unknown): hodnota is ApiZprava {
   if (typeof zaznam["id"] !== "string" || zaznam["id"].length === 0) {
     return false;
   }
-  if (
-    typeof zaznam["expeditionId"] !== "string" ||
-    zaznam["expeditionId"].length === 0
-  ) {
-    return false;
-  }
+  const expeditionId: unknown = zaznam["expeditionId"];
+  if (typeof expeditionId !== "string" && expeditionId !== null) return false;
+  if (typeof expeditionId === "string" && expeditionId.length === 0) return false;
   const autorId: unknown = zaznam["autorId"];
   if (typeof autorId !== "string" && autorId !== null) return false;
+  if (typeof zaznam["authorName"] !== "string" || zaznam["authorName"].length === 0) {
+    return false;
+  }
+  if (!jeKanalDiskuze(zaznam["channel"])) return false;
+  // Vazba kanál ↔ expedice (kopie DB CHECK zpravy_kanal_expedice_check).
+  const channel: KanalDiskuze = zaznam["channel"] as KanalDiskuze;
+  if (channel === "expedice" && expeditionId === null) return false;
+  if (channel !== "expedice" && expeditionId !== null) return false;
   if (typeof zaznam["text"] !== "string") return false;
   if (typeof zaznam["createdAt"] !== "string") return false;
   return true;
@@ -2350,4 +2447,421 @@ export function jePosliZpravuOdpoved(
   }
   const zaznam = hodnota as Record<string, unknown>;
   return jeApiZprava(zaznam["zprava"]);
+}
+
+/* ------------------------------------------------------------------ */
+/* 18) Step 1 — Diskuze unread (meta + read, HANDOFF §10, Step 0).       */
+/* Nová tabulka `diskuze_precteni` (migrace 0010,                         */
+/* drizzle/schema/diskuze_precteni.ts): per-user značka                   */
+/* `(user_id, expedice_id) → last_read_at`, PK dvojice, obě FK CASCADE.  */
+/* Smazání zprávy lastReadAt nemění; smazání usera/výpravy maže značky.  */
+/* Matice: GET meta = PUBLIC (anonym: lastReadAt null, unread false —     */
+/* tečka se nepersonalizuje); POST read = USER (idempotentní upsert,      */
+/* userId VŽDY ze session, nikdy z body/query — jinak by šlo falšovat    */
+/* cizí přečtení). Neznámá expedice → 404 NENALEZENO. Odpovědi nesou jen  */
+/* ISO časy + boolean — žádný secret (stejný zákaz jako §15/§17).         */
+/* latestMessageAt = MAX(created_at) viditelných zpráv (NULL = prázdné).  */
+/* unread = latest !== null && (lastRead === null || latest > lastRead).  */
+/* Klient: localStorage `exapp:discussion-lastRead-v1` je jen optimistic  */
+/* cache, pravdou je vždy server (reload čte meta). Aditivní.             */
+/* ------------------------------------------------------------------ */
+
+/** Vlákno diskuze — meta pro badge (GET = PUBLIC). */
+export const DISKUZE_META_VZOR = "/api/expeditions/:id/discussion/meta" as const;
+/** Značka přečtení vlákna (POST = USER, idempotentní). */
+export const DISKUZE_READ_VZOR = "/api/expeditions/:id/discussion/read" as const;
+
+/** Staví URL meta: `/api/expeditions/xxx/discussion/meta`. */
+export function diskuzeMetaPath(id: string): `/api/expeditions/${string}/discussion/meta` {
+  return `/api/expeditions/${id}/discussion/meta`;
+}
+
+/** Staví URL read: `/api/expeditions/xxx/discussion/read`. */
+export function diskuzeReadPath(id: string): `/api/expeditions/${string}/discussion/read` {
+  return `/api/expeditions/${id}/discussion/read`;
+}
+
+/** Meta vlákna — jen ISO časy + boolean, nikdy secret. */
+export interface DiskuzeMetaResponse {
+  /** MAX(created_at) viditelných zpráv; null = prázdné vlákno. */
+  latestMessageAt: string | null;
+  /** Značka přihlášeného pro expedici; null = nikdy nečetl / anonym. */
+  lastReadAt: string | null;
+  /** True = cizí (i vlastní) nová zpráva po lastReadAt; anonym vždy false. */
+  unread: boolean;
+}
+
+/** POST read přijímá prázdné tělo (budoucí rozšíření aditivně optional). */
+export interface OznacPrecteniRequest {
+  /** Rezerva — server ho ignoruje, čas razí vždy sám. */
+  lastReadAt?: string;
+}
+
+/** Odpověď POST read — serverový čas zápisu (ISO). */
+export interface OznacPrecteniResponse {
+  lastReadAt: string;
+}
+
+/** Vzory cest unread pro matici oprávnění (odděleně jako §17). */
+export type DiskuzePrecteniCesta =
+  | typeof DISKUZE_META_VZOR
+  | typeof DISKUZE_READ_VZOR;
+
+/** Hranice unread: meta PUBLIC, read přihlášený. */
+export const PRISTUP_DISKUZE_PRECTENI: Record<DiskuzePrecteniCesta, AuthRole | "PUBLIC"> = {
+  [DISKUZE_META_VZOR]: "PUBLIC",
+  [DISKUZE_READ_VZOR]: "USER",
+} as const;
+
+export interface MaticeRadekDiskuzePrecteni {
+  metoda: ExpediceMetoda;
+  cesta: string;
+  kdo: AuthRole | "PUBLIC";
+  uspech: string;
+}
+
+/**
+ * Matice oprávnění unread (metoda + cesta → kdo smí).
+ * GET meta = PUBLIC (anonym unread false); POST read = USER (upsert, vždy 200).
+ */
+export const MATICE_DISKUZE_PRECTENI: readonly MaticeRadekDiskuzePrecteni[] = [
+  {
+    metoda: "GET",
+    cesta: DISKUZE_META_VZOR,
+    kdo: "PUBLIC",
+    uspech: "200 + DiskuzeMetaResponse (anonym: lastReadAt null, unread false)",
+  },
+  {
+    metoda: "POST",
+    cesta: DISKUZE_READ_VZOR,
+    kdo: "USER",
+    uspech: "200 + OznacPrecteniResponse (idempotentní upsert last_read_at)",
+  },
+] as const;
+
+function jeIsoNeboNull(hodnota: unknown): boolean {
+  return typeof hodnota === "string" || hodnota === null;
+}
+
+/** Guard meta (právě 3 klíče, žádné secrety). */
+export function jeDiskuzeMetaOdpoved(
+  hodnota: unknown,
+): hodnota is DiskuzeMetaResponse {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  const klice = Object.keys(zaznam).sort();
+  if (klice.length !== 3) return false;
+  if (
+    klice[0] !== "lastReadAt" ||
+    klice[1] !== "latestMessageAt" ||
+    klice[2] !== "unread"
+  ) {
+    return false;
+  }
+  if (!jeIsoNeboNull(zaznam["latestMessageAt"])) return false;
+  if (!jeIsoNeboNull(zaznam["lastReadAt"])) return false;
+  if (typeof zaznam["unread"] !== "boolean") return false;
+  for (const klic of [
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "accessToken",
+    "refreshToken",
+    "clientSecret",
+    "passwordHash",
+    "email",
+  ]) {
+    if (klic in zaznam) return false;
+  }
+  return true;
+}
+
+/** Guard odpovědi read (právě `{ lastReadAt: ISO }`, bez secretů). */
+export function jeOznacPrecteniOdpoved(
+  hodnota: unknown,
+): hodnota is OznacPrecteniResponse {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  if (Object.keys(zaznam).length !== 1) return false;
+  if (typeof zaznam["lastReadAt"] !== "string") return false;
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* 19) Step 2 — Jména + seskupení + guard (kanály dulezite/general).    */
+/* Jedna tabulka `zpravy` (kanal + expedice_id NULL = globál +           */
+/* autor_jmeno snapshot, migrace 0011) + `konverzace_precteni`           */
+/* (user_id, conversation_key, last_read_at, migrace 0011).              */
+/* - GET diskuze JOIN `users` → `authorName` (jmeno+prijmeni, fallback    */
+/*   discordNick/email/Bývalý člen; SET NULL drží `autor_jmeno`).        */
+/*   Klient jména nefetchuje zvlášť — jsou v `ApiZprava` (§17).          */
+/* - GET konverzace `[{key, expeditionId, channel, lastMessage,           */
+/*   unreadCount}]` (PUBLIC; anonym unreadCount vždy 0). Klíč:            */
+/*   `dulezite` | `general` | `expedice:<slug>`.                         */
+/* - POST globálu: `dulezite` jen vedení/rada/admin (funkce               */
+/*   `vedeni`|`rada` NEBO `isAdmin`), jinak 403 ZAKAZANO; `general`       */
+/*   každý přihlášený (USER). Čtení PUBLIC.                              */
+/* - POST read: per-user upsert `konverzace_precteni`, čas razí server,  */
+/*   userId VŽDY ze session. Chyby jen `ApiErrorResponse`. Aditivní.      */
+/* ------------------------------------------------------------------ */
+
+/** Seznam konverzací (GET = PUBLIC, anonym unreadCount 0). */
+export const KONVERZACE_PATH = "/api/diskuze/konverzace" as const;
+/** Značka přečtení konverzace (POST = USER, idempotentní upsert). */
+export const KONVERZACE_READ_PATH = "/api/diskuze/konverzace/read" as const;
+/** Globální zprávy (GET = PUBLIC, POST = USER + guard kanálu). */
+export const GLOBALNI_ZPRAVY_PATH = "/api/diskuze/zpravy" as const;
+
+/** Staví URL read konverzace (bez parametru — key je v body). */
+export function konverzaceReadPath(): typeof KONVERZACE_READ_PATH {
+  return KONVERZACE_READ_PATH;
+}
+
+/** Staví URL globálních zpráv s volitelným `?channel=` filtrem. */
+export function globalniZpravyUrl(channel?: KanalDiskuze): string {
+  if (channel === undefined) return GLOBALNI_ZPRAVY_PATH;
+  const params = new URLSearchParams();
+  params.set("channel", channel);
+  return `${GLOBALNI_ZPRAVY_PATH}?${params.toString()}`;
+}
+
+/** Jedna konverzace v přehledu (klíč + poslední zpráva + počet nepřečtených). */
+export interface ApiKonverzace {
+  /** `dulezite` | `general` | `expedice:<slug>`. */
+  key: string;
+  /** NULL = globál, string = vlákno výpravy. */
+  expeditionId: string | null;
+  channel: KanalDiskuze;
+  /** Poslední viditelná zpráva (MAX created_at); null = prázdný globál. */
+  lastMessage: ApiZprava | null;
+  /** Počet zpráv po lastReadAt (anonym vždy 0, nikdy záporné). */
+  unreadCount: number;
+}
+
+/** Seznam konverzací (PUBLIC — čte i anonym). */
+export interface KonverzaceListResponse {
+  konverzace: ApiKonverzace[];
+}
+
+/** Zápis do globálu (USER + guard kanálu na serveru). */
+export interface PosliGlobalZpravuRequest {
+  channel: "dulezite" | "general";
+  text: string;
+}
+
+/** Odpověď zápisu do globálu → 201. */
+export interface PosliGlobalZpravuResponse {
+  zprava: ApiZprava;
+}
+
+/** Označení konverzace jako přečtené (USER, key v body). */
+export interface OznacKonverzaciRequest {
+  key: string;
+}
+
+/** Vzory cest Step 2 pro matici oprávnění. */
+export type KonverzaceCesta =
+  | typeof KONVERZACE_PATH
+  | typeof KONVERZACE_READ_PATH
+  | typeof GLOBALNI_ZPRAVY_PATH;
+
+/** Hranice Step 2: čtení PUBLIC, zápis přihlášený (Důležité hlídá guard). */
+export const PRISTUP_KONVERZACE: Record<KonverzaceCesta, AuthRole | "PUBLIC"> = {
+  [KONVERZACE_PATH]: "PUBLIC",
+  [KONVERZACE_READ_PATH]: "USER",
+  [GLOBALNI_ZPRAVY_PATH]: "PUBLIC",
+} as const;
+
+export interface MaticeRadekKonverzace {
+  metoda: ExpediceMetoda;
+  cesta: string;
+  kdo: AuthRole | "PUBLIC";
+  uspech: string;
+}
+
+/**
+ * Matice oprávnění Step 2 (metoda + cesta → kdo smí).
+ * GET konverzace i globálu = PUBLIC; POST globálu = USER
+ * (Důležité navíc vedení/rada/admin, jinak 403); POST read = USER.
+ */
+export const MATICE_KONVERZACE: readonly MaticeRadekKonverzace[] = [
+  {
+    metoda: "GET",
+    cesta: KONVERZACE_PATH,
+    kdo: "PUBLIC",
+    uspech: "200 + KonverzaceListResponse (anonym unreadCount 0)",
+  },
+  {
+    metoda: "GET",
+    cesta: GLOBALNI_ZPRAVY_PATH,
+    kdo: "PUBLIC",
+    uspech: "200 + ZpravyListResponse (authorName z JOINu)",
+  },
+  {
+    metoda: "POST",
+    cesta: GLOBALNI_ZPRAVY_PATH,
+    kdo: "USER",
+    uspech: "201 + PosliGlobalZpravuResponse (dulezite jen vedeni/rada/admin, jinak 403)",
+  },
+  {
+    metoda: "POST",
+    cesta: KONVERZACE_READ_PATH,
+    kdo: "USER",
+    uspech: "200 + OznacPrecteniResponse (upsert last_read_at ze session)",
+  },
+] as const;
+
+/** Guard jedné konverzace (unreadCount nikdy záporné, vazba kanál ↔ expedice). */
+export function jeApiKonverzace(hodnota: unknown): hodnota is ApiKonverzace {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  if (typeof zaznam["key"] !== "string" || zaznam["key"].length === 0) {
+    return false;
+  }
+  const expeditionId: unknown = zaznam["expeditionId"];
+  if (typeof expeditionId !== "string" && expeditionId !== null) return false;
+  if (!jeKanalDiskuze(zaznam["channel"])) return false;
+  const channel: KanalDiskuze = zaznam["channel"] as KanalDiskuze;
+  if (channel === "expedice" && expeditionId === null) return false;
+  if (channel !== "expedice" && expeditionId !== null) return false;
+  const lastMessage: unknown = zaznam["lastMessage"];
+  if (lastMessage !== null && !jeApiZprava(lastMessage)) return false;
+  if (typeof zaznam["unreadCount"] !== "number") return false;
+  const unread: number = zaznam["unreadCount"] as number;
+  if (!Number.isInteger(unread) || unread < 0) return false;
+  return true;
+}
+
+/** Guard seznamu konverzací (prázdný seznam je platný). */
+export function jeKonverzaceOdpoved(
+  hodnota: unknown,
+): hodnota is KonverzaceListResponse {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  const konverzace: unknown = zaznam["konverzace"];
+  if (!Array.isArray(konverzace)) return false;
+  for (const polozka of konverzace) {
+    if (!jeApiKonverzace(polozka)) return false;
+  }
+  return true;
+}
+
+/** Guard odpovědi zápisu do globálu. */
+export function jePosliGlobalZpravuOdpoved(
+  hodnota: unknown,
+): hodnota is PosliGlobalZpravuResponse {
+  if (typeof hodnota !== "object" || hodnota === null || Array.isArray(hodnota)) {
+    return false;
+  }
+  const zaznam = hodnota as Record<string, unknown>;
+  return jeApiZprava(zaznam["zprava"]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Albums (Fotky). Two kinds share one list:                          */
+/* - vyprava: not a row of its own. id === expeditions.id, and only     */
+/*   when expeditions.stav is "proběhlá" (volno / skoro plno omitted).  */
+/*   Photos are existing `photos` rows. Bytes stay on                  */
+/*   GET /api/expeditions/:id/fotky/:fotkaId/soubor.                   */
+/* - vlastni: row in `alba`, photos in `alba_fotky`. Bytes:           */
+/*   GET /api/alba/:id/fotky/:fotkaId/soubor.                          */
+/* Errors are only ApiErrorResponse.                                   */
+/* ------------------------------------------------------------------ */
+
+export const ALBA_PATH = "/api/alba" as const;
+
+export type DruhAlba = "vyprava" | "vlastni" | "kos";
+
+/** One album card. `expeditionId` is set only for `druh: "vyprava"`. */
+export interface ApiAlbum {
+  id: string;
+  nazev: string;
+  druh: DruhAlba;
+  expeditionId: string | null;
+  pocetFotek: number;
+  nahledFotkaId: string | null;
+}
+
+export interface AlbaListResponse {
+  alba: ApiAlbum[];
+}
+
+export interface VytvoritAlbumRequest {
+  nazev: string;
+}
+
+/** Created extra album. Count is 0 and the cover is null. → 201. */
+export interface VytvoritAlbumResponse {
+  album: ApiAlbum;
+}
+
+/**
+ * DELETE /api/alba/:id — ADMIN (`vyzadujAdmina`). Extra album (`alba`) only.
+ * Expedition id → 404 NENALEZENO; the expedition and its `photos` rows stay.
+ * Missing id → 404 NENALEZENO, message "Album nenalezeno."
+ * Success → 200. `alba_fotky` leave with ON DELETE CASCADE.
+ */
+export interface SmazatAlbumResponse {
+  ok: true;
+}
+
+/**
+ * One photo inside GET /api/alba/:id/fotky.
+ * Expedition album: `expeditionId` is the expedition id, `albumId` is null.
+ * Extra album: `expeditionId` is null, `albumId` is `alba.id`.
+ */
+export interface ApiAlbumFotka {
+  id: string;
+  url: string;
+  createdAt: string;
+  jeNahled: boolean;
+  expeditionId: string | null;
+  albumId: string | null;
+  /** Set when listing trash; null for active album photos. */
+  smazanoAt?: string | null;
+}
+
+export interface AlbumFotkyResponse {
+  fotky: ApiAlbumFotka[];
+}
+
+/** Multipart upload of one or more `soubor` fields. → 201. */
+export interface PridatAlbumFotkyResponse {
+  fotky: ApiAlbumFotka[];
+}
+
+/**
+ * DELETE /api/alba/:id/fotky/:fotkaId — ADMIN (`vyzadujAdmina`).
+ * Soft-delete: row stays in DB with `smazano_at` (Koš). Extra album only;
+ * expedition id → 404 (use DELETE /api/expeditions/:id/fotky/:fotkaId).
+ * Missing row → 404. Success → 200.
+ */
+export interface SmazatAlbumFotkuResponse {
+  ok: true;
+}
+
+/** POST /api/alba/kos/fotky/:fotkaId/obnovit — ADMIN. Clears smazano_at. */
+export interface ObnovitFotkuZKoseResponse {
+  ok: true;
+}
+
+/** DELETE /api/alba/kos/fotky/:fotkaId — ADMIN. Hard delete + R2 when configured. */
+export interface TrvaleSmazatFotkuZKoseResponse {
+  ok: true;
+}
+
+/** Streams one extra-album object. Expedition photos use `fotkaSouborPath`. */
+export function albumFotkaSouborPath(
+  albumId: string,
+  fotkaId: string,
+): `/api/alba/${string}/fotky/${string}/soubor` {
+  return `/api/alba/${albumId}/fotky/${fotkaId}/soubor`;
 }

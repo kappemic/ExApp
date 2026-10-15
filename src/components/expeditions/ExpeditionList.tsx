@@ -6,9 +6,11 @@ import ExpeditionEmpty from "./ExpeditionEmpty";
 export interface ExpeditionListProps {
   expedice: Expedition[];
   onDetail?: (expedice: Expedition) => void;
+  /** Mapa unread z useUnreadExpeditions — chybějící klíč = přečteno. */
+  neprectene?: ReadonlyMap<string, boolean>;
 }
 
-export default function ExpeditionList({ expedice, onDetail }: ExpeditionListProps): JSX.Element {
+export default function ExpeditionList({ expedice, onDetail, neprectene }: ExpeditionListProps): JSX.Element {
   if (expedice.length === 0) {
     return <ExpeditionEmpty />;
   }
@@ -20,7 +22,11 @@ export default function ExpeditionList({ expedice, onDetail }: ExpeditionListPro
     >
       {expedice.map((exp) => (
         <li key={exp.id} className="min-w-0">
-          <ExpeditionCard expedice={exp} onDetail={onDetail} />
+          <ExpeditionCard
+            expedice={exp}
+            onDetail={onDetail}
+            neprecteno={neprectene?.get(exp.id) === true}
+          />
         </li>
       ))}
     </ul>

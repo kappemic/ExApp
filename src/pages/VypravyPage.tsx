@@ -10,8 +10,14 @@ import KalendarTyden from "../components/kalendar/KalendarTyden";
 import SchuzkaForm from "../components/kalendar/SchuzkaForm";
 import UdalostModal from "../components/kalendar/UdalostModal";
 import { useAuth } from "../hooks/useAuth";
+import { useUnreadExpeditions } from "../hooks/useUnreadExpeditions";
 import { filtrujExpedicePodleJmena, normalizujProVyhledavani } from "../lib/expedice-filtr";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
+import {
+  VYPRAVA_PARAM,
+  parseVypravaId,
+  sVypravouVUrl,
+} from "../lib/vyprava-deep-link";
 import { dnesniDatumYmd, jeProbihajici } from "../lib/expedition-utils";
 import { vytvorVypravu } from "../lib/expeditions-ucast";
 import { udalostiProMesic, udalostiProTyden } from "../lib/kalendar";
@@ -23,6 +29,7 @@ import {
   type ChybySchuzky,
 } from "../lib/schuzky-api";
 import type { Expedition } from "../lib/mock-expeditions";
+import { expediceDetailPath, jeApiExpedice } from "../shared/api-types";
 import type {
   ApiExpedice,
   ApiSchuzka,
@@ -89,7 +96,42 @@ function prevedApiExpedici(api: ApiExpedice): Expedition {
     trasaOdkaz: api.trasaOdkaz,
     kapacita: { prihlaseno: api.kapacita.prihlaseno, celkem: api.kapacita.celkem },
     stav: api.stav,
+    ...(api.nahledFotkaId !== undefined ? { nahledFotkaId: api.nahledFotkaId } : {}),
   };
+}
+
+/** Základ BFF z veřejného `VITE_API_BASE_URL` (nikdy secret, stejně jako read vrstva). */
+function apiZaklad(): string {
+  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
+  if (typeof raw !== "string") return "";
+  return raw.trim().replace(/\/+$/, "");
+}
+
+/**
+ * Step 3 — fallback detailu pro deep-link (`GET /api/expeditions/:id`,
+ * veřejné, tvar `{ expedice }` jako přehled Ušlé).
+ * Nikdy nevyhazuje — při chybě / 404 / nevalidním tvaru vrací `null`
+ * (volající param ignoruje + smaže).
+ */
+async function nactiDetailVypravy(id: string): Promise<Expedition | null> {
+  const zaklad: string = apiZaklad();
+  if (zaklad.length === 0) return null;
+  try {
+    const odpoved: Response = await fetch(
+      `${zaklad}${expediceDetailPath(id)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!odpoved.ok) return null;
+    const telo: unknown = await odpoved.json();
+    const expedice: unknown =
+      typeof telo === "object" && telo !== null
+        ? (telo as Record<string, unknown>)["expedice"]
+        : null;
+    if (!jeApiExpedice(expedice)) return null;
+    return prevedApiExpedici(expedice);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -130,6 +172,11 @@ export default function VypravyPage(): JSX.Element {
   const { muzeSpravovatVypravy } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
+  /* Step 3 — deep-link `/vypravy?vyprava=<id>` (kompatibilní se `zobrazeni`).
+     Surový param hlídáme zvlášť: nevalidní tvar se maže, i když po
+     normalizaci dává `null` stejně jako chybějící. */
+  const surovyParamVyprava: string | null = searchParams.get(VYPRAVA_PARAM);
+  const vypravaIdZUrl: string | null = parseVypravaId(surovyParamVyprava);
   // Start: build-time snapshot pro okamžité vykreslení, po mountu se tiše
   // povýší na živá data z BFF (GET /api/expeditions, PUBLIC) — snapshot
   // jinak ukazuje zastaralé počty přihlášených proti detailu z DB.
@@ -251,6 +298,10 @@ export default function VypravyPage(): JSX.Element {
     };
   }, [historieStranka]);
   const [vybrana, setVybrana] = useState<Expedition | null>(null);
+  /* Step 3 — cílí otevřený modal Diskuzi (`true` jen pro příchod z URL:
+     Nástěnka / přímé URL / forward; klik na kartu v seznamu nechává
+     detail odshora jako dosud). */
+  const [cilDiskuze, setCilDiskuze] = useState<boolean>(false);
   const [tvorbaOtevrena, setTvorbaOtevrena] = useState<boolean>(false);
   const [vytvariSe, setVytvariSe] = useState<boolean>(false);
   const [chybaTvorby, setChybaTvorby] = useState<string | null>(null);
@@ -319,6 +370,18 @@ export default function VypravyPage(): JSX.Element {
     probehleFiltrovane.length;
 
   /*
+   * Krok 3 — tečka nepřečtené diskuze na kartách (synchronně všech 3 sekcí).
+   * Jedna sdílená mapa pro probíhající + nadcházející + historii; hook sám
+   * fetchne meta, polluje 30 s a zhasne eventem bez reloadu.
+   */
+  const idsVypravProUnread: string[] = useMemo(() => {
+    const vse: Expedition[] = [...probihajici, ...nadchazejici, ...probehle];
+    return vse.map((e) => e.id);
+  }, [probihajici, nadchazejici, probehle]);
+  const neprecteneMapa: Map<string, boolean> =
+    useUnreadExpeditions(idsVypravProUnread);
+
+  /*
    * Fáze 3 — sjednocená data kalendáře (výpravy + schůzky na dny).
    * Výpravy ze všech stavů (nadcházející i proběhlé se propisují).
    */
@@ -335,6 +398,18 @@ export default function VypravyPage(): JSX.Element {
     () => new Map(expedice.map((e) => [e.id, e])),
     [expedice],
   );
+  /* Step 3 — mount lookup pro deep-link: aktivní seznam + stránkovaná
+     historie (tu `expedicePodleId` pro kalendář nekryje). Výpravu z URL
+     nikdy nehledat ručně v UI — jen tahle mapa + fallback detail. */
+  const vypravaPodleId = useMemo(() => {
+    const mapa = new Map(expedice.map((e) => [e.id, e]));
+    if (historie !== null) {
+      for (const zaznam of historie) {
+        if (!mapa.has(zaznam.id)) mapa.set(zaznam.id, zaznam);
+      }
+    }
+    return mapa;
+  }, [expedice, historie]);
   const schuzkyPodleId = useMemo(
     () => new Map(schuzky.map((s) => [s.id, s])),
     [schuzky],
@@ -503,17 +578,79 @@ export default function VypravyPage(): JSX.Element {
   }
 
   const naAktualizaciStabilni = useCallback(naAktualizaci, []);
-  const naSmazanaStabilni = useCallback((id: string): void => {
-    smazaneRef.current.add(id);
-    setExpedice((prev) => prev.filter((e) => e.id !== id));
-    setHistorie((prev) =>
-      prev === null ? prev : prev.filter((e) => e.id !== id),
-    );
-    setVybrana(null);
-  }, []);
+
+  /* Step 3 — otevření karty zapisuje `?vyprava=<id>` (merge přes
+     `sVypravouVUrl`, `zobrazeni` zůstává); zavření / smazání param maže.
+     URL je sdílená pravda pro modal: přímé URL i zpětná navigace pak
+     fungují bez ručního hledání výpravy. */
+  function otevriVypravu(expedice: Expedition): void {
+    setCilDiskuze(false);
+    setVybrana(expedice);
+    setSearchParams((prev) => sVypravouVUrl(prev, expedice.id));
+  }
+
+  const naSmazanaStabilni = useCallback(
+    (id: string): void => {
+      smazaneRef.current.add(id);
+      setExpedice((prev) => prev.filter((e) => e.id !== id));
+      setHistorie((prev) =>
+        prev === null ? prev : prev.filter((e) => e.id !== id),
+      );
+      setCilDiskuze(false);
+      setVybrana(null);
+      setSearchParams((prev) => sVypravouVUrl(prev, null));
+    },
+    [setSearchParams],
+  );
   const naZavritModalStabilni = useCallback((): void => {
+    setCilDiskuze(false);
     setVybrana(null);
-  }, []);
+    setSearchParams((prev) => sVypravouVUrl(prev, null));
+  }, [setSearchParams]);
+
+  /* Step 3 — směr URL → modal (mount lookup + fallback detail).
+     - `?vyprava=<id>` + modal zavřený / jiný → otevřít + cílit Diskuzi.
+     - Param pryč + modal otevřený → zavřít (zpětná navigace nezavěsí).
+     - Nevalidní / neznámé id → ignorovat + param smazat.
+     - Už otevřeno (`vybrana.id` sedí) → nic (žádná smyčka).
+     `vybrana` schválně mimo deps: každá změna výběru zapisuje i param,
+     takže efekt se probudí přes `surovyParamVyprava` / mapu. */
+  useEffect(() => {
+    if (surovyParamVyprava !== null && vypravaIdZUrl === null) {
+      setSearchParams((prev) => sVypravouVUrl(prev, null));
+      return;
+    }
+    if (vypravaIdZUrl === null) {
+      if (vybrana !== null) {
+        setCilDiskuze(false);
+        setVybrana(null);
+      }
+      return;
+    }
+    if (vybrana !== null && vybrana.id === vypravaIdZUrl) return;
+    const mistni: Expedition | undefined = vypravaPodleId.get(vypravaIdZUrl);
+    if (mistni !== undefined) {
+      setCilDiskuze(true);
+      setVybrana(mistni);
+      return;
+    }
+    let zruseno = false;
+    void (async (): Promise<void> => {
+      const detail: Expedition | null =
+        await nactiDetailVypravy(vypravaIdZUrl);
+      if (zruseno) return;
+      if (detail === null) {
+        setSearchParams((prev) => sVypravouVUrl(prev, null));
+        return;
+      }
+      setCilDiskuze(true);
+      setVybrana(detail);
+    })();
+    return () => {
+      zruseno = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surovyParamVyprava, vypravaIdZUrl, vypravaPodleId, setSearchParams]);
 
   function naOdeslatNovou(
     payload: VytvoritExpediciRequest | UpravitExpediciRequest,
@@ -535,7 +672,10 @@ export default function VypravyPage(): JSX.Element {
         [...prev, nova].sort((a, b) => a.datum.localeCompare(b.datum)),
       );
       setTvorbaOtevrena(false);
+      /* Step 3 — nová výprava se rovnou otevře i v URL (refresh neztratí). */
+      setCilDiskuze(false);
       setVybrana(nova);
+      setSearchParams((prev) => sVypravouVUrl(prev, nova.id));
     })();
   }
 
@@ -659,7 +799,7 @@ export default function VypravyPage(): JSX.Element {
                   </p>
                 </div>
                 <div className="pt-4">
-                  <ExpeditionList expedice={probihajiciFiltrovane} onDetail={setVybrana} />
+                  <ExpeditionList expedice={probihajiciFiltrovane} onDetail={otevriVypravu} neprectene={neprecteneMapa} />
                 </div>
               </section>
             )}
@@ -681,7 +821,7 @@ export default function VypravyPage(): JSX.Element {
                 </p>
               </div>
               <div className="pt-4">
-                <ExpeditionList expedice={nadchazejiciFiltrovane} onDetail={setVybrana} />
+                <ExpeditionList expedice={nadchazejiciFiltrovane} onDetail={otevriVypravu} neprectene={neprecteneMapa} />
               </div>
             </section>
 
@@ -707,7 +847,7 @@ export default function VypravyPage(): JSX.Element {
                 docházku a fotky.
               </p>
               <div className="pt-4">
-                <ExpeditionList expedice={probehleFiltrovane} onDetail={setVybrana} />
+                <ExpeditionList expedice={probehleFiltrovane} onDetail={otevriVypravu} neprectene={neprecteneMapa} />
               </div>
               {!hledaSe && historieZeServeru && historieStranek > 1 && (
                 <nav
@@ -843,7 +983,9 @@ export default function VypravyPage(): JSX.Element {
           onZavrit={() => setDenDetail(null)}
           onDetailVypravy={(expedice) => {
             setDenDetail(null);
+            setCilDiskuze(false);
             setVybrana(expedice);
+            setSearchParams((prev) => sVypravouVUrl(prev, expedice.id));
           }}
           onUpravitSchuzku={(schuzka) => {
             setSchuzkaChyba(null);
@@ -915,6 +1057,8 @@ export default function VypravyPage(): JSX.Element {
           onZavrit={naZavritModalStabilni}
           onAktualizace={naAktualizaciStabilni}
           onSmazana={naSmazanaStabilni}
+          neprectenaDiskuze={neprecteneMapa.get(vybrana.id) === true}
+          startNaDiskuzi={cilDiskuze}
         />
       )}
 

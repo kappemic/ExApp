@@ -12,7 +12,7 @@
  * `kapacita_celkem` vs COUNT řádků v `participants`.
  */
 
-import { count, eq } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import type {
   ApiExpedice,
   ApiUcastnik,
@@ -24,6 +24,7 @@ import type { ExpeditionRow } from "../../drizzle/schema/expeditions";
 import type { Participant } from "../../drizzle/schema/participants";
 import { expeditions } from "../../drizzle/schema/expeditions";
 import { participants } from "../../drizzle/schema/participants";
+import { photos } from "../../drizzle/schema/photos";
 import type { Db } from "./db";
 
 const PLATNE_STAVY: readonly StavVypravy[] = ["volno", "skoro plno", "proběhlá"];
@@ -168,4 +169,75 @@ export async function synchronizujPocet(
     .set({ kapacitaPrihlaseno: pocet })
     .where(eq(expeditions.id, expeditionId));
   return pocet;
+}
+
+/** One photo row used to pick a card cover. Oldest `createdAt` first when unflagged. */
+export interface NahledKandidat {
+  id: string;
+  expeditionId: string;
+  jeNahled: boolean;
+  createdAt: Date;
+}
+
+/**
+ * One cover id per expedition. A flagged row wins; otherwise the oldest
+ * photo (tie-break: id). Empty input → empty map.
+ */
+export function sestavMapuNahledu(
+  radky: readonly NahledKandidat[],
+): ReadonlyMap<string, string> {
+  const nejlepsi = new Map<string, NahledKandidat>();
+  for (const radek of radky) {
+    const stavajici = nejlepsi.get(radek.expeditionId);
+    if (stavajici === undefined || jeLepsiNahled(radek, stavajici)) {
+      nejlepsi.set(radek.expeditionId, radek);
+    }
+  }
+  const mapa = new Map<string, string>();
+  for (const [expeditionId, radek] of nejlepsi) {
+    mapa.set(expeditionId, radek.id);
+  }
+  return mapa;
+}
+
+function jeLepsiNahled(kandidat: NahledKandidat, stavajici: NahledKandidat): boolean {
+  if (kandidat.jeNahled !== stavajici.jeNahled) return kandidat.jeNahled;
+  const rozdilCasu = kandidat.createdAt.getTime() - stavajici.createdAt.getTime();
+  if (rozdilCasu !== 0) return rozdilCasu < 0;
+  return kandidat.id < stavajici.id;
+}
+
+/**
+ * Cover ids for the expedition list in one query (not one query per card).
+ * Omit `expeditionIds` to scan every photo row's id columns only.
+ */
+export async function nactiMapuNahledu(
+  db: Db,
+  expeditionIds?: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (expeditionIds !== undefined && expeditionIds.length === 0) {
+    return new Map();
+  }
+  const sloupce = {
+    id: photos.id,
+    expeditionId: photos.expeditionId,
+    jeNahled: photos.jeNahled,
+    createdAt: photos.createdAt,
+  };
+  const radky =
+    expeditionIds === undefined
+      ? await db.select(sloupce).from(photos)
+      : await db
+          .select(sloupce)
+          .from(photos)
+          .where(inArray(photos.expeditionId, [...expeditionIds]));
+  return sestavMapuNahledu(radky);
+}
+
+/** Attaches `nahledFotkaId` (`null` when the expedition has no photo). */
+export function sNahledFotkaId(
+  expedice: ApiExpedice,
+  mapa: ReadonlyMap<string, string>,
+): ApiExpedice {
+  return { ...expedice, nahledFotkaId: mapa.get(expedice.id) ?? null };
 }

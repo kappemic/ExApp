@@ -7,6 +7,7 @@ import AdminClenovePage from "./pages/AdminClenovePage";
 import AdminKodyPage from "./pages/AdminKodyPage";
 import ChatPage from "./pages/ChatPage";
 import DomuPage from "./pages/DomuPage";
+import FotkyPage from "./pages/FotkyPage";
 import LoginPage from "./pages/LoginPage";
 import ProfilPage from "./pages/ProfilPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -32,6 +33,22 @@ function AppObsah(): JSX.Element {
             }
           />
           <Route path="/zebricky" element={<ZebrickyPage />} />
+          <Route
+            path="/fotky"
+            element={
+              <RequireAuth>
+                <FotkyPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/fotky/:albumId"
+            element={
+              <RequireAuth>
+                <FotkyPage />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/chat"
             element={

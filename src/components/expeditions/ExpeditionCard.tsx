@@ -1,5 +1,8 @@
 import type { JSX } from "react";
 import type { Expedition, ExpeditionStatus } from "../../lib/mock-expeditions";
+import { useNahledFotkaId } from "../../hooks/useNahledFotkaId";
+import NeprectenaTecka from "../chat/NeprectenaTecka";
+import VypravaNahled from "./VypravaNahled";
 import {
   formatDen,
   formatMesicZkratka,
@@ -15,6 +18,8 @@ export interface ExpeditionCardProps {
   expedice: Expedition;
   /** Otevře modal detailu (Fáze 2). Bez handleru je tlačítko skryté. */
   onDetail?: (expedice: Expedition) => void;
+  /** Tečka nepřečtené diskuze (Krok 3) — vedle názvu, mimo tap-target. */
+  neprecteno?: boolean;
 }
 
 const badgeStyly: Record<ExpeditionStatus, string> = {
@@ -67,61 +72,14 @@ function RazitkoData({ isoDatum }: { isoDatum: string }): JSX.Element {
   );
 }
 
-function PlaceholderFoto({ probehla }: { probehla: boolean }): JSX.Element {
-  return (
-    <div
-      aria-hidden="true"
-      className={`relative aspect-[16/9] w-full overflow-hidden border-b-2 border-inkoust ${
-        probehla ? "bg-linka/60" : "bg-linka/70"
-      }`}
-    >
-      {/* linkovaný deníkový podklad */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)",
-        }}
-      />
-      {/* stylizované hory */}
-      <svg
-        viewBox="0 0 400 180"
-        preserveAspectRatio="xMidYMax slice"
-        className={`absolute inset-x-0 bottom-0 h-full w-full text-inkoust ${probehla ? "opacity-50 grayscale" : ""}`}
-      >
-        <path
-          d="M0 150 L90 70 L150 130 L220 45 L300 130 L350 85 L400 130 L400 180 L0 180 Z"
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.35"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M0 165 L110 100 L190 155 L270 90 L340 155 L400 120 L400 180 L0 180 Z"
-          fill="currentColor"
-          fillOpacity="0.16"
-          stroke="currentColor"
-          className="text-smrk"
-          strokeOpacity="0.45"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-        <circle cx="322" cy="38" r="14" fill="none" stroke="currentColor" className="text-jantar" strokeOpacity="0.55" strokeWidth="2.5" />
-      </svg>
-      <span className="absolute bottom-2 right-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70">
-        {probehla ? "archiv · exapp" : "exapp"}
-      </span>
-    </div>
-  );
-}
-
 export default function ExpeditionCard({
   expedice,
   onDetail,
+  neprecteno = false,
 }: ExpeditionCardProps): JSX.Element {
   const probehla = jeProbehla(expedice);
   const probiha = !probehla && jeProbihajici(expedice);
+  const fotkaId = useNahledFotkaId(expedice.id, expedice.nahledFotkaId);
   const bezOmezeni = jeBezOmezeni(expedice);
   const procenta = obsazenostProcenta(expedice);
   const volna = volnaMista(expedice);
@@ -133,19 +91,38 @@ export default function ExpeditionCard({
       }`}
     >
       <div className="relative">
-        <PlaceholderFoto probehla={probehla} />
-        <div className="absolute left-3 top-3">
+        <div
+          className={`relative aspect-[16/9] w-full overflow-hidden border-b-2 border-inkoust ${
+            probehla ? "bg-linka/60" : "bg-linka/70"
+          }`}
+        >
+          <VypravaNahled
+            expeditionId={expedice.id}
+            fotkaId={fotkaId}
+            probehla={probehla}
+            ukazSlunce
+          />
+        </div>
+        <div className="absolute left-3 top-3 z-10">
           <RazitkoData isoDatum={expedice.datum} />
         </div>
-        <div className="absolute right-3 top-3">
+        <div className="absolute right-3 top-3 z-10">
           <StavBadge stav={expedice.stav} probiha={probiha} />
         </div>
       </div>
-
       <div className="flex flex-1 flex-col p-4">
-        <h2 className="break-words text-[1.05rem] font-bold leading-snug tracking-tight">
-          {expedice.nazev}
-        </h2>
+        <div className="flex min-w-0 items-start gap-2">
+          <h2 className="min-w-0 flex-1 break-words text-[1.05rem] font-bold leading-snug tracking-tight">
+            {expedice.nazev}
+          </h2>
+          <span className="flex shrink-0 pt-1.5">
+            <NeprectenaTecka
+              viditelna={neprecteno}
+              velikost="karta"
+              nazevVypravy={expedice.nazev}
+            />
+          </span>
+        </div>
         <p className="mt-1.5 line-clamp-3 break-words text-sm leading-relaxed text-inkoust/80">
           {expedice.popis}
         </p>

@@ -27,7 +27,7 @@
  */
 
 import generatedSnapshot from "../data/expeditions.generated.json";
-import { expediceListUrl } from "../shared/api-types";
+import { expediceListUrl, jeVolitelneNahledFotkaId } from "../shared/api-types";
 import type { ExpediceListQuery, Strankovani } from "../shared/api-types";
 import type { Expedition } from "./mock-expeditions";
 import { mockExpeditions } from "./mock-expeditions";
@@ -94,6 +94,7 @@ function jeExpedice(hodnota: unknown): hodnota is Expedition {
   if (typeof kapacita["prihlaseno"] !== "number" || !Number.isInteger(kapacita["prihlaseno"])) return false;
   if (typeof kapacita["celkem"] !== "number" || !Number.isInteger(kapacita["celkem"])) return false;
   if ((kapacita["prihlaseno"] as number) < 0 || (kapacita["celkem"] as number) < 0) return false;
+  if (!jeVolitelneNahledFotkaId(hodnota["nahledFotkaId"])) return false;
   return true;
 }
 

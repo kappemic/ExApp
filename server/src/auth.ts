@@ -227,6 +227,38 @@ export async function vyzadujPrihlaseni(
 }
 
 /**
+ * Volitelné přihlášení pro PUBLIC routy s personalizací (Step 1 meta).
+ * Vrátí session uživatele, nebo null pro anonyma — NIKDY neposílá 401.
+ * Token i trio čte stejně jako `vyzadujPrihlaseni` (čerstvě z DB, nikdy z tokenu).
+ */
+export async function ctiVolitelnehoUzivatele(
+  req: Request,
+): Promise<SessionUzivatel | null> {
+  const token = ctiTokenZRequestu(req);
+  if (token === null) return null;
+  const userId = overToken(token);
+  if (userId === null) return null;
+  let radek: DbUserRow | null;
+  try {
+    radek = await najdiUzivatelePodleId(userId);
+  } catch {
+    return null;
+  }
+  if (radek === null) return null;
+  const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
+  const trio = ctiTrioZRadku(radek);
+  return {
+    id: radek.id,
+    email: radek.email,
+    role,
+    authRole: trio.isAdmin ? "ADMIN" : "USER",
+    clenstvi: trio.clenstvi,
+    funkce: trio.funkce,
+    isAdmin: trio.isAdmin,
+  };
+}
+
+/**
  * Middleware: vyžaduje session s čerstvým `is_admin = TRUE` z DB.
  * Bez session → 401 NEPRIHLASEN, přihlášený bez admin příznaku → 403 ZAKAZANO.
  */

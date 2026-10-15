@@ -24,6 +24,23 @@ export interface Expedition {
   trasaOdkaz: string;
   kapacita: ExpeditionCapacity;
   stav: ExpeditionStatus;
+  /**
+   * Stav párování z detailu výpravy (Krok 16 fix, aditivně optional).
+   * true = výprava má zapsané km (Strava i ručně) — vidí i neúčastník.
+   * undefined = starší payload bez detailu (bere se jako nepřipojeno).
+   */
+  jeSparovano?: boolean;
+  /**
+   * Id připojené Strava aktivity (Krok 16 fix, aditivně optional).
+   * null/undefined = bez Strava id (ruční zápis, nebo nespárováno).
+   */
+  stravaActivityId?: string | null;
+  /**
+   * Cover photo id from the list payload. `null` = no photo (keep the
+   * diary illustration). `undefined` = older payload; the card may
+   * resolve it itself without blocking the page.
+   */
+  nahledFotkaId?: string | null;
 }
 
 export const mockExpeditions: Expedition[] = [

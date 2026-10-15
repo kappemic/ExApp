@@ -10,11 +10,14 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { clenove } from "../../drizzle/schema/clenove";
+import { diskuzePrecteni } from "../../drizzle/schema/diskuze_precteni";
+import { konverzacePrecteni } from "../../drizzle/schema/konverzace_precteni";
 import { expeditions } from "../../drizzle/schema/expeditions";
 import { participants } from "../../drizzle/schema/participants";
 import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
+import { zpravy } from "../../drizzle/schema/zpravy";
 
 const schema = {
   users,
@@ -23,6 +26,9 @@ const schema = {
   clenove,
   participants,
   stravaTokens,
+  zpravy,
+  diskuzePrecteni,
+  konverzacePrecteni,
 };
 
 export type Db = NeonHttpDatabase<typeof schema>;

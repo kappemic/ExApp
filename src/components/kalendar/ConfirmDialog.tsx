@@ -5,6 +5,7 @@ import {
   type JSX,
   type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Rozsah smazání opakované schůzky — KROK 3 (výjimka pro jeden výskyt).
@@ -34,6 +35,11 @@ export interface ConfirmDialogProps {
   radaPopisek?: string;
   /** Prvek, kam se po zavření vrátí fokus (typicky tlačítko, které dialog otevřelo). */
   navratElement?: HTMLElement | null;
+  /**
+   * Photo lightboxes portal to body at z-[100]; default confirm stays at z-[60].
+   * Use `nad-lightboxem` when confirm opens while a lightbox is still mounted (portaled at z-[200]).
+   */
+  vrstva?: "normal" | "nad-lightboxem";
   onPotvrdit: () => void;
   onZrusit: () => void;
 }
@@ -124,7 +130,7 @@ export default function ConfirmDialog(
     };
   }, [otevreno]);
 
-  if (!otevreno) return null;
+  if (!otevreno || typeof document === "undefined") return null;
 
   const nabidnoutRozsah: boolean =
     props.rozsah !== null &&
@@ -136,9 +142,15 @@ export default function ConfirmDialog(
     if (udalost.target === udalost.currentTarget && !probiha) onZrusit();
   }
 
-  return (
+  const vrstvaTrida =
+    props.vrstva === "nad-lightboxem"
+      ? "z-[200]"
+      : "z-[60]";
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-inkoust/60 p-4 sm:items-center"
+      data-confirm-dialog-portal=""
+      className={`fixed inset-0 ${vrstvaTrida} flex items-end justify-center bg-inkoust/60 p-4 sm:items-center`}
       onMouseDown={naKlikBackdropu}
     >
       <div
@@ -259,6 +271,7 @@ export default function ConfirmDialog(
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
