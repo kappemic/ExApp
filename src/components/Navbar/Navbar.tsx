@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "../chat/NeprectenaTecka";
 import {
   popisekNeprectenych,
@@ -31,16 +32,6 @@ function ZakladIkony({
     >
       {children}
     </svg>
-  );
-}
-
-function IkonaDomu(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M3.5 10.5 12 3.5l8.5 7" />
-      <path d="M5.5 9.5V20h13V9.5" />
-      <path d="M9.5 20v-5.5h5V20" />
-    </ZakladIkony>
   );
 }
 
@@ -124,7 +115,6 @@ type PolozkaNavigace = {
 };
 
 const DESKTOP_POLOZKY: PolozkaNavigace[] = [
-  { to: "/", popisek: "Domů", end: true, Ikona: IkonaDomu },
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
   { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
@@ -133,18 +123,18 @@ const DESKTOP_POLOZKY: PolozkaNavigace[] = [
 ];
 
 /**
- * Spodní lišta (mobil, běžný člen): přesně 5 položek — Chat záměrně chybí.
- * Chat je v `AppHeader` jako ikona (`lg:hidden`, 44px target + badge).
- * Důvod: šest a více ikon na úzkém displeji zmenšuje popisky a tap-targety;
- * nepřečtené diskuze sdílí stejný `pocetNeprectenych` jako desktop TopBar.
- * Admin položky (Kódy, Členové) se přidávají až v `MobileBar` — mimo tento seznam.
+ * Phone bottom bar: Výpravy, Fotky, Žebříčky.
+ * Chat is intentionally absent from this list — it lives in `AppHeader`
+ * (`lg:hidden`, 44px target + badge) and shares `pocetNeprectenych` with TopBar.
+ * Profil is also absent here: on the phone it is an avatar at the top right.
+ * Domů is the logged-out landing only, so signed-in nav does not link to it.
+ * Kódy are added in MobileBar / TopBar for admins.
+ * Členové (`ADMIN_POLOZKA`) stay in both bars for every signed-in member.
  */
 const MOBIL_POLOZKY: PolozkaNavigace[] = [
-  { to: "/", popisek: "Domů", end: true, Ikona: IkonaDomu },
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
   { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
-  { to: "/profil", popisek: "Profil", Ikona: IkonaProfil },
 ];
 
 const ADMIN_POLOZKA: PolozkaNavigace = {
@@ -215,8 +205,7 @@ function ChatTecka({ popisek }: { popisek: string }): JSX.Element {
 }
 
 /**
- * Jediný zdroj pro viditelnost admin položek v navigaci.
- * Jen role ADMIN ze session (useAuth).
+ * Kódy jen pro admina. Členové jsou v navigaci pro každého přihlášeného.
  */
 function useVidetAdmin(): boolean {
   const { isAdmin } = useAuth();
@@ -263,7 +252,8 @@ export function TopBar({
   const videtAdmin = useVidetAdmin();
   const polozky: PolozkaNavigace[] = [
     ...DESKTOP_POLOZKY,
-    ...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : []),
+    ADMIN_POLOZKA,
+    ...(videtAdmin ? [KODY_POLOZKA] : []),
   ];
   const maNeprectene: boolean = pocetNeprectenych > 0;
 
@@ -305,7 +295,8 @@ export function MobileBar(): JSX.Element {
   const videtAdmin = useVidetAdmin();
   const polozky: PolozkaNavigace[] = [
     ...MOBIL_POLOZKY,
-    ...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : []),
+    ADMIN_POLOZKA,
+    ...(videtAdmin ? [KODY_POLOZKA] : []),
   ];
 
   return (
@@ -354,8 +345,7 @@ function AuthCluster(): JSX.Element | null {
     return null;
   }
 
-  // Jediná interaktivní cesta na /profil vede přes položku „Profil" v menu
-  // (TopBar / MobileBar s IkonaProfil). Hlavička ukazuje jen Odhlásit — žádné jméno/čip.
+  // Desktop reaches /profil from TopBar. On the phone the header avatar does.
   return (
     <button
       type="button"
@@ -380,9 +370,9 @@ export function AppHeader({
     <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
-          to="/"
+          to="/vypravy"
           className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
-          aria-label="ExApp – domů"
+          aria-label="ExApp – výpravy"
         >
           <span
             aria-hidden="true"
@@ -415,6 +405,22 @@ export function AppHeader({
                 <IkonaChat />
                 {maNeprectene && <ChatTecka popisek="Chat" />}
               </span>
+            </NavLink>
+          )}
+          {user !== null && (
+            <NavLink
+              to="/profil"
+              aria-label="Profil"
+              className={({ isActive }: { isActive: boolean }) =>
+                `flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:hidden [touch-action:manipulation] ${
+                  isActive ? "ring-2 ring-smrk ring-offset-2 ring-offset-papir" : ""
+                }`
+              }
+            >
+              <AvatarKruh
+                jmeno={`${user.jmeno} ${user.prijmeni ?? ""}`.trim()}
+                url={user.avatarUrl}
+              />
             </NavLink>
           )}
         </div>

@@ -9,6 +9,9 @@ import { FOTKA_POPIS_MAX_DELKA } from "./validace";
 export const FOTKA_MAX_BAJTU = 8 * 1024 * 1024;
 /** Room for multipart headers around the 8 MB file. */
 export const FOTKA_TELO_MAX_BAJTU = FOTKA_MAX_BAJTU + 64 * 1024;
+/** Profile avatar file cap. Multipart overhead sits in the body cap. */
+export const AVATAR_MAX_BAJTU = 5 * 1024 * 1024;
+export const AVATAR_TELO_MAX_BAJTU = AVATAR_MAX_BAJTU + 64 * 1024;
 
 export const FOTKY_NEJSOU_NASTAVENE_ZPRAVA =
   "Úložiště fotek není nastavené. Doplň R2 klíče v .env.local a restartuj server." as const;
@@ -121,6 +124,34 @@ export function klicZVerejneUrl(verejnaUrl: string, publicBaseUrl: string): stri
   ) {
     return null;
   }
+  if (klic.includes("..")) return null;
+  return klic;
+}
+
+/** Avatar object key `avatary/<userId>/<uuid>.<ext>`. Null when ids are not uuids. */
+export function klicAvataru(
+  userId: string,
+  pripona: PriponaFotky,
+  id: string = randomUUID(),
+): string | null {
+  if (!UUID_RE.test(userId) || !UUID_RE.test(id)) return null;
+  return `avatary/${userId}/${id}.${pripona}`;
+}
+
+/** Our avatar key for this user, or null for a foreign / legacy URL. */
+export function klicAvataruZVerejneUrl(
+  verejnaUrl: string,
+  publicBaseUrl: string,
+  userId: string,
+): string | null {
+  if (!UUID_RE.test(userId)) return null;
+  const zaklad = publicBaseUrl.replace(/\/+$/, "");
+  const prefix = `${zaklad}/`;
+  if (!verejnaUrl.startsWith(prefix)) return null;
+  const klic = verejnaUrl.slice(prefix.length);
+  const ocekavany = `avatary/${userId}/`;
+  if (!klic.startsWith(ocekavany)) return null;
+  if (!/^avatary\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(klic)) return null;
   if (klic.includes("..")) return null;
   return klic;
 }

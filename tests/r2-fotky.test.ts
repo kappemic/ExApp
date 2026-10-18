@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   ctiR2Nastaveni,
   klicFotky,
+  klicAvataru,
+  klicAvataruZVerejneUrl,
   contentTypeZKlice,
   klicZVerejneUrl,
   rozpoznajObrazek,
@@ -77,6 +79,15 @@ describe("klíč a veřejná adresa", () => {
 
   it("odmítne nebezpečné id", () => {
     expect(klicFotky("../etc", "jpg", UUID)).toBeNull();
+  });
+
+  it("skládá klíč avatara jen z uuid uživatele", () => {
+    const klic = klicAvataru(UUID, "jpg", UUID);
+    expect(klic).toBe(`avatary/${UUID}/${UUID}.jpg`);
+    expect(klicAvataru("../etc", "jpg", UUID)).toBeNull();
+    const url = verejnaUrlFotky("https://pub-example.r2.dev", klic ?? "");
+    expect(klicAvataruZVerejneUrl(url, "https://pub-example.r2.dev", UUID)).toBe(klic);
+    expect(klicAvataruZVerejneUrl(url, "https://pub-example.r2.dev", "00000000-0000-4000-8000-000000000000")).toBeNull();
   });
 
   it("složí veřejnou URL a pozná náš objekt", () => {

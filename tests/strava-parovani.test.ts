@@ -245,6 +245,18 @@ describe("rozhodniParovani (stav + duplicita → 409, bez párování → ok)", 
     ).toBe(true);
   });
 
+  it("neuzavřená po termínu smí párovat", () => {
+    expect(
+      rozhodniParovani({
+        stav: "volno",
+        datum: "2026-10-13",
+        datumDo: "2026-10-15",
+        expediceSparovana: false,
+        aktivitaUzSparovana: false,
+      }).ok,
+    ).toBe(true);
+  });
+
   it("ne-proběhlá → 409 VYPRAVA_UZAVRENA", () => {
     const vysledek = rozhodniParovani({
       stav: "volno",

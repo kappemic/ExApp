@@ -16,6 +16,8 @@ import {
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
 import type { UlozitProfilVstup } from "../../lib/admin-clenove";
+import { useAuth } from "../../hooks/useAuth";
+import ConfirmDialog from "../kalendar/ConfirmDialog";
 import RoleBadge from "./RoleBadge";
 
 interface ClenDetailModalProps {
@@ -31,6 +33,11 @@ interface ClenDetailModalProps {
     id: string,
     vstup: UlozitProfilVstup,
   ) => Promise<string | null>;
+  /**
+   * Smazání účtu přes DELETE /api/users/:id (řeší AdminClenovePage).
+   * Vrací českou chybu, nebo `null` při úspěchu.
+   */
+  onOdstranit?: (id: string) => Promise<string | null>;
 }
 
 const FOCUSOVATELNE =
@@ -67,16 +74,27 @@ export default function ClenDetailModal({
   clen,
   onZavrit,
   onUlozitProfil,
+  onOdstranit,
 }: ClenDetailModalProps): JSX.Element | null {
+  const { user } = useAuth();
   const nadpisId: string = useId();
   const popisId: string = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const krizekRef = useRef<HTMLButtonElement>(null);
+  const odstranitRef = useRef<HTMLButtonElement>(null);
   const [rezim, setRezim] = useState<Rezim>("detail");
+  const [potvrzeni, setPotvrzeni] = useState<boolean>(false);
+  const [mazu, setMazu] = useState<boolean>(false);
+  const [chybaMazani, setChybaMazani] = useState<string | null>(null);
+  const potvrzeniRef = useRef<boolean>(false);
+  potvrzeniRef.current = potvrzeni;
   const clenId: string | null = clen === null ? null : clen.id;
 
   useEffect(() => {
     setRezim("detail");
+    setPotvrzeni(false);
+    setMazu(false);
+    setChybaMazani(null);
   }, [clenId]);
 
   useEffect(() => {
@@ -91,6 +109,7 @@ export default function ClenDetailModal({
 
     function naStiskKlavesy(udalost: KeyboardEvent): void {
       if (udalost.key === "Escape") {
+        if (potvrzeniRef.current) return;
         udalost.stopPropagation();
         onZavrit();
         return;
@@ -138,6 +157,7 @@ export default function ClenDetailModal({
   const skolaText: string = clen.skola.trim();
   const tridaText: string = clen.trida.trim();
   const discordText: string = (clen.discordNick ?? "").trim();
+  const telefonText: string = (clen.telefon ?? "").trim();
   const zarazeni: string =
     profil.funkce === "rada"
       ? "Rada"
@@ -147,9 +167,25 @@ export default function ClenDetailModal({
   const upravy: boolean = rezim === "upravy" && onUlozitProfil !== undefined;
 
   function naKlikBackdropu(udalost: MouseEvent<HTMLDivElement>): void {
+    if (potvrzeniRef.current) return;
     if (udalost.target === udalost.currentTarget) {
       onZavrit();
     }
+  }
+
+  const vlastniUcet: boolean = user !== null && user.id === clen.id;
+
+  async function naPotvrditSmazani(): Promise<void> {
+    if (onOdstranit === undefined || mazu) return;
+    setMazu(true);
+    setChybaMazani(null);
+    const chyba: string | null = await onOdstranit(clen.id);
+    setMazu(false);
+    if (chyba !== null) {
+      setChybaMazani(chyba);
+      return;
+    }
+    setPotvrzeni(false);
   }
 
   return (
@@ -232,6 +268,27 @@ export default function ClenDetailModal({
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
                 <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Telefon
+                </dt>
+                <dd
+                  className={
+                    telefonText.length > 0 ? "font-semibold" : "text-inkoust/70"
+                  }
+                >
+                  {telefonText.length > 0 ? (
+                    <a
+                      href={`tel:${telefonText}`}
+                      className="text-smrk underline underline-offset-2"
+                    >
+                      {telefonText}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-24 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
                   Discord
                 </dt>
                 <dd
@@ -290,40 +347,66 @@ export default function ClenDetailModal({
               </div>
             </dl>
 
-            <div className="mt-5 flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={onZavrit}
-                className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
-              >
-                Zavřít
-              </button>
-              <button
-                type="button"
-                disabled={onUlozitProfil === undefined}
-                onClick={
-                  onUlozitProfil === undefined
-                    ? undefined
-                    : () => setRezim("upravy")
-                }
-                title={
-                  onUlozitProfil === undefined
-                    ? "Editace není k dispozici"
-                    : "Upravit profil člena"
-                }
-                className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors enabled:motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
-              >
-                Upravit
-              </button>
+            <div className="mt-5 flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:items-center sm:justify-between">
+              {onOdstranit !== undefined && vlastniUcet ? (
+                <p className="text-sm text-inkoust/70">
+                  Vlastní účet z administrace smazat nejde.
+                </p>
+              ) : onOdstranit !== undefined ? (
+                <button
+                  ref={odstranitRef}
+                  type="button"
+                  onClick={() => {
+                    setChybaMazani(null);
+                    setPotvrzeni(true);
+                  }}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-red-800 bg-white/70 px-5 font-bold text-red-900 motion-safe:transition-colors motion-safe:hover:bg-red-50 [touch-action:manipulation]"
+                >
+                  Odstranit účet
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={onZavrit}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+                >
+                  Zavřít
+                </button>
+                {onUlozitProfil !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => setRezim("upravy")}
+                    title="Upravit profil člena"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk [touch-action:manipulation]"
+                  >
+                    Upravit
+                  </button>
+                )}
+              </div>
             </div>
-            {onUlozitProfil === undefined && (
-              <p className="mt-2 text-center text-xs text-inkoust/60 sm:text-right">
-                Editace není k dispozici.
-              </p>
-            )}
           </>
         )}
       </div>
+      <ConfirmDialog
+        otevreno={potvrzeni}
+        nadpis="Odstranit účet"
+        popis={`Opravdu odstranit účet ${clen.jmeno}? Přihlášení zmizí a nejde to vrátit.`}
+        potvrditPopisek="Odstranit účet"
+        probiha={mazu}
+        chyba={chybaMazani}
+        navratElement={odstranitRef.current}
+        onPotvrdit={() => {
+          void naPotvrditSmazani();
+        }}
+        onZrusit={() => {
+          if (mazu) return;
+          setPotvrzeni(false);
+          setChybaMazani(null);
+        }}
+      />
     </div>
   );
 }

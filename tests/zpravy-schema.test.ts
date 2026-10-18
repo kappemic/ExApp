@@ -70,11 +70,20 @@ describe("zpravy — tvar tabulky (Fáze 5 diskuze)", () => {
     expect(id?.notNull).toBe(true);
   });
 
-  it("expedice_id je TEXT NOT NULL (FK → expeditions.id v migraci)", () => {
+  it("expedice_id je TEXT NULLABLE (Step 1: NULL = globál dulezite/general)", () => {
     const sloupec = najdiSloupec("expedice_id");
     expect(sloupec).toBeDefined();
     expect(sloupec?.columnType).toBe("PgText");
-    expect(sloupec?.notNull).toBe(true);
+    expect(sloupec?.notNull).toBe(false);
+  });
+
+  it("kanal + autor_jmeno existují (Step 1, migrace 0011)", () => {
+    const kanal = najdiSloupec("kanal");
+    const autorJmeno = najdiSloupec("autor_jmeno");
+    expect(kanal?.columnType).toBe("PgText");
+    expect(kanal?.notNull).toBe(true);
+    expect(autorJmeno?.columnType).toBe("PgText");
+    expect(autorJmeno?.notNull).toBe(true);
   });
 
   it("autor_id je UUID (FK → users.id v migraci)", () => {

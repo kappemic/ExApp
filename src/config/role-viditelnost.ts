@@ -4,7 +4,8 @@
  * Čistá UI logika bez DB/HTTP. Zdroj pravdy ROLE_DOC.md §5 + dodatek 3D §5:
  * - Výpravy čtou všichni; spravují je dual-guard (`isAdmin` NEBO `smiNaVypravy`).
  * - Tlačítko „Upravit" kopíruje právo spravovat výpravy.
- * - Fotky + členové/kódy jen `isAdmin` (aktivní člen bez admina nestačí).
+ * - Fotky jen `isAdmin`. Registrační kódy a úprava členů jen `isAdmin`.
+ * - Seznam členů (kontakty) vidí každá přihlášená role.
  * - Statistiky, přihlásit/odhlásit a odpojit vlastní Stravu smí každá
  *   přihlášená role (běžný člen, aktivní člen i vedoucí/admin).
  *
@@ -24,7 +25,11 @@ export interface ViditelnostRole {
   vidiUpravit: boolean;
   /** Nahrávat/mazat fotky k výpravě (jen ADMIN). */
   muzeSpravovatFotky: boolean;
-  /** Spravovat členy a generovat registrační kódy (jen ADMIN). */
+  /** Číst adresář členů (každý přihlášený). */
+  vidiSeznamClenu: boolean;
+  /** Upravovat a mazat členy (jen ADMIN). */
+  muzeUpravovatCleny: boolean;
+  /** Generovat registrační kódy (jen ADMIN). */
   muzeSpravovatClenyKody: boolean;
   /** Čtení statistik a leaderboardu. */
   vidiStatistiky: boolean;
@@ -46,6 +51,8 @@ export function viditelnostProProfil(profil: ClenskyProfil): ViditelnostRole {
     muzeSpravovatVypravy: spravceVyprav,
     vidiUpravit: spravceVyprav,
     muzeSpravovatFotky: admin,
+    vidiSeznamClenu: true,
+    muzeUpravovatCleny: admin,
     muzeSpravovatClenyKody: admin,
     vidiStatistiky: true,
     muzeSePrihlasitNaVypravu: true,

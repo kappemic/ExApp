@@ -30,6 +30,15 @@ export interface ProfilProJmeno {
   prijmeni: string;
   discordNick: string | null;
   email: string;
+  /** Živý avatar z `users.avatar_url`. Chybí = bez fotky. */
+  avatarUrl?: string | null;
+}
+
+/** Jen veřejná https URL. Cokoli jiného (prázdné, http, data) → null. */
+export function verejnyAvatarUrl(hodnota: string | null | undefined): string | null {
+  if (typeof hodnota !== "string") return null;
+  const cisty = hodnota.trim();
+  return cisty.startsWith("https://") ? cisty : null;
 }
 
 /** Vstup pro guard zápisu (3D trio čtené čerstvě z DB, nikdy z tokenu). */
@@ -178,6 +187,7 @@ export function toApiZprava(
     expeditionId: (expediceId as string | null) ?? null,
     autorId: radek.autorId ?? null,
     authorName: slozAuthorName(autor, snapshot),
+    authorAvatarUrl: verejnyAvatarUrl(autor?.avatarUrl),
     channel,
     text: radek.text,
     createdAt: radek.createdAt.toISOString(),

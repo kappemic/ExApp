@@ -2,7 +2,8 @@
  * src/lib/admin-clenove.ts — klient správy členů nad živými users.
  *
  * Tenký BFF fetch-first: `VITE_API_BASE_URL` + kontrakt
- * `src/shared/api-types.ts` (§11 GET /api/users, §12 PATCH /api/users/:id).
+ * `src/shared/api-types.ts` (§11 GET /api/users, §12 PATCH /api/users/:id,
+ * DELETE /api/users/:id).
  * DB `clenove` je prázdná — zdrojem je `users` (5 reálných).
  * `role` je jedna hodnota (users.role CHECK), ne pole.
  * Žádný secret v klientovi (jen `VITE_*`). Chyby česky, nikdy nevyhazuje
@@ -22,6 +23,7 @@ import {
   type ApiErrorCode,
   type UserListItem,
   type UsersListResponse,
+  type SmazatUzivateleResponse,
   type UpravitUzivateleResponse,
 } from "../shared/api-types";
 
@@ -80,6 +82,18 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   if (discordNick !== null && typeof discordNick !== "string") {
     return false;
   }
+  const telefon: unknown = kandidat["telefon"];
+  if (telefon !== null && typeof telefon !== "string") {
+    return false;
+  }
+  const avatarUrl: unknown = kandidat["avatarUrl"];
+  if (
+    avatarUrl !== undefined &&
+    avatarUrl !== null &&
+    typeof avatarUrl !== "string"
+  ) {
+    return false;
+  }
   // 3D trio je v kontraktu aditivně optional (fallback mirror ze starého role).
   const clenstvi: unknown = kandidat["clenstvi"];
   if (
@@ -121,7 +135,7 @@ function jeUpravitUzivateleResponse(
 }
 
 /**
- * Seznam uživatelů pro správu členů (jen ADMIN, GET /api/users).
+ * Seznam uživatelů pro adresář členů (přihlášený USER i ADMIN, GET /api/users).
  * Bez backendu / při pádu sítě česká offline hláška.
  */
 export async function nactiCleny(): Promise<ClenoveVysledek<UserListItem[]>> {
@@ -203,6 +217,41 @@ export async function ulozProfilClena(
   if (vstup.skola !== undefined) telo["skola"] = vstup.skola;
   if (vstup.trida !== undefined) telo["trida"] = vstup.trida;
   return patchUzivatele(id, telo);
+}
+
+function jeSmazatUzivateleResponse(
+  telo: unknown,
+): telo is SmazatUzivateleResponse {
+  if (typeof telo !== "object" || telo === null) return false;
+  const kandidat = telo as Record<string, unknown>;
+  return kandidat["ok"] === true;
+}
+
+/**
+ * Smazání přihlašovacího účtu (jen ADMIN, DELETE /api/users/:id).
+ * Vlastní účet server odmítne (403). Úspěch jen při 200 a `{ ok: true }`.
+ */
+export async function smazClena(
+  id: string,
+): Promise<ClenoveVysledek<SmazatUzivateleResponse>> {
+  const zaklad: string = apiBase();
+  if (zaklad.length === 0) {
+    return { ok: false, chyba: "Bez připojení účet smazat nejde. Zkus to později." };
+  }
+  try {
+    const odpoved: Response = await fetch(`${zaklad}${userDetailPath(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    const telo: unknown = await ctiTelo(odpoved);
+    if (odpoved.status === 200 && jeSmazatUzivateleResponse(telo)) {
+      return { ok: true, data: telo };
+    }
+    return chybaZTela(telo);
+  } catch {
+    return { ok: false, chyba: "Bez připojení účet smazat nejde. Zkus to později." };
+  }
 }
 
 /**

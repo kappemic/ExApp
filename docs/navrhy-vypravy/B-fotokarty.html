@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Výpravy — B · Fotokronika (prototyp)</title>
+<style>
+  :root{
+    --les:#101511; --papir:#F4EEE1; --smrk:#2E5233; --smrk-hlub:#1B3320;
+    --jantar:#E8B44A; --jantar-tm:#7A5A12; --mlha:#8AA88B; --karta:#1A211C;
+    --cara:#2C3A2E; --focus:#E8B44A;
+  }
+  :root{
+    --ease-out:cubic-bezier(0.23,1,0.32,1);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--les);color:var(--papir);font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;line-height:1.55;padding-bottom:env(safe-area-inset-bottom)}
+  .btn,.filtr,.prepinac button,.snap,.polozka{transition:transform 160ms var(--ease-out),border-color 160ms var(--ease-out)}
+  .btn:active,.filtr:active,.snap:active,.polozka:active{transform:scale(0.97)}
+  @media (hover:hover) and (pointer:fine){
+    .snap:hover{border-color:var(--jantar)}
+  }
+  .truncate{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;min-width:0}
+  .break-words{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  /* worst-case sekce */
+  .wc{margin-top:28px;border:2px dashed var(--jantar);border-radius:16px;background:#0B0F0C;overflow:hidden}
+  .wc-hlavicka{padding:14px 18px;border-bottom:1px solid var(--cara);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+  .wc-hlavicka h2{margin:0;font-size:1.05rem}
+  .wc-hlavicka p{margin:2px 0 0;font-size:.82rem;color:var(--mlha);width:100%}
+  .wc-toggle{background:var(--jantar);color:#101511;border:0;border-radius:10px;min-height:44px;min-width:44px;padding:8px 18px;font:inherit;font-weight:800;cursor:pointer}
+  .wc-telo{padding:6px 18px 20px}
+  .wc-pripad{border-top:1px solid var(--cara);padding:14px 0}
+  .wc-pripad:first-of-type{border-top:0}
+  .wc-pripad h3{margin:0 0 8px;font-size:.95rem}
+  .wc-stitek{display:inline-block;font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:var(--jantar);color:#101511;border-radius:999px;padding:3px 10px;margin-bottom:8px}
+  .wc-demo{border:1px solid var(--cara);border-radius:12px;padding:14px;background:var(--karta)}
+  .wc-demo h3{margin:0 0 4px;font-size:1rem}
+  .dlouhy-popis{max-height:132px;overflow:auto;border:1px solid var(--cara);border-radius:8px;padding:10px;background:#0B0F0C;font-size:.88rem;color:var(--papir)}
+  .statistiky{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .statistiky span{font-size:.8rem;font-weight:800;border:1.5px solid var(--jantar);color:var(--jantar);border-radius:999px;padding:2px 10px}
+  .mini-foto{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+  .mini-foto i{display:block;aspect-ratio:4/3;border:1px solid var(--cara);border-radius:8px;background:linear-gradient(160deg,#3a3a32,#0B0F0C)}
+  .role-cty{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:center}
+  .role-cty .kdo{font-size:.82rem;font-weight:800;width:100%;color:var(--mlha)}
+  .btn[disabled]{opacity:.55;cursor:not-allowed}
+  .btn.admin{background:var(--papir);color:#101511}
+  .wc input{font-size:16px;min-height:44px;border:2px solid var(--cara);border-radius:10px;padding:8px 12px;width:100%;font-family:inherit;background:#0B0F0C;color:var(--papir)}
+  .empty-cta{border:2px dashed var(--cara);border-radius:12px;padding:20px;text-align:center;background:#0B0F0C}
+  footer{margin-top:26px;color:var(--mlha);font-size:.82rem}
+  :focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .obal{max-width:1120px;margin:0 auto;padding:0 16px 64px}
+  header.top{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:22px 0 14px;border-bottom:1px solid var(--cara)}
+  .brand{display:flex;gap:12px;align-items:center}
+  .cockarda{width:46px;height:46px;border-radius:50%;background:var(--jantar);color:#101511;display:grid;place-items:center;font-weight:900;flex:none}
+  h1{margin:0;font-size:1.65rem;letter-spacing:.01em;line-height:1.15}
+  .pod{margin:2px 0 0;color:var(--mlha);font-size:.92rem}
+  .prepinac{display:inline-flex;background:#0B0F0C;border:1px solid var(--cara);border-radius:999px;padding:3px;gap:2px}
+  .prepinac button{border:0;background:transparent;color:var(--papir);font:inherit;font-weight:700;font-size:.9rem;padding:9px 20px;min-height:44px;border-radius:999px;cursor:pointer}
+  .prepinac button[aria-pressed="true"]{background:var(--papir);color:var(--les)}
+  /* feature fotka */
+  .feature{margin:18px 0 6px;border-radius:16px;overflow:hidden;border:1px solid var(--cara);background:linear-gradient(135deg,#234434,#101511 60%),radial-gradient(circle at 80% 15%,#E8B44A33,transparent 45%);position:relative;min-height:280px;display:flex;align-items:flex-end}
+  .feature svg{position:absolute;inset:auto 0 0 0;width:100%;height:70%;opacity:.9}
+  .feature .popis{position:relative;padding:22px;max-width:640px}
+  .odznak{display:inline-block;background:var(--jantar);color:#101511;font-weight:800;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:4px 12px;margin-bottom:10px}
+  .feature h2{margin:0 0 6px;font-size:clamp(1.5rem,4vw,2.3rem);line-height:1.12}
+  .feature p{margin:0 0 12px;color:#EDE6D3}
+  .feature .radka{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:.92rem}
+  .btn{border:0;border-radius:10px;background:var(--jantar);color:#101511;font:inherit;font-weight:800;padding:11px 20px;min-height:44px;cursor:pointer}
+  .btn.duch{background:transparent;color:var(--papir);border:2px solid var(--papir)}
+  .kap{font-weight:700;color:var(--papir)}
+  .unread{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700;color:var(--jantar)}
+  .unread::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--jantar)}
+  /* snap pás */
+  h2.sekce{font-size:1.05rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mlha);margin:26px 0 10px}
+  .pas{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(220px,280px);gap:12px;overflow-x:auto;padding:4px 2px 14px;scroll-snap-type:x mandatory}
+  .snap{scroll-snap-align:start;background:var(--karta);border:1px solid var(--cara);border-radius:14px;overflow:hidden;text-align:left;color:var(--papir);font:inherit;cursor:pointer;padding:0;display:flex;flex-direction:column}
+  .snap .foto{height:130px;background:linear-gradient(160deg,#2E5233,#101511);position:relative}
+  .snap .foto.zluta{background:linear-gradient(160deg,#6b5518,#101511)}
+  .snap .foto.zelena{background:linear-gradient(160deg,#2E5233,#0B0F0C)}
+  .snap .foto svg{position:absolute;inset:auto 0 0 0;width:100%;height:80px}
+  .snap .tx{padding:12px 14px}
+  .snap h3{margin:0 0 4px;font-size:1rem;line-height:1.3}
+  .snap p{margin:0;font-size:.85rem;color:var(--mlha);overflow-wrap:anywhere}
+  .snap .spodek{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:.82rem;font-weight:700}
+  .tecku{width:10px;height:10px;border-radius:50%;background:var(--jantar);display:inline-block;margin-right:6px;vertical-align:baseline}
+  /* proběhlé galerie */
+  .galerie{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:12px}
+  .polozka{background:#0B0F0C;border:1px solid var(--cara);border-radius:14px;overflow:hidden;color:var(--papir);font:inherit;text-align:left;cursor:pointer;padding:0;filter:saturate(.7)}
+  .polozka .foto{height:110px;background:linear-gradient(160deg,#3a3a32,#0B0F0C);position:relative}
+  .polozka h3{margin:0;font-size:.98rem;padding:10px 14px 2px}
+  .polozka p{margin:0;padding:0 14px 12px;color:var(--mlha);font-size:.84rem}
+  .filtry{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .filtr{background:transparent;border:2px solid var(--cara);color:var(--papir);border-radius:999px;padding:7px 16px;min-height:44px;font:inherit;font-size:.88rem;font-weight:700;cursor:pointer}
+  .filtr[aria-pressed="true"]{border-color:var(--jantar);color:var(--jantar)}
+  dialog{border:1px solid var(--cara);border-radius:16px;background:var(--karta);color:var(--papir);max-width:min(540px,92vw);padding:0}
+  dialog::backdrop{background:rgba(0,0,0,.65)}
+  .m-h{padding:16px 20px;border-bottom:1px solid var(--cara);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .m-h h2{margin:0;font-size:1.2rem}
+  .m-t{padding:16px 20px 22px}
+  .m-t dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0 0 12px;font-size:.92rem}
+  .m-t dt{color:var(--mlha);font-weight:700}
+  .m-t dd{margin:0;overflow-wrap:anywhere}
+  .zavrit{background:transparent;border:2px solid var(--papir);color:var(--papir);border-radius:8px;min-width:44px;min-height:44px;font-size:1.1rem;cursor:pointer;flex:none}
+  .kalendar{display:none;margin-top:14px;border:1px solid var(--cara);border-radius:14px;background:#0B0F0C;padding:16px}
+  .kalendar.mostrar{display:block}
+  .mrizka{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+  .mrizka span{min-height:42px;border:1px solid var(--cara);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:600;color:var(--papir)}
+  .mrizka span.tecka{border-color:var(--jantar);box-shadow:inset 0 -6px 0 var(--jantar)}
+  .mrizka .h{min-height:0;border:0;color:var(--mlha);font-size:.72rem}
+  footer{margin-top:26px;color:var(--mlha);font-size:.82rem}
+  @media (max-width:560px){h1{font-size:1.35rem}.feature{min-height:320px}}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="obal">
+  <header class="top">
+    <div class="brand">
+      <span class="cockarda" aria-hidden="true">▲</span>
+      <div><h1>Fotokronika výprav</h1><p class="pod">7 příběhů · nejdřív obraz, pak details</p></div>
+    </div>
+    <div class="prepinac" role="group" aria-label="Přepínač zobrazení">
+      <button type="button" id="btnSeznam" aria-pressed="true">Seznam</button>
+      <button type="button" id="btnKalendar" aria-pressed="false">Kalendář</button>
+    </div>
+  </header>
+
+  <div class="filtry" role="group" aria-label="Filtr výprav">
+    <button class="filtr" type="button" data-f="vse" aria-pressed="true">Vše</button>
+    <button class="filtr" type="button" data-f="volno" aria-pressed="false">Volno</button>
+    <button class="filtr" type="button" data-f="skoro" aria-pressed="false">Skoro plno</button>
+    <button class="filtr" type="button" data-f="probehle" aria-pressed="false">Proběhlé</button>
+  </div>
+
+  <main id="obsahSeznam">
+    <section class="feature" aria-label="Doporučená výprava">
+      <svg viewBox="0 0 400 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><path d="M0 100 L90 40 L150 90 L220 25 L300 90 L350 60 L400 90 L400 120 L0 120Z" fill="none" stroke="#E8B44A" stroke-width="3" opacity=".7"/><path d="M0 110 L110 70 L190 105 L270 60 L340 105 L400 85 L400 120 L0 120Z" fill="#8AA88B" opacity=".35"/></svg>
+      <div class="popis">
+        <span class="odznak">Tip týdne · zbývají 2 místa</span>
+        <h2>Český ráj – Prachovské skály</h2>
+        <p>24. října 2026 · sraz Turnov, aut. nádraží, 9:00 · Smyčka mezi vyhlídkami s výstupem na Přivýšinu.</p>
+        <div class="radka">
+          <button class="btn" type="button" data-modal="raj">Otevřít detail</button>
+          <span class="kap">14 / 16 míst</span>
+          <span class="unread">Nepřečtené</span>
+        </div>
+      </div>
+    </section>
+
+    <h2 class="sekce">Nadcházející · snap-pás</h2>
+    <div class="pas" id="pas" aria-label="Nadcházející výpravy"></div>
+
+    <h2 class="sekce">Proběhlé · tmavá galerie</h2>
+    <div class="galerie" id="galerie"></div>
+  </main>
+
+  <section class="kalendar" id="kalendar" aria-label="Kalendář" tabindex="-1">
+    <h2 style="margin:0 0 10px">Říjen 2026</h2>
+    <div class="mrizka" id="mrizka"></div>
+    <p style="color:var(--mlha);font-size:.88rem">Zlatý proužek = den s výpravou (17. a 24. 10.).</p>
+  </section>
+
+  <section class="wc" aria-labelledby="wcNadpis">
+    <div class="wc-hlavicka">
+      <h2 id="wcNadpis">Demo data / Worst case — 5 break případů</h2>
+      <button class="wc-toggle" type="button" id="wcToggle" aria-expanded="true" aria-controls="wcTelo">Skrýt</button>
+      <p>Drží 360px: <code>min-w-0</code> · <code>truncate</code> · <code>break-words</code> · 44px targety · safe-area.</p>
+    </div>
+    <div class="wc-telo" id="wcTelo">
+      <div class="wc-pripad">
+        <span class="wc-stitek">1 · Dlouhý název</span>
+        <h3>Snap-karta s extrémním názvem</h3>
+        <div class="wc-demo break-words">
+          <h3 class="truncate" title="Krkonoše – Sněžka přes Obří důl, Růžohorky, Luční boudu, Výrovku a zpět přes Dlouhý důl s nouzovým sestupem">Krkonoše – Sněžka přes Obří důl, Růžohorky, Luční boudu, Výrovku a zpět přes Dlouhý důl s&nbsp;nouzovým sestupem</h3>
+          <p style="margin:0;font-size:.85rem;color:var(--mlha)">21.&nbsp;11. · 11/12 · sraz Pec-pod-Sněžkou,parkoviště,7:30:00–extrémně–dlouhé–slovo–bez–mezer</p>
+          <p style="font-size:.8rem;color:var(--mlha);margin:6px 0 0">truncate + anywhere, popisek se nezalomí ven z karty</p>
+        </div>
+      </div>
+      <div class="wc-pripad">
+        <span class="wc-stitek">2 · 0 výprav → prázdný stav</span>
+        <h3>Prázdný filtr + offline diskuze</h3>
+        <div class="empty-cta" role="status">
+          <p style="margin:0;font-weight:800">Tady zatím nic není</p>
+          <p style="margin:4px 0 12px;font-size:.88rem;color:var(--mlha)">Filtr nic nenašel. Vrať se na vše, nebo navrhni výpravu.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+            <button class="btn" type="button">Zobrazit vše</button>
+            <button class="btn duch" type="button">Navrhnout výpravu</button>
+          </div>
+        </div>
+        <div class="empty-cta break-words" role="status" style="margin-top:10px">
+          <p style="margin:0;font-weight:800">Diskuze je offline prázdná</p>
+          <p style="margin:4px 0 12px;font-size:.88rem;color:var(--mlha)">Jsi offline — diskuze se načte po připojení.</p>
+          <button class="btn duch" type="button">Zkusit znovu</button>
+        </div>
+      </div>
+      <div class="wc-pripad">
+        <span class="wc-stitek">3 · 1000 znaků popisu</span>
+        <h3>Dlouhý popis — scroll uvnitř, fotky drží</h3>
+        <div class="wc-demo">
+          <p class="break-words" style="margin:0 0 8px;font-size:.88rem">Podyjí – vinice a vyhlídky: poklidná trasa nad Dyjí s výhledy na Hardegg, Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit.</p>
+          <div class="dlouhy-popis break-words" tabindex="0" aria-label="Dlouhý popis, posuvná oblast">Posuvná oblast max-height 132px… řádek 1 · řádek 2 · řádek 3 · řádek 4 · řádek 5 · řádek 6 · konec.</div>
+          <label for="wcHledatB" style="display:block;margin-top:10px;font-size:.85rem;font-weight:700">Hledat (16px, bez zoomu)</label>
+          <input id="wcHledatB" type="search" placeholder="např. Tok…" autocomplete="off">
+        </div>
+      </div>
+      <div class="wc-pripad">
+        <span class="wc-stitek">4 · Plná kapacita</span>
+        <h3>16/16 — badge slovem + disabled</h3>
+        <div class="wc-demo">
+          <p style="margin:0 0 8px"><span class="tecku" aria-hidden="true"></span><b>16 / 16 míst · PLNO</b> <span style="color:var(--mlha);font-size:.85rem">— stav slovem, ne jen barvou</span></p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <button class="btn" type="button" disabled aria-disabled="true">Plně obsazeno</button>
+            <button class="btn duch" type="button">Náhradník</button>
+          </div>
+        </div>
+      </div>
+      <div class="wc-pripad">
+        <span class="wc-stitek">5 · Proběhlá + admin vs člen</span>
+        <h3>Adršpach — 18,6 km · ↑540 m · 42 fotek</h3>
+        <div class="wc-demo break-words">
+          <p style="margin:0;font-size:.9rem"><b>5. září 2026 · proběhlo</b> · 12/14 · víkend mezi skalními městy</p>
+          <div class="statistiky" aria-label="Statistiky"><span>18,6 km</span><span>↑ 540 m</span><span>42 fotek</span><span>12 lidí</span></div>
+          <div class="mini-foto" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="role-cty"><span class="kdo">Člen vidí:</span><button class="btn" type="button">Zobrazit fotky</button><button class="btn duch" type="button">Stáhnout GPX</button></div>
+          <div class="role-cty"><span class="kdo">Admin navíc:</span><button class="btn admin" type="button">Upravit záznam</button><button class="btn duch" type="button">Uzavřít</button><button class="btn duch" type="button">Smazat</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>ExApp · hi-fi prototyp B · stejných 7 výprav jako A a C · offline statika</footer>
+</div>
+
+<dialog id="modal" aria-labelledby="mNazev">
+  <div class="m-h"><h2 id="mNazev"></h2><button class="zavrit" id="mZavrit" aria-label="Zavřít detail">×</button></div>
+  <div class="m-t">
+    <dl><dt>Datum</dt><dd id="mDatum"></dd><dt>Sraz</dt><dd id="mSraz"></dd><dt>Kapacita</dt><dd id="mKapacita"></dd><dt>Stav</dt><dd id="mStav"></dd></dl>
+    <p id="mPopis" style="margin:0 0 14px"></p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <button class="btn" type="button">Přihlásit se</button>
+      <button class="btn duch" type="button">Zobrazit fotky</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+const DATA={
+ sumava:{nazev:"Podzimní Šumava – Tříjezerní slať",datum:"17. října 2026",sraz:"Praha hl. n., 7:40",kap:"8 z 18 obsazeno",stav:"volno",popis:"Lehký okruh slatěmi a lesy kolem Modravy. Vhodné i pro nováčky, svačina z vlastních zásob."},
+ raj:{nazev:"Český ráj – Prachovské skály",datum:"24. října 2026",sraz:"Turnov, aut. nádraží, 9:00",kap:"14 z 16 obsazeno",stav:"skoro plno",popis:"Smyčka mezi skalními vyhlídkami s výstupem na Přivýšinu. Návrat vlakem přes Jičín."},
+ brdy:{nazev:"Brdy – výšlap na Tok",datum:"7. listopadu 2026",sraz:"Příbram, aut. nádraží, 8:15",kap:"5 z 20 obsazeno",stav:"volno",popis:"Nejvyšší vrchol Brd po hřebeni přes Klobouček. Delší trasa, pevné boty nutné."},
+ snezka:{nazev:"Krkonoše – Sněžka přes Obří důl",datum:"21. listopadu 2026",sraz:"Pec pod Sněžkou, parkoviště, 7:30",kap:"11 z 12 obsazeno",stav:"skoro plno",popis:"Náročná celodenní túra Obřím dolem na Sněžku a zpět přes Růžohorky. Jen pro zdatné."},
+ podyji:{nazev:"Podyjí – vinice a vyhlídky",datum:"5. prosince 2026",sraz:"Znojmo, vlakové nádraží, 9:30",kap:"3 z 15 obsazeno",stav:"volno",popis:"Poklidná trasa nad Dyjí s výhledy na hrad Hardegg. Zakončení na punči ve Znojmě."},
+ krivoklat:{nazev:"Křivoklátsko – údolím Berounky",datum:"19. září 2026 · proběhlo",sraz:"Křivoklát, nádraží, 9:00",kap:"16 z 16 · plno",stav:"proběhlá",popis:"Už proběhlo: procházka údolím řeky s opékáním u ležení pod hradem."},
+ adrspach:{nazev:"Adršpašské skály a Broumovsko",datum:"5. září 2026 · proběhlo",sraz:"Adršpach, parkoviště, 9:00",kap:"12 ze 14",stav:"proběhlá",popis:"Už proběhlo: víkend mezi skalními městy, přespání na faře v Teplicích nad Metují."}
+};
+const NADCHAZEJICI=[
+ {id:"sumava",trida:"zelena",pod:"17. 10. · 8/18",unread:true},
+ {id:"raj",trida:"zluta",pod:"24. 10. · 14/16 · skoro plno",unread:true},
+ {id:"brdy",trida:"zelena",pod:"7. 11. · 5/20",unread:false},
+ {id:"snezka",trida:"zluta",pod:"21. 11. · 11/12 · skoro plno",unread:true},
+ {id:"podyji",trida:"zelena",pod:"5. 12. · 3/15",unread:false}
+];
+const PROBEHLE=[{id:"krivoklat",pod:"19. 9. · 16/16"},{id:"adrspach",pod:"5. 9. · 12/14"}];
+const pas=document.getElementById("pas"),gal=document.getElementById("galerie");
+function kartaSnap(x){
+  const d=DATA[x.id],b=document.createElement("button");
+  b.className="snap";b.type="button";b.dataset.modal=x.id;
+  b.setAttribute("aria-label",d.nazev+", "+d.datum+(x.unread?", nepřečtené":""));
+  b.innerHTML='<span class="foto '+x.trida+'" aria-hidden="true"><svg viewBox="0 0 300 80" preserveAspectRatio="xMidYMax slice"><path d="M0 65 L70 25 L130 60 L200 15 L260 60 L300 40 L300 80 L0 80Z" fill="none" stroke="#E8B44A" stroke-width="2.5" opacity=".7"/></svg></span><span class="tx"><h3>'+d.nazev+'</h3><p>'+x.pod+' · sraz '+d.sraz+'</p><span class="spodek"><span>'+d.stav+'</span>'+(x.unread?'<span><span class="tecku" aria-hidden="true"></span>nové</span>':"<span></span>")+'</span></span>';
+  return b;
+}
+function renderSeznam(f){
+  pas.innerHTML="";gal.innerHTML="";
+  NADCHAZEJICI.filter(x=>f==="vse"||(f==="volno"&&DATA[x.id].stav==="volno")||(f==="skoro"&&DATA[x.id].stav==="skoro plno")).forEach(x=>pas.appendChild(kartaSnap(x)));
+  if(f==="vse"||f==="probehle")PROBEHLE.forEach(x=>{
+    const d=DATA[x.id],b=document.createElement("button");
+    b.className="polozka";b.type="button";b.dataset.modal=x.id;b.setAttribute("aria-label",d.nazev+", proběhlá");
+    b.innerHTML='<span class="foto" aria-hidden="true"></span><h3>'+d.nazev+'</h3><p>'+x.pod+' · '+d.sraz+'</p>';
+    gal.appendChild(b);
+  });
+  if(!pas.children.length&&!gal.children.length){pas.innerHTML='<p style="color:var(--mlha)">Pro tento filtr tu nic není.</p>';}
+}
+document.querySelectorAll(".filtr").forEach(f=>f.addEventListener("click",()=>{
+  document.querySelectorAll(".filtr").forEach(x=>x.setAttribute("aria-pressed",x===f?"true":"false"));
+  renderSeznam(f.dataset.f);
+}));
+const modal=document.getElementById("modal");let navrat=null;
+function otevri(id,btn){
+  const d=DATA[id];if(!d)return;navrat=btn||document.activeElement;
+  document.getElementById("mNazev").textContent=d.nazev;
+  document.getElementById("mDatum").textContent=d.datum;
+  document.getElementById("mSraz").textContent=d.sraz;
+  document.getElementById("mKapacita").textContent=d.kap;
+  document.getElementById("mStav").textContent=d.stav;
+  document.getElementById("mPopis").textContent=d.popis;
+  if(typeof modal.showModal==="function")modal.showModal();
+  document.getElementById("mZavrit").focus();
+}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-modal]");if(t)otevri(t.dataset.modal,t);});
+document.getElementById("mZavrit").addEventListener("click",()=>modal.close());
+modal.addEventListener("close",()=>{if(navrat&&navrat.focus)navrat.focus();});
+modal.addEventListener("click",e=>{if(e.target===modal)modal.close();});
+// kalendář
+const mrizka=document.getElementById("mrizka");
+["Po","Út","St","Čt","Pá","So","Ne"].forEach(d=>{const s=document.createElement("span");s.className="h";s.textContent=d;mrizka.appendChild(s);});
+for(let i=1;i<=31;i++){const s=document.createElement("span");s.textContent=i;if(i===17||i===24)s.classList.add("tecka");mrizka.appendChild(s);}
+const btnS=document.getElementById("btnSeznam"),btnK=document.getElementById("btnKalendar"),kal=document.getElementById("kalendar"),obsah=document.getElementById("obsahSeznam");
+btnS.addEventListener("click",()=>{btnS.setAttribute("aria-pressed","true");btnK.setAttribute("aria-pressed","false");kal.classList.remove("mostrar");obsah.style.display="";});
+btnK.addEventListener("click",()=>{btnK.setAttribute("aria-pressed","true");btnS.setAttribute("aria-pressed","false");kal.classList.add("mostrar");obsah.style.display="none";kal.focus();});
+const wcT=document.getElementById("wcToggle"),wcB=document.getElementById("wcTelo");
+if(wcT&&wcB)wcT.addEventListener("click",()=>{const s=wcB.style.display==="none";wcB.style.display=s?"":"none";wcT.textContent=s?"Skrýt":"Zobrazit";wcT.setAttribute("aria-expanded",s?"true":"false");});
+renderSeznam("vse");
+</script>
+</body>
+</html>

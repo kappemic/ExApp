@@ -4,12 +4,15 @@ import {
   type RucniAktivitaVysledek,
 } from "../../lib/expedice-aktivita";
 import {
+  druhStravaChyby,
+  jeStravaNedostupnaVetev,
+  muzeOpakovatStravaChybu,
   nactiNeparovaneAktivity,
   odpojAktivitu,
   sparujAktivitu,
   type NeparovanaAktivita,
 } from "../../lib/strava-api";
-import { getMojeStatistiky } from "../../lib/statistiky-api";
+import type { ApiErrorCode } from "../../shared/api-types";
 
 export interface StravaParovaniProps {
   expeditionId: string;
@@ -40,22 +43,39 @@ function formatDatum(datum: string): string {
 }
 
 /**
- * Karta párování k uzavřené výpravě (OAuth parovani)
- * + ruční zápis bez Stravy (`POST :id/aktivita-ruchne { km, prevyseni_m }`).
- * Krok 13: načte `GET /api/strava/neparovane` (VŠECHNY moje aktivity
- * s `sparovano` + `celkem`), ukáže seznam s odznakem připojeno/nepřipojeno.
- * Confirm → `POST :id/strava-parovani { activityId }` (dual-guard).
- * Odpojení → `DELETE :id/strava-parovani` s confirmem (dual-guard,
- * jen proběhlá, vymaže 4 sloupce → statistiky klesnou).
- * Krok 15: výběr je kompaktní expanding box (collapsed 1 řádek
- * `Vybrat Strava aktivitu (N)` s `aria-expanded`; expand = seznam
- * v `max-h-64 overflow-y-auto`; po potvrzení se sbalí zpět).
- * Ruční km i Odpojit zůstávají vždy viditelné MIMO box.
- * Bez secretů v klientovi — jen veřejný návrh ze serveru.
- * Expedition-level sdílení: jedna aktivita na expedici se započítá všem
- * `ucastnil_se` (statistiky čtou JOIN) — proto stačí jedno párování
- * nebo jeden ruční zápis pro celou výpravu.
+ * Step 4 — rozlišení tří úrovní odpojení (texty se nesmí plést):
+ * - Strava aktivita od výpravy → tlačítko „Odpojit aktivitu" + confirm().
+ * - Ruční zápis kilometrů → tlačítko „Smazat ruční zápis" + confirm().
+ *   Stejný DELETE endpoint (server nuluje 4 sloupce), jiný popisek + dotaz.
+ * - Účet Strava → JEN v profilu („Odpojit účet"), nikdy v expedici.
+ *   Tady je jen vysvětlující hint, žádné takové tlačítko.
+ * Čistá funkce pro testy — ruční km nesmí zmizet bez confirmu.
  */
+export type ZdrojPripojeni = "strava" | "rucni" | "nic";
+
+export interface StavPripojeniVstup {
+  sparovanoId: string | null;
+  jeSparovano: boolean;
+  stravaActivityId: string | null;
+  rucneSparovano: boolean;
+  potlacenoOdpojenim: boolean;
+}
+
+export function rozhodniZdrojPripojeni(
+  vstup: StavPripojeniVstup,
+): ZdrojPripojeni {
+  if (vstup.potlacenoOdpojenim) return "nic";
+  if (vstup.sparovanoId !== null) return "strava";
+  if (vstup.stravaActivityId !== null) return "strava";
+  if (vstup.rucneSparovano) return "rucni";
+  if (vstup.jeSparovano && vstup.stravaActivityId === null) return "rucni";
+  return "nic";
+}
+
+export const POTVRZENI_ODPOJENI_STRAVA =
+  "Opravdu odpojit Strava aktivitu od výpravy? Kilometry z výpravy zmizí.";
+export const POTVRZENI_SMAZANI_RUCNIHO =
+  "Opravdu smazat ručně zapsané kilometry z výpravy? Zápis zmizí a nepůjde vzít zpět.";
 export default function StravaParovani({
   expeditionId,
   onSparovano,
@@ -67,6 +87,13 @@ export default function StravaParovani({
   const [navrhy, setNavrhy] = useState<NeparovanaAktivita[]>([]);
   const [celkem, setCelkem] = useState<number | null>(null);
   const [chyba, setChyba] = useState<string | null>(null);
+  /* Step 3: kód chyby vedle textu — podle něj se volí větev
+     (validace / nedostupná / přihlášení / oprávnění / konflikt). */
+  const [kodChyby, setKodChyby] = useState<ApiErrorCode | null>(null);
+  /* Step 3: poslední nezdařené potvrzení — jen pro něj se nabízí ruční
+     retry (odpojení retry nenabízí, aby znovu nevyskakoval confirm). */
+  const [posledniNezdar, setPosledniNezdar] =
+    useState<NeparovanaAktivita | null>(null);
   const [potvrzujeSe, setPotvrzujeSe] = useState<string | null>(null);
   const [zprava, setZprava] = useState<string | null>(null);
   const [sparovanoId, setSparovanoId] = useState<string | null>(
@@ -80,27 +107,36 @@ export default function StravaParovani({
   const [rucniZprava, setRucniZprava] = useState<string | null>(null);
   /* Krok 15: kompaktní expanding výběr — collapsed = 1 řádek. */
   const [rozbaleno, setRozbaleno] = useState<boolean>(false);
-  /* Krok 16 fallback: expedice má km/strava_activity_id v DB, ale props
-     jeSparovano/stravaActivityId jsou false (ExpeditionModal je nepředává).
-     Dočteme stav z GET /api/statistiky/moje a Odpojit ukážeme i tehdy. */
-  const [dbMaZaznam, setDbMaZaznam] = useState<boolean>(false);
-  const [dbKm, setDbKm] = useState<number | null>(null);
+  /* Krok 16 fix: rozhodnutí čte JEN props z detailu expedice.
+     Místní přepisy kryjí okno mezi klikem a refreshem rodiče
+     (nactiUcastniky → nová expedice s novým jeSparovano). */
+  const [rucneSparovano, setRucneSparovano] = useState<boolean>(false);
+  const [mistniKm, setMistniKm] = useState<number | null>(null);
+  const [potlacenoOdpojenim, setPotlacenoOdpojenim] =
+    useState<boolean>(false);
   const seznamId: string = useId();
 
   useEffect(() => {
     setSparovanoId(stravaActivityId);
-  }, [stravaActivityId]);
+    setRucneSparovano(false);
+    setMistniKm(null);
+    setPotlacenoOdpojenim(false);
+    setKodChyby(null);
+    setPosledniNezdar(null);
+  }, [expeditionId, jeSparovano, stravaActivityId]);
 
   useEffect(() => {
     let zije = true;
     void (async (): Promise<void> => {
       setFaze("nacitani");
       setChyba(null);
+      setKodChyby(null);
       const vysledek = await nactiNeparovaneAktivity({ page: 1, per_page: 30 });
       if (!zije) return;
       if (!vysledek.ok) {
         setFaze("chyba");
         setChyba(vysledek.chyba);
+        setKodChyby(vysledek.kod ?? null);
         return;
       }
       setNavrhy(vysledek.data.aktivity);
@@ -112,48 +148,31 @@ export default function StravaParovani({
     };
   }, [expeditionId]);
 
-  /* Krok 16 fallback: když props říkají „nepřipojeno", ověř DB.
-     Kryje i ruční zápis (km bez stravaActivityId). */
-  useEffect(() => {
-    if (stravaActivityId !== null || jeSparovano) return;
-    let zije = true;
-    void (async (): Promise<void> => {
-      const statistiky = await getMojeStatistiky();
-      if (!zije) return;
-      if (statistiky.source !== "db") return;
-      const zaznam =
-        statistiky.data.aktivity.find((a) => a.expeditionId === expeditionId) ??
-        null;
-      if (zaznam === null) return;
-      const maKm: boolean = zaznam.km !== null;
-      const maStravaId: boolean = zaznam.stravaActivityId !== null;
-      if (!maKm && !maStravaId) return;
-      setDbMaZaznam(true);
-      setDbKm(zaznam.km);
-      if (zaznam.stravaActivityId !== null)
-        setSparovanoId(zaznam.stravaActivityId);
-    })();
-    return () => {
-      zije = false;
-    };
-  }, [expeditionId, jeSparovano, stravaActivityId]);
-
   async function potvrdit(aktivita: NeparovanaAktivita): Promise<void> {
     setPotvrzujeSe(aktivita.id);
     setChyba(null);
+    setKodChyby(null);
+    setPosledniNezdar(null);
     setZprava(null);
     const vysledek = await sparujAktivitu(expeditionId, aktivita.id);
     setPotvrzujeSe(null);
     if (!vysledek.ok) {
       setChyba(vysledek.chyba);
+      setKodChyby(vysledek.kod ?? null);
+      /* Retry (ruční tlačítko) jen kde pomůže — validace, 401/403 ani 409
+         ho nedostanou; aktivitu si pamatujeme jen pro opakovatelné druhy. */
+      if (muzeOpakovatStravaChybu(vysledek.kod)) {
+        setPosledniNezdar(aktivita);
+      }
       return;
     }
     setZprava(
       `Spárováno: ${formatKm(aktivita.km)} · +${String(aktivita.prevyseniM)} m.`,
     );
     setSparovanoId(aktivita.id);
-    setDbMaZaznam(true);
-    setDbKm(aktivita.km);
+    setMistniKm(aktivita.km);
+    setRucneSparovano(false);
+    setPotlacenoOdpojenim(false);
     setNavrhy((prev) =>
       prev.map((polozka) =>
         polozka.id === aktivita.id ? { ...polozka, sparovano: true } : polozka,
@@ -172,10 +191,12 @@ export default function StravaParovani({
   async function obnovit(): Promise<void> {
     setFaze("nacitani");
     setChyba(null);
+    setKodChyby(null);
     const vysledek = await nactiNeparovaneAktivity({ page: 1, per_page: 30 });
     if (!vysledek.ok) {
       setFaze("chyba");
       setChyba(vysledek.chyba);
+      setKodChyby(vysledek.kod ?? null);
       return;
     }
     setNavrhy(vysledek.data.aktivity);
@@ -183,26 +204,58 @@ export default function StravaParovani({
     setFaze("hotovo");
   }
 
-  async function odpojit(): Promise<void> {
+  async function odpojitStravaAktivitu(): Promise<void> {
     if (
       typeof window !== "undefined" &&
-      !window.confirm("Opravdu odpojit aktivitu od výpravy? Kilometry zmizí.")
+      !window.confirm(POTVRZENI_ODPOJENI_STRAVA)
     ) {
       return;
     }
     setOdpojujeSe(true);
     setChyba(null);
+    setKodChyby(null);
+    setPosledniNezdar(null);
     setZprava(null);
     const vysledek = await odpojAktivitu(expeditionId);
     setOdpojujeSe(false);
     if (!vysledek.ok) {
       setChyba(vysledek.chyba);
+      setKodChyby(vysledek.kod ?? null);
       return;
     }
     setSparovanoId(null);
-    setDbMaZaznam(false);
-    setDbKm(null);
-    setZprava("Aktivita odpojena — kilometry z výpravy zmizely.");
+    setRucneSparovano(false);
+    setMistniKm(null);
+    setPotlacenoOdpojenim(true);
+    setZprava("Strava aktivita odpojena — kilometry z výpravy zmizely.");
+    onOdpojeno?.();
+    onSparovano?.();
+  }
+
+  async function smazatRucniZapis(): Promise<void> {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(POTVRZENI_SMAZANI_RUCNIHO)
+    ) {
+      return;
+    }
+    setOdpojujeSe(true);
+    setChyba(null);
+    setKodChyby(null);
+    setPosledniNezdar(null);
+    setZprava(null);
+    const vysledek = await odpojAktivitu(expeditionId);
+    setOdpojujeSe(false);
+    if (!vysledek.ok) {
+      setChyba(vysledek.chyba);
+      setKodChyby(vysledek.kod ?? null);
+      return;
+    }
+    setSparovanoId(null);
+    setRucneSparovano(false);
+    setMistniKm(null);
+    setPotlacenoOdpojenim(true);
+    setZprava("Ruční zápis smazán — kilometry z výpravy zmizely.");
     onOdpojeno?.();
     onSparovano?.();
   }
@@ -240,14 +293,121 @@ export default function StravaParovani({
     setRucniZprava(
       `Zapsáno bez Stravy: ${formatKm(vysledek.data.aktivita.km ?? 0)} · +${String(vysledek.data.aktivita.prevyseniM ?? 0)} m.`,
     );
-    setDbMaZaznam(true);
-    setDbKm(vysledek.data.aktivita.km);
+    setRucneSparovano(true);
+    setMistniKm(vysledek.data.aktivita.km);
+    setPotlacenoOdpojenim(false);
     onSparovano?.();
   }
 
-  const pripojeno = sparovanoId !== null || jeSparovano || dbMaZaznam;
+  const zdroj: ZdrojPripojeni = rozhodniZdrojPripojeni({
+    sparovanoId,
+    jeSparovano,
+    stravaActivityId: stravaActivityId ?? null,
+    rucneSparovano,
+    potlacenoOdpojenim,
+  });
+
+  /**
+   * Step 3 — jediné ruční retry v souboru (tlačítko pro opakování).
+   * Volá ho jen klik; žádný timer ani auto-retry v efektu.
+   */
+  function tlacitkoZkusitZnovu(akce: () => void): JSX.Element {
+    return (
+      <button
+        type="button"
+        onClick={akce}
+        className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold"
+      >
+        Zkusit znovu
+      </button>
+    );
+  }
+
+  /**
+   * Step 3 — společný obsah chyby pro načtení i potvrzení/odpojení.
+   * Každá větev má vlastní text i akci; retry tlačítko jen tam, kde
+   * `muzeOpakovatStravaChybu` (výpadek Stravy / sítě) — validace (422),
+   * 401/403 ani 409 retry nemají. Odkazy jsou nativní `<a>`
+   * (klávesnice zdarma, stejný vzor jako zbytek aplikace).
+   */
+  function obsahChybyStravy(
+    zprava: string,
+    kod: ApiErrorCode | null,
+    retryAkce: (() => void) | null,
+  ): JSX.Element {
+    const kodVolba: ApiErrorCode | undefined =
+      kod === null ? undefined : kod;
+    const druh = druhStravaChyby(kodVolba);
+    const opakovatelna: (() => void) | null =
+      retryAkce !== null && muzeOpakovatStravaChybu(kodVolba)
+        ? retryAkce
+        : null;
+    if (druh === "validace") {
+      return <span>Zkontroluj zadané údaje: {zprava}</span>;
+    }
+    if (jeStravaNedostupnaVetev(kodVolba)) {
+      return (
+        <>
+          <span>{zprava}</span>{" "}
+          <span>
+            Mrkni, že máš Stravu propojenou v{" "}
+            <a
+              href="/profil"
+              className="font-bold underline underline-offset-2"
+            >
+              profilu (Propoj Stravu)
+            </a>
+            .
+          </span>
+          {opakovatelna !== null && tlacitkoZkusitZnovu(opakovatelna)}
+        </>
+      );
+    }
+    if (druh === "neprihlasen") {
+      return (
+        <>
+          <span>{zprava}</span>{" "}
+          <a href="/login" className="font-bold underline underline-offset-2">
+            Přihlas se
+          </a>
+          <span> a zkus to znovu.</span>
+        </>
+      );
+    }
+    if (druh === "zakazano") {
+      return (
+        <span>
+          {zprava} Nemáš k téhle akci oprávnění — obrať se na vedoucí výpravy.
+        </span>
+      );
+    }
+    if (druh === "konflikt") {
+      return <span>{zprava} Opakování nepomůže.</span>;
+    }
+    return (
+      <>
+        <span>{zprava}</span>
+        {opakovatelna !== null && tlacitkoZkusitZnovu(opakovatelna)}
+      </>
+    );
+  }
+
+  /* Step 3 — retry potvrzení jen pro opakovatelný druh s uloženou aktivitou. */
+  const retryPotvrzeni: (() => void) | null =
+    posledniNezdar === null
+      ? null
+      : () => {
+          const aktivita: NeparovanaAktivita = posledniNezdar;
+          void potvrdit(aktivita);
+        };
   const stavKmText: string =
-    dbKm !== null ? ` (${formatKm(dbKm)})` : "";
+    mistniKm !== null ? ` (${formatKm(mistniKm)})` : "";
+  const stavTrasyText: string =
+    zdroj === "strava"
+      ? `připojeno – Strava aktivita${stavKmText}`
+      : zdroj === "rucni"
+        ? `připojeno – ruční zápis${stavKmText}`
+        : "nepřipojeno";
 
   return (
     <>
@@ -275,21 +435,46 @@ export default function StravaParovani({
         {celkem !== null && ` Celkem mých aktivit: ${String(celkem)}.`}
       </p>
       <p role="status" className="mt-2 text-sm font-semibold tabular-nums">
-        Stav trasy: {pripojeno ? `připojeno${stavKmText}` : "nepřipojeno"}
+        Stav trasy: {stavTrasyText}
       </p>
 
-      {pripojeno && (
+      {zdroj === "strava" && (
         <div className="mt-3 rounded-xl border border-inkoust/15 bg-papir p-3">
-          <p className="text-sm font-bold">Aktivita je připojena.</p>
+          <p className="text-sm font-bold">Strava aktivita je připojena.</p>
           <button
             type="button"
-            onClick={() => void odpojit()}
+            onClick={() => void odpojitStravaAktivitu()}
             disabled={odpojujeSe}
-            title="Odpojit aktivitu od výpravy"
+            title="Odpojit Strava aktivitu od výpravy"
+            aria-label="Odpojit aktivitu od výpravy"
             className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
           >
             {odpojujeSe ? "Odpojuji…" : "Odpojit aktivitu"}
           </button>
+          <p className="mt-2 text-[13px] text-inkoust/70">
+            Odpojuje se jen aktivita od této výpravy. Účet Strava se odpojuje
+            v profilu („Odpojit účet“).
+          </p>
+        </div>
+      )}
+
+      {zdroj === "rucni" && (
+        <div className="mt-3 rounded-xl border border-inkoust/15 bg-papir p-3">
+          <p className="text-sm font-bold">Ruční zápis je uložen.</p>
+          <button
+            type="button"
+            onClick={() => void smazatRucniZapis()}
+            disabled={odpojujeSe}
+            title="Smazat ručně zapsané kilometry z výpravy"
+            aria-label="Smazat ruční zápis z výpravy"
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+          >
+            {odpojujeSe ? "Mažu…" : "Smazat ruční zápis"}
+          </button>
+          <p className="mt-2 text-[13px] text-inkoust/70">
+            Smaže se jen ruční zápis u této výpravy. Účet Strava se odpojuje
+            v profilu („Odpojit účet“).
+          </p>
         </div>
       )}
 
@@ -302,15 +487,12 @@ export default function StravaParovani({
       {faze === "chyba" && (
         <div className="mt-2 rounded-xl border border-inkoust/20 p-3 text-center">
           <p role="alert" className="text-sm font-semibold">
-            {chyba ?? "Návrhy se nepodařilo načíst."}
+            {obsahChybyStravy(
+              chyba ?? "Návrhy se nepodařilo načíst.",
+              kodChyby,
+              () => void obnovit(),
+            )}
           </p>
-          <button
-            type="button"
-            onClick={() => void obnovit()}
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold"
-          >
-            Zkusit znovu
-          </button>
         </div>
       )}
 
@@ -406,9 +588,12 @@ export default function StravaParovani({
         </p>
       )}
       {faze === "hotovo" && chyba !== null && (
-        <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-          {chyba}
-        </p>
+        <div
+          role="alert"
+          className="mt-2 text-sm font-semibold text-red-800"
+        >
+          {obsahChybyStravy(chyba, kodChyby, retryPotvrzeni)}
+        </div>
       )}
     </section>
 

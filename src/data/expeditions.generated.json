@@ -1,7 +1,7 @@
 {
   "_meta": {
     "zdroj": "db-snapshot",
-    "generatedAt": "2026-10-14T01:18:26.871Z",
+    "generatedAt": "2026-10-16T09:19:25.349Z",
     "poznamka": "Build-time snapshot z Neon DB (scripts/sync-readmodel.ts). Bez secretů, pouze veřejná read data."
   },
   "expedice": [
@@ -14,7 +14,7 @@
       "popis": "Už proběhlo: podzimní procházka údolím řeky s opékáním u ležení pod hradem.",
       "trasaOdkaz": "",
       "kapacita": {
-        "prihlaseno": 5,
+        "prihlaseno": 6,
         "celkem": 16
       },
       "stav": "proběhlá"

@@ -40,6 +40,8 @@ export interface ConfirmDialogProps {
    * Use `nad-lightboxem` when confirm opens while a lightbox is still mounted (portaled at z-[200]).
    */
   vrstva?: "normal" | "nad-lightboxem";
+  /** Extra class on the portaled layer. Preview uses it for press easing. */
+  trida?: string;
   onPotvrdit: () => void;
   onZrusit: () => void;
 }
@@ -150,7 +152,9 @@ export default function ConfirmDialog(
   return createPortal(
     <div
       data-confirm-dialog-portal=""
-      className={`fixed inset-0 ${vrstvaTrida} flex items-end justify-center bg-inkoust/60 p-4 sm:items-center`}
+      className={`fixed inset-0 ${vrstvaTrida} flex items-end justify-center bg-inkoust/60 p-4 sm:items-center${
+        props.trida !== undefined && props.trida.length > 0 ? ` ${props.trida}` : ""
+      }`}
       onMouseDown={naKlikBackdropu}
     >
       <div

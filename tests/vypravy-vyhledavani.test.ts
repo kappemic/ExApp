@@ -15,27 +15,30 @@ function cti(soubor: string): string {
 
 describe("vyhledavani podle jmena (VypravyPage)", () => {
   it("ma search input s ceskym labelem", () => {
-    const obsah = cti("src/pages/VypravyPage.tsx");
-    expect(obsah).toContain('type="search"');
-    expect(obsah).toContain("Hledat");
+    const hlavicka = cti("src/components/vypravy-nahled/NahledHlavicka.tsx");
+    expect(hlavicka).toContain('type="search"');
+    expect(hlavicka).toContain("Hledat");
+    expect(cti("src/pages/VypravyNahledPage.tsx")).toContain("hledaniId=");
   });
 
   it("filtruje klientsky pres filtr helper (zadny novy endpoint)", () => {
-    const obsah = cti("src/pages/VypravyPage.tsx");
+    const obsah = cti("src/pages/VypravyNahledPage.tsx");
     expect(obsah).toContain("filtrujExpedicePodleJmena");
     expect(obsah).not.toContain("/api/expeditions?hledat");
     expect(obsah).not.toContain("/api/vypravy/hledat");
   });
 
   it("debounceuje vstup (setTimeout + cleanup)", () => {
-    const obsah = cti("src/pages/VypravyPage.tsx");
+    const obsah = cti("src/pages/VypravyNahledPage.tsx");
     expect(obsah).toContain("setTimeout");
     expect(obsah).toContain("clearTimeout");
   });
 
   it("prazdny stav a pocet vysledku (aria-live)", () => {
-    const obsah = cti("src/pages/VypravyPage.tsx");
+    const obsah = cti("src/pages/VypravyNahledPage.tsx");
     expect(obsah).toContain("Nic jsme nenašli");
-    expect(obsah).toContain('aria-live="polite"');
+    expect(cti("src/components/vypravy-nahled/NahledHlavicka.tsx")).toContain(
+      'aria-live="polite"',
+    );
   });
 });

@@ -7,8 +7,8 @@ import { useAuth, type PolePrihlaseni } from "../hooks/useAuth";
  * Odmítne absolutní URL, `//evil` i prázdnou hodnotu.
  */
 export function bezpecneFrom(hodnota: string | null): string {
-  if (hodnota === null || !hodnota.startsWith("/") || hodnota.startsWith("//")) {
-    return "/";
+  if (hodnota === null || !hodnota.startsWith("/") || hodnota.startsWith("//") || hodnota === "/") {
+    return "/vypravy";
   }
   return hodnota;
 }

@@ -29,6 +29,8 @@ export type {
 } from "./registration_codes";
 export { stravaTokens } from "./strava_tokens";
 export type { StravaTokensRow, NewStravaTokensRow } from "./strava_tokens";
+export { soukromeZpravy } from "./soukrome_zpravy";
+export type { SoukromaZprava } from "./soukrome_zpravy";
 export { zpravy, KANALY_ZPRAVY, jeKanalZpravy } from "./zpravy";
 export type { Zprava, NovaZprava, KanalZpravy } from "./zpravy";
 export { diskuzePrecteni } from "./diskuze_precteni";

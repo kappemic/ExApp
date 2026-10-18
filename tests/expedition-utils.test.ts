@@ -7,6 +7,7 @@ import {
   dnesniDatumYmd,
   formatRozsahData,
   jeProbihajici,
+  jeUplynula,
 } from "../src/lib/expedition-utils";
 import type { Expedition } from "../src/lib/mock-expeditions";
 
@@ -87,6 +88,36 @@ describe("jeProbihajici", () => {
   it("bez explicitního dnes bere lokální dnešek", () => {
     const dnes = dnesniDatumYmd();
     expect(jeProbihajici(vyprava({ datum: dnes }))).toBe(true);
+  });
+});
+
+describe("jeUplynula", () => {
+  const DNES = "2026-10-16";
+
+  it("konec před dneškem a neuzavřený stav je neuzavřená", () => {
+    expect(
+      jeUplynula(
+        vyprava({ datum: "2026-10-13", datumDo: "2026-10-15" }),
+        DNES,
+      ),
+    ).toBe(true);
+    expect(jeUplynula(vyprava({ datum: "2026-10-14", datumDo: null }), DNES)).toBe(
+      true,
+    );
+  });
+
+  it("dnešek a budoucnost nejsou neuzavřené", () => {
+    expect(jeUplynula(vyprava({ datum: DNES }), DNES)).toBe(false);
+    expect(jeUplynula(vyprava({ datum: "2026-10-17" }), DNES)).toBe(false);
+  });
+
+  it("už uzavřená výprava sem nepatří", () => {
+    expect(
+      jeUplynula(
+        vyprava({ stav: "proběhlá", datum: "2026-10-01" }),
+        DNES,
+      ),
+    ).toBe(false);
   });
 });
 

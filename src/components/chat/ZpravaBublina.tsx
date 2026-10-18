@@ -1,6 +1,8 @@
 import type { JSX } from "react";
 import type { ApiZprava } from "../../lib/diskuze-api";
 import { formatCasKratce } from "../../lib/format-cas";
+import AvatarKruh from "../AvatarKruh";
+import { TlacitkoProfilu } from "../clen/ClenProfil";
 
 export interface ZpravaBublinaProps {
   zprava: ApiZprava;
@@ -10,6 +12,12 @@ export interface ZpravaBublinaProps {
   muzeMazat: boolean;
   mazeSe: boolean;
   onSmazat: (id: string) => void;
+  /**
+   * Step 3 — seskupení po autorovi/dni: true = skrýt hlavičku s avatar+
+   * jménem (navazující bublina stejného autora ve stejný den).
+   * Hlavička `authorName` + „Ty" jen pro currentUserId (prop `jeMoje`).
+   */
+  skrytHlavicku?: boolean;
 }
 
 /**
@@ -64,23 +72,42 @@ export default function ZpravaBublina({
   muzeMazat,
   mazeSe,
   onSmazat,
+  skrytHlavicku = false,
 }: ZpravaBublinaProps): JSX.Element {
   const cas: string = formatCasZpravy(zprava.createdAt);
   const jeOptimisticka: boolean = zprava.id.startsWith("optimistic-");
 
   return (
     <li
-      className={`flex gap-2.5 ${jeMoje ? "flex-row-reverse" : "flex-row"}`}
+      className={`flex gap-2.5 ${jeMoje ? "flex-row-reverse" : "flex-row"} ${
+        skrytHlavicku ? "mt-[-8px]" : ""
+      }`}
     >
-      <span
-        aria-hidden="true"
-        title={autorPopisek}
-        className={`flex h-9 w-9 shrink-0 grow-0 basis-9 select-none items-center justify-center rounded-full border-2 border-inkoust text-[13px] font-extrabold ${
-          jeMoje ? "bg-inkoust text-papir" : "bg-linka/70 text-inkoust"
-        }`}
-      >
-        {inicialyProJmeno(autorPopisek)}
-      </span>
+      {skrytHlavicku ? (
+        <span
+          aria-hidden="true"
+          className="w-9 shrink-0 grow-0 basis-9"
+        />
+      ) : zprava.autorId !== null ? (
+        <TlacitkoProfilu
+          id={zprava.autorId}
+          jmeno={autorPopisek}
+          avatarUrl={zprava.authorAvatarUrl}
+          className="shrink-0 p-0"
+        >
+          <AvatarKruh
+            jmeno={autorPopisek}
+            url={zprava.authorAvatarUrl}
+            ton={jeMoje ? "moje" : "cizi"}
+          />
+        </TlacitkoProfilu>
+      ) : (
+        <AvatarKruh
+          jmeno={autorPopisek}
+          url={zprava.authorAvatarUrl}
+          ton={jeMoje ? "moje" : "cizi"}
+        />
+      )}
 
       <div className="min-w-0 flex-1">
         <div
@@ -88,32 +115,59 @@ export default function ZpravaBublina({
             jeMoje ? "bg-smrk text-papir" : "bg-papir text-inkoust"
           } ${jeOptimisticka ? "opacity-70" : ""}`}
         >
-          <div className="flex min-w-0 items-baseline justify-between gap-2">
-            <span
-              title={autorPopisek}
-              className={`min-w-0 flex-1 truncate text-[12px] font-bold ${
-                jeMoje ? "text-papir/90" : "text-inkoust/70"
-              }`}
-              style={{ overflowWrap: "anywhere" }}
-            >
-              {autorPopisek}
-              {jeMoje && (
-                <span className="ml-1.5 inline-flex shrink-0 whitespace-nowrap rounded-full border border-current px-1.5 py-px align-middle text-[10px] font-extrabold uppercase tracking-wider opacity-80">
-                  ty
+          {!skrytHlavicku && (
+            <div className="flex min-w-0 items-baseline justify-between gap-2">
+              {zprava.autorId !== null ? (
+                <TlacitkoProfilu
+                  id={zprava.autorId}
+                  jmeno={autorPopisek}
+                  avatarUrl={zprava.authorAvatarUrl}
+                  className={`min-w-0 flex-1 truncate bg-transparent p-0 text-[12px] font-bold ${
+                    jeMoje ? "text-papir/90" : "text-inkoust/70"
+                  }`}
+                >
+                  <span title={autorPopisek} style={{ overflowWrap: "anywhere" }}>
+                    {autorPopisek}
+                    {jeMoje && (
+                      <span className="ml-1.5 inline-flex shrink-0 whitespace-nowrap rounded-full border border-current px-1.5 py-px align-middle text-[10px] font-extrabold uppercase tracking-wider opacity-80">
+                        ty
+                      </span>
+                    )}
+                  </span>
+                </TlacitkoProfilu>
+              ) : (
+                <span
+                  title={autorPopisek}
+                  className={`min-w-0 flex-1 truncate text-[12px] font-bold ${
+                    jeMoje ? "text-papir/90" : "text-inkoust/70"
+                  }`}
+                  style={{ overflowWrap: "anywhere" }}
+                >
+                  {autorPopisek}
+                  {jeMoje && (
+                    <span className="ml-1.5 inline-flex shrink-0 whitespace-nowrap rounded-full border border-current px-1.5 py-px align-middle text-[10px] font-extrabold uppercase tracking-wider opacity-80">
+                      ty
+                    </span>
+                  )}
                 </span>
               )}
+              {cas.length > 0 && (
+                <time
+                  dateTime={zprava.createdAt}
+                  className={`shrink-0 text-[11px] tabular-nums ${
+                    jeMoje ? "text-papir/75" : "text-inkoust/55"
+                  }`}
+                >
+                  {cas}
+                </time>
+              )}
+            </div>
+          )}
+          {skrytHlavicku && cas.length > 0 && (
+            <span className="sr-only">
+              <time dateTime={zprava.createdAt}>{cas}</time>
             </span>
-            {cas.length > 0 && (
-              <time
-                dateTime={zprava.createdAt}
-                className={`shrink-0 text-[11px] tabular-nums ${
-                  jeMoje ? "text-papir/75" : "text-inkoust/55"
-                }`}
-              >
-                {cas}
-              </time>
-            )}
-          </div>
+          )}
           <p
             className="mt-1 min-w-0 break-words text-[15px] leading-relaxed"
             style={{ overflowWrap: "anywhere" }}

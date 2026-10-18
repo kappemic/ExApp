@@ -116,6 +116,15 @@ export function dnesniDatumYmd(): string {
  * `stav !== "proběhlá"` A `datum <= dnes <= (datumDo ?? datum)`
  * (ISO řetězce, lokální dnešek).
  */
+function konecVypravyYmd(
+  expedice: Pick<Expedition, "datum" | "datumDo">,
+): string {
+  const od: string = expedice.datum.slice(0, 10);
+  const rawDo: string | null = expedice.datumDo;
+  if (rawDo === null || rawDo.length === 0) return od;
+  return rawDo.slice(0, 10);
+}
+
 export function jeProbihajici(
   expedice: Pick<Expedition, "stav" | "datum" | "datumDo">,
   dnes?: string,
@@ -123,8 +132,19 @@ export function jeProbihajici(
   if (expedice.stav === "proběhlá") return false;
   const dnesYmd: string = dnes ?? dnesniDatumYmd();
   const od: string = expedice.datum.slice(0, 10);
-  const rawDo: string | null = expedice.datumDo;
-  const konec: string =
-    rawDo === null || rawDo.length === 0 ? od : rawDo.slice(0, 10);
+  const konec: string = konecVypravyYmd(expedice);
   return od <= dnesYmd && dnesYmd <= konec;
+}
+
+/**
+ * Date has passed, but nobody closed the expedition yet
+ * (`stav` is still volno / skoro plno). Shown in Neuzavřené, not upcoming.
+ */
+export function jeUplynula(
+  expedice: Pick<Expedition, "stav" | "datum" | "datumDo">,
+  dnes?: string,
+): boolean {
+  if (expedice.stav === "proběhlá") return false;
+  const dnesYmd: string = dnes ?? dnesniDatumYmd();
+  return konecVypravyYmd(expedice) < dnesYmd;
 }

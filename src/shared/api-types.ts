@@ -73,7 +73,30 @@ export interface ApiUser {
   funkce?: Funkce;
   /** Ortogonální admin příznak — aditivně optional. */
   isAdmin?: boolean;
+  /**
+   * Škola (Step 4, aditivně optional — DB `users.skola` NOT NULL DEFAULT '').
+   * "" = nevyplněna. Chybí-li pole (starší odpověď), klient bere "".
+   */
+  skola?: string;
+  /**
+   * Třída / klubovna (Step 4, aditivně optional — DB `users.trida`).
+   * "" = nevyplněna.
+   */
+  trida?: string;
   stravaId: string | null;
+  /**
+   * Avatar (Step 3, aditivně optional — DB sloupec `users.avatar_url` beze změny).
+   * Veřejná https:// URL, null = nevyplněno. UI URL input odebrán
+   * (jen náhled + Odebrat/Zahodit); API validace URL beze změny.
+   */
+  avatarUrl?: string | null;
+  /** Krátké představení (Step 3, aditivně optional — DB `users.bio`). */
+  bio?: string;
+  /**
+   * Datum narození YYYY-MM-DD (Step 3, aditivně optional — DB sloupec `users.narozeniny` beze změny).
+   * null = nevyplněno.
+   */
+  narozeniny?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -224,6 +247,63 @@ export interface PrihlaseniResponse {
 export const ME_PATH = "/api/me" as const;
 
 export type MeResponse = ApiUser;
+
+/* ------------------------------------------------------------------ */
+/* 4b) PATCH /api/me — úprava vlastního profilu (Step 3, USER i ADMIN)  */
+/* Hranice: vyžaduje session (`vyzadujPrihlaseni`). Bez session → 401   */
+/* NEPRIHLASEN. Cíl je VŽDY session.user.id (žádné :id v URL) — IDOR     */
+/* je vyloučen konstrukcí, aktuální heslo se nevyžaduje (Q3).           */
+/* Parciální PATCH sémantika — jen poslaná pole se mění. Pole mapují    */
+/* 1:1 na DB `users`: jmeno, prijmeni, telefon, discordNick, skola,     */
+/* trida + nové avatar_url / bio / narozeniny (DB sloupec `narozeniny`  */
+/* beze změny, UI label „Datum narození"; migrace 0015). Žádný          */
+/* displayName/nick bez sloupce — zobrazované jméno = jmeno + prijmeni. */
+/* E-mail: lowercase normalizace + kontrola unikátnosti (jiné id s       */
+/* týmž e-mailem → 409 EMAIL_OBSAZEN). Heslo: plaintext v body, server   */
+/* hashuje bcrypt (cost 10, stejně jako registr), hash se nikdy nevrací */
+/* ani neloguje. Avatar: POUZE https:// URL v API (UI URL input odebrán, */
+/* upload souborů až Step 4).                                            */
+/* Nevalidní pole → 422 VALIDATION_ERROR s details (pole → české hlášky).*/
+/* Úspěch → 200 + `UpravitProfilResponse`. Idempotentní: opakovaný PATCH */
+/* se stejným tělem přepíše stejné hodnoty (`updatedAt` se obnoví).      */
+/* Chyby vždy jen `ApiErrorResponse`. Aditivní, nic se nepřejmenovává.  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parciální update vlastního profilu — jen poslaná pole se mění.
+ * Prázdný nepovinný kontakt / avatar / datum narození (pole `narozeniny`, "" nebo null)
+ * hranice normalizuje na null (smazání). Škola / třída / bio:
+ * prázdné → "" (DB NOT NULL DEFAULT ''). Heslo se posílá plaintext
+ * (TLS), server ho hashuje a nikdy nevrací.
+ */
+export interface UpravitProfilRequest {
+  jmeno?: string;
+  prijmeni?: string;
+  email?: string;
+  /** Nové heslo plaintext (8–128 znaků). Server hashuje bcrypt. */
+  heslo?: string;
+  /** Nepovinný; prázdný řetězec / null → null (smazat). Max 32 znaků. */
+  telefon?: string | null;
+  /** Nepovinný; prázdný řetězec / null → null (smazat). Max 32 znaků. */
+  discordNick?: string | null;
+  /** Nepovinná; prázdná → "" (DB DEFAULT ''). Max 120 znaků. */
+  skola?: string;
+  /** Nepovinná; prázdná → "" (DB DEFAULT ''). Max 120 znaků. */
+  trida?: string;
+  /**
+   * Avatar — POUZE veřejná https:// URL v API (max 2048, UI URL input odebrán).
+   * "" / null → null (smazat). Upload souborů až Step 4.
+   */
+  avatarUrl?: string | null;
+  /** Nepovinné; max 500 znaků. Prázdné → "". */
+  bio?: string;
+  /** Datum narození YYYY-MM-DD (1900-01-01 až dnes, DB sloupec `narozeniny`); "" / null → null (smazat). */
+  narozeniny?: string | null;
+}
+
+export interface UpravitProfilResponse {
+  user: ApiUser;
+}
 
 /* ------------------------------------------------------------------ */
 /* 5) PATCH /api/clenove/:id — úprava člena (jen ADMIN, Krok 4b)        */
@@ -437,6 +517,8 @@ export const VALIDACE = {
   rucniPrevyseniMax: 20000,
   skolaMaxDelka: 120,
   tridaMaxDelka: 120,
+  avatarUrlMaxDelka: 2048,
+  bioMaxDelka: 500,
   zpravaTextMinDelka: 1,
   zpravaTextMaxDelka: 1000,
   zpravyLimitDefault: 50,
@@ -491,6 +573,11 @@ export const VALIDACNI_ZPRAVY = {
   ucastnikStatusNeplatny: "Status musí být „ucastnil_se“, nebo „omluven“.",
   skolaDlouha: "Škola může mít nejvýš 120 znaků.",
   tridaDlouha: "Třída může mít nejvýš 120 znaků.",
+  avatarUrlNeplatny: "Avatar musí být veřejný odkaz (https://).",
+  avatarUrlDlouhy: "Odkaz na avatar je moc dlouhý (nejvýš 2048 znaků).",
+  bioDlouhe: "Představení může mít nejvýš 500 znaků.",
+  narozeninyNeplatne: "Datum narození musí být ve tvaru RRRR-MM-DD.",
+  narozeninyMimoRozsah: "Datum narození musí být mezi rokem 1900 a dneškem.",
   schuzkaNazevPovinny: "Zadej název schůzky.",
   schuzkaNazevKratky: "Název schůzky musí mít aspoň 3 znaky.",
   schuzkaNazevDlouhy: "Název schůzky může mít nejvýš 120 znaků.",
@@ -658,6 +745,11 @@ export interface ApiUcastnik {
   jmeno: string;
   status: StatusUcasti;
   createdAt: string;
+  /**
+   * Avatar přihlášeného účtu (`users.avatar_url`). null = bez fotky
+   * nebo účastník bez účtu (jen `clenId`).
+   */
+  avatarUrl?: string | null;
 }
 
 /** Query pro GET /api/expeditions (seznam + historie, vše PUBLIC). */
@@ -1077,14 +1169,11 @@ export function odebratUcastnikaPath(
 }
 
 /* ------------------------------------------------------------------ */
-/* 11) GET /api/users — seznam uživatelů pro selektor (jen ADMIN, Krok 4) */
+/* 11) GET /api/users — seznam členů (každý přihlášený, Krok 4 + adresář) */
 /* Implementováno v server/src/index.ts 1:1 dle kontraktu.              */
-/* Důvod: POST /api/expeditions/:id/ucastnici { userId | clenId } už    */
-/* funguje (varianta A, §10), ale admin UI nemá odkud brát `userId` —   */
-/* chybí jen list uživatelů pro selektor. Aditivní, nic se nepřejmenovává.*/
-/* Hranice: vyžaduje session s authRole === "ADMIN" (stejný guard jako  */
-/* GET /api/clenove — `vyzadujAdmina`). Jinak 401 NEPRIHLASEN (bez       */
-/* session) / 403 ZAKAZANO (USER). Úspěch → 200 + `UsersListResponse`.   */
+/* Adresář vidí USER i ADMIN (e-mail, telefon, Discord). Úpravy a       */
+/* mazání zůstávají PATCH/DELETE jen ADMIN. Bez session → 401           */
+/* NEPRIHLASEN. Úspěch → 200 + `UsersListResponse`.                     */
 /* Tvar je záměrně úzký `UserListItem { id, jmeno, email }` — nikdy      */
 /* hesla ani hashe (stejně jako `ApiUser` nenosí `passwordHash`).        */
 /* `jmeno` je složené z DB `users.jmeno + users.prijmeni` (trim +        */
@@ -1125,6 +1214,10 @@ export interface UserListItem {
   trida: string;
   /** Discord nick — null = nevyplněn (DB `discord_nick` nullable, server mapuje string → string, jinak null). */
   discordNick: string | null;
+  /** Telefon — null = nevyplněn (DB `telefon` nullable). */
+  telefon: string | null;
+  /** Živý avatar (`users.avatar_url`). null / chybí = iniciály. */
+  avatarUrl?: string | null;
 }
 
 export interface UsersListResponse {
@@ -1163,12 +1256,29 @@ export interface UpravitUzivateleResponse {
   user: UserListItem;
 }
 
+/* ------------------------------------------------------------------ */
+/* DELETE /api/users/:id — smazání přihlašovacího účtu (jen ADMIN).     */
+/* Stejná cesta jako PATCH. Bez session 401 NEPRIHLASEN, ne-admin       */
+/* 403 ZAKAZANO. Vlastní účet (session id === :id) → 403 ZAKAZANO.      */
+/* Neznámé id → 404 NENALEZENO. Úspěch → 200 + SmazatUzivateleResponse. */
+/* Související řádky řeší existující ON DELETE (CASCADE / SET NULL).    */
+/* Řádek v `clenove` se nemaže. Opakovaný DELETE → 404.                  */
+/* ------------------------------------------------------------------ */
+
+export interface SmazatUzivateleResponse {
+  ok: true;
+}
+
 /** Vzory cest uživatelského listu + detailu (odděleně jako Krok 2 / Krok 6). */
 export type UsersCesta = typeof USERS_PATH | typeof USERS_DETAIL_VZOR;
 
-/** Hranice správy uživatelů: list i editace role jen ADMIN. */
+/**
+ * Čtení seznamu (`GET /api/users`) smí každý přihlášený.
+ * Úprava a smazání na stejné cestě detailu zůstávají jen ADMIN
+ * (metoda se do téhle matice nevejde — hlídá route).
+ */
 export const PRISTUP_USERS: Record<UsersCesta, AuthRole | "PUBLIC"> = {
-  [USERS_PATH]: "ADMIN",
+  [USERS_PATH]: "USER",
   [USERS_DETAIL_VZOR]: "ADMIN",
 } as const;
 
@@ -2148,9 +2258,46 @@ export const STRAVA_AUTH_URL_PATH = "/api/strava/auth-url" as const;
 /** Odpojení Stravy (USER, idempotentní `{ ok: true }`). */
 export const STRAVA_ODPOJIT_PATH = "/api/strava/odpojit" as const;
 
+/** Stav propojení (USER) — veřejný stav bez secretů (Step 5, tenký slice). */
+export const STRAVA_STAV_PATH = "/api/strava/stav" as const;
+
+/** Alias `GET /api/strava/connect` → stejné jako auth-url (Step 5). */
+export const STRAVA_CONNECT_PATH = "/api/strava/connect" as const;
+
+/** Alias `DELETE /api/strava/disconnect` → stejné jako odpojit (Step 5). */
+export const STRAVA_DISCONNECT_PATH = "/api/strava/disconnect" as const;
+
 /** Odpověď `GET /api/strava/auth-url` — jen veřejné URL. */
 export interface StravaAuthUrlResponse {
   url: string;
+}
+
+/**
+ * Veřejný stav propojení pro tab Strava (Step 5, tenký slice).
+ * Žádné secrety — jen `stravaId` (atlet), `scope` a `expirace` (ISO).
+ * `scope`/`expirace` null = nepropojeno (nebo bez řádku tokenů).
+ */
+export interface StravaStavResponse {
+  propojeno: boolean;
+  stravaId: string | null;
+  scope: string | null;
+  expirace: string | null;
+}
+
+/** Guard `StravaStavResponse` — odmítne secrety v odpovědi. */
+export function jeStravaStavResponse(hodnota: unknown): hodnota is StravaStavResponse {
+  if (typeof hodnota !== "object" || hodnota === null) return false;
+  const zaznam = hodnota as Record<string, unknown>;
+  if (typeof zaznam["propojeno"] !== "boolean") return false;
+  const stravaId: unknown = zaznam["stravaId"];
+  if (typeof stravaId !== "string" && stravaId !== null) return false;
+  const scope: unknown = zaznam["scope"];
+  if (typeof scope !== "string" && scope !== null) return false;
+  const expirace: unknown = zaznam["expirace"];
+  if (typeof expirace !== "string" && expirace !== null) return false;
+  if ("access_token" in zaznam || "refresh_token" in zaznam) return false;
+  if ("accessToken" in zaznam || "refreshToken" in zaznam) return false;
+  return true;
 }
 
 /** Povolené důvody callback chyby (allowlist do `?duvod=`). */
@@ -2284,12 +2431,15 @@ export function zpravaDetailPath(
  * Kanál diskuze (Step 2, kopie DB CHECK `zpravy_kanal_check` + `KANALY_ZPRAVY`).
  * `expedice` = vlákno výpravy (`expedice_id` NOT NULL), zbytek = globál (NULL).
  */
-export type KanalDiskuze = "expedice" | "dulezite" | "general";
+export type KanalDiskuze = "expedice" | "dulezite" | "general" | "soukrome";
 
 /** Guard kanálu (hranice API ho použije při validaci POST). */
 export function jeKanalDiskuze(hodnota: unknown): hodnota is KanalDiskuze {
   return (
-    hodnota === "expedice" || hodnota === "dulezite" || hodnota === "general"
+    hodnota === "expedice" ||
+    hodnota === "dulezite" ||
+    hodnota === "general" ||
+    hodnota === "soukrome"
   );
 }
 
@@ -2306,6 +2456,11 @@ export interface ApiZprava {
    * `autor_jmeno`, jinak `Bývalý člen`. Vždy neprázdné.
    */
   authorName: string;
+  /**
+   * Živý avatar z JOINu `users.avatar_url`. null / chybí = iniciály
+   * (smazaný účet, nebo účet bez fotky).
+   */
+  authorAvatarUrl?: string | null;
   /** Kanál zprávy (kopie DB CHECK `zpravy_kanal_check`). */
   channel: KanalDiskuze;
   /** Tělo zprávy raw (trimnuté, 1–1000 znaků) — escapuje až render. */
@@ -2408,6 +2563,14 @@ export function jeApiZprava(hodnota: unknown): hodnota is ApiZprava {
   const autorId: unknown = zaznam["autorId"];
   if (typeof autorId !== "string" && autorId !== null) return false;
   if (typeof zaznam["authorName"] !== "string" || zaznam["authorName"].length === 0) {
+    return false;
+  }
+  const authorAvatarUrl: unknown = zaznam["authorAvatarUrl"];
+  if (
+    authorAvatarUrl !== undefined &&
+    authorAvatarUrl !== null &&
+    typeof authorAvatarUrl !== "string"
+  ) {
     return false;
   }
   if (!jeKanalDiskuze(zaznam["channel"])) return false;
@@ -2631,11 +2794,15 @@ export function globalniZpravyUrl(channel?: KanalDiskuze): string {
 
 /** Jedna konverzace v přehledu (klíč + poslední zpráva + počet nepřečtených). */
 export interface ApiKonverzace {
-  /** `dulezite` | `general` | `expedice:<slug>`. */
+  /** `dulezite` | `general` | `expedice:<slug>` | `soukrome:<uuid>:<uuid>`. */
   key: string;
-  /** NULL = globál, string = vlákno výpravy. */
+  /** NULL = globál nebo soukromý chat, string = vlákno výpravy. */
   expeditionId: string | null;
   channel: KanalDiskuze;
+  /** Druhý účastník soukromého chatu. Jinde chybí. */
+  partnerId?: string | null;
+  /** Jméno druhého účastníka. Jinde chybí. */
+  partnerJmeno?: string | null;
   /** Poslední viditelná zpráva (MAX created_at); null = prázdný globál. */
   lastMessage: ApiZprava | null;
   /** Počet zpráv po lastReadAt (anonym vždy 0, nikdy záporné). */

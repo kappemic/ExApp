@@ -21,6 +21,7 @@ import { eq } from "drizzle-orm";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
 import type { Db } from "./db";
+import { lzeDoplnitArchiv } from "./vyprava-termin";
 
 /** Udělený OAuth scope (čtení + čtení aktivit pro párování k výpravám). */
 export const STRAVA_SCOPE_DEFAULT = "read,activity:read" as const;
@@ -52,6 +53,25 @@ export class StravaVymenaChyba extends Error {
     super(zprava);
     this.name = "StravaVymenaChyba";
   }
+}
+
+/**
+ * Strava je nedostupná (timeout / síť / 5xx) — route složí 502
+ * `STRAVA_NEDOSTUPNA` (ne 500). Zpráva je sdílená s kontraktem
+ * (`STRAVA_NEDOSTUPNA_ZPRAVA`), nikdy nenese secret ani tělo odpovědi.
+ */
+export class StravaNedostupnaChyba extends Error {
+  constructor(zprava: string = STRAVA_NEDOSTUPNA_ZPRAVA) {
+    super(zprava);
+    this.name = "StravaNedostupnaChyba";
+  }
+}
+
+/** Type-guard pro rozlišení výpadku Stravy od vnitřní chyby (bez any). */
+export function jeStravaNedostupnaChyba(
+  hodnota: unknown,
+): hodnota is StravaNedostupnaChyba {
+  return hodnota instanceof StravaNedostupnaChyba;
 }
 
 /** Výsledek výměny `code → tokens` (vše server-only kromě scope). */
@@ -194,8 +214,20 @@ interface SurovaTokenOdpoved {
   expirace: Date;
 }
 
-/** Guard odpovědi Stravy — nedůvěryhodný vstup z externí API. */
-function ctiTokenOdpoved(hodnota: unknown): SurovaTokenOdpoved | null {
+function ctiAtletId(hodnota: Record<string, unknown>): string {
+  const atlet: unknown = hodnota["athlete"];
+  if (!jeRecord(atlet)) return "";
+  const id: unknown = atlet["id"];
+  if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  if (typeof id === "string" && id.length > 0) return id;
+  return "";
+}
+
+/**
+ * Shared fields of a Strava token response. `athlete` is optional:
+ * the authorization_code grant includes it, the refresh_token grant does not.
+ */
+function ctiSurovaTokenPole(hodnota: unknown): SurovaTokenOdpoved | null {
   if (!jeRecord(hodnota)) return null;
   const access: unknown = hodnota["access_token"];
   const expires: unknown = hodnota["expires_at"];
@@ -203,24 +235,37 @@ function ctiTokenOdpoved(hodnota: unknown): SurovaTokenOdpoved | null {
   if (typeof expires !== "number" || !Number.isFinite(expires) || expires <= 0)
     return null;
   const refresh: unknown = hodnota["refresh_token"];
-  const atlet: unknown = hodnota["athlete"];
-  let athleteId = "";
-  if (jeRecord(atlet)) {
-    const id: unknown = atlet["id"];
-    if (typeof id === "number" && Number.isFinite(id)) athleteId = String(id);
-    else if (typeof id === "string" && id.length > 0) athleteId = id;
-  }
-  if (athleteId.length === 0) return null;
   const scopeRaw: unknown = hodnota["scope"];
   return {
     accessToken: access,
     refreshToken: typeof refresh === "string" ? refresh : "",
-    athleteId,
+    athleteId: ctiAtletId(hodnota),
     scope:
       typeof scopeRaw === "string" && scopeRaw.length > 0
         ? scopeRaw
         : STRAVA_SCOPE_DEFAULT,
     expirace: new Date(expires * 1000),
+  };
+}
+
+/** Authorization-code exchange — athlete id is required. */
+function ctiTokenOdpoved(hodnota: unknown): SurovaTokenOdpoved | null {
+  const pole = ctiSurovaTokenPole(hodnota);
+  if (pole === null || pole.athleteId.length === 0) return null;
+  return pole;
+}
+
+/** Refresh grant — Strava omits `athlete`; a missing athlete is still success. */
+function ctiRefreshOdpoved(
+  hodnota: unknown,
+): Omit<SurovaTokenOdpoved, "athleteId"> | null {
+  const pole = ctiSurovaTokenPole(hodnota);
+  if (pole === null) return null;
+  return {
+    accessToken: pole.accessToken,
+    refreshToken: pole.refreshToken,
+    scope: pole.scope,
+    expirace: pole.expirace,
   };
 }
 
@@ -250,8 +295,11 @@ async function postNaStravu(telo: URLSearchParams): Promise<unknown> {
       body: telo.toString(),
     });
   } catch {
-    throw new Error("Strava je teď nedostupná. Zkus to prosím později.");
+    throw new StravaNedostupnaChyba();
   }
+  // 5xx / výpadek token endpointu není odpojení účtu ani 401 aplikace.
+  // 4xx (invalid_grant, odvolané oprávnění) zůstává chyba výměny.
+  if (odpoved.status >= 500) throw new StravaNedostupnaChyba();
   if (!odpoved.ok) throw new StravaVymenaChyba();
   try {
     return (await odpoved.json()) as unknown;
@@ -319,7 +367,7 @@ export async function obnovStravaToken(
   telo.set("grant_type", "refresh_token");
   telo.set("refresh_token", refreshToken);
   const surova = await postNaStravu(telo);
-  const cista = ctiTokenOdpoved(surova);
+  const cista = ctiRefreshOdpoved(surova);
   if (cista === null) throw new StravaVymenaChyba();
   return {
     accessToken: cista.accessToken,
@@ -375,6 +423,7 @@ export async function ulozStravaTokeny(
 /* ------------------------------------------------------------------ */
 
 import {
+  STRAVA_NEDOSTUPNA_ZPRAVA,
   jeStravaCallbackDuvod,
   type ApiErrorCode,
   type NeparovanaAktivita,
@@ -633,10 +682,10 @@ export async function nactiStravaAktivity(
       },
     });
   } catch {
-    throw new Error("Strava je teď nedostupná. Zkus to prosím později.");
+    throw new StravaNedostupnaChyba();
   }
   if (!odpoved.ok) {
-    throw new Error("Strava je teď nedostupná. Zkus to prosím později.");
+    throw new StravaNedostupnaChyba();
   }
   let surova: unknown;
   try {
@@ -699,6 +748,9 @@ export function oznacSparovane(
 export interface RozhodnutiParovaniVstup {
   /** Aktuální stav výpravy (`stav` z DB). */
   stav: string;
+  /** When set with `datum`, a past end date counts like `proběhlá`. */
+  datum?: string;
+  datumDo?: string | null;
   /** Výprava už má `strava_activity_id` (jiný confirm proběhl). */
   expediceSparovana: boolean;
   /** Aktivita už je spárovaná k jiné výpravě (UNIQUE). */
@@ -709,20 +761,33 @@ export type RozhodnutiParovani =
   | { ok: true }
   | { ok: false; kod: ApiErrorCode; zprava: string };
 
+function smiDoplnitArchiv(vstup: {
+  stav: string;
+  datum?: string;
+  datumDo?: string | null;
+}): boolean {
+  if (vstup.datum === undefined) return vstup.stav === "proběhlá";
+  return lzeDoplnitArchiv({
+    stav: vstup.stav,
+    datum: vstup.datum,
+    datumDo: vstup.datumDo ?? null,
+  });
+}
+
 /**
  * Čisté rozhodnutí pro `POST :id/strava-parovani` (bez DB — testovatelné).
- * Jen `proběhlá` smí párovat (jinak 409 `VYPRAVA_UZAVRENA`);
- * duplicita (výprava už spárovaná / aktivita už jinde) → 409
- * `UZ_PRIHLASEN`. Route chybu složí přes `posliChybu`.
+ * `proběhlá`, or a trip whose end date already passed, may pair
+ * (otherwise 409 `VYPRAVA_UZAVRENA`). A duplicate expedition or activity
+ * is 409 `UZ_PRIHLASEN`. The route sends the error via `posliChybu`.
  */
 export function rozhodniParovani(
   vstup: RozhodnutiParovaniVstup,
 ): RozhodnutiParovani {
-  if (vstup.stav !== "proběhlá") {
+  if (!smiDoplnitArchiv(vstup)) {
     return {
       ok: false,
       kod: "VYPRAVA_UZAVRENA",
-      zprava: "Párovat jde až proběhlou výpravu. Nejdřív ji uzavři s docházkou.",
+      zprava: "Párovat jde až po skončení výpravy.",
     };
   }
   if (vstup.expediceSparovana) {
@@ -745,6 +810,9 @@ export function rozhodniParovani(
 export interface RozhodnutiOdpojeniVstup {
   /** Aktuální stav výpravy (`stav` z DB). */
   stav: string;
+  /** When set with `datum`, a past end date counts like `proběhlá`. */
+  datum?: string;
+  datumDo?: string | null;
   /** Výprava má `strava_activity_id` nebo km/převýšení/polyline. */
   expediceSparovana: boolean;
 }
@@ -755,17 +823,17 @@ export type RozhodnutiOdpojeni =
 
 /**
  * Čisté rozhodnutí pro `DELETE :id/strava-parovani` (bez DB — testovatelné).
- * Jen `proběhlá` smí odpojovat (jinak 409 `VYPRAVA_UZAVRENA`);
- * nic připojeno → 404 `NENALEZENO`. Route chybu složí přes `posliChybu`.
+ * `proběhlá`, or a trip whose end date already passed, may disconnect
+ * (otherwise 409 `VYPRAVA_UZAVRENA`). Nothing attached → 404 `NENALEZENO`.
  */
 export function rozhodniOdpojeni(
   vstup: RozhodnutiOdpojeniVstup,
 ): RozhodnutiOdpojeni {
-  if (vstup.stav !== "proběhlá") {
+  if (!smiDoplnitArchiv(vstup)) {
     return {
       ok: false,
       kod: "VYPRAVA_UZAVRENA",
-      zprava: "Odpojit jde až proběhlou výpravu. Nejdřív ji uzavři s docházkou.",
+      zprava: "Odpojit jde až po skončení výpravy.",
     };
   }
   if (!vstup.expediceSparovana) {
@@ -807,9 +875,16 @@ export async function zajistiPlatnyAccessToken(
       })
       .where(eq(stravaTokens.userId, userId));
     return obnovene.accessToken;
-  } catch {
-    // Best-effort: i prošlý token vrátíme — volající dostane 401 od Stravy,
-    // ale session uživatele (přihlášení) tím nikdy netrpí.
-    return radek.accessToken;
+  } catch (chyba) {
+    // Rozlišení příčiny (root-cause STRAVA_NEDOSTUPNA při párování):
+    // - výpadek Stravy (timeout/síť/5xx) → propaguj Nedostupna (volající složí 502),
+    // - odmítnutý refresh (invalid_grant/odvolané oprávnění) → null (volající
+    //   vrátí [] / 422 s návodem do profilu, ne matoucí 502 ze stale tokenu),
+    // - misconfig (chybí CLIENT_ID/SECRET) → propaguj (volající složí 500, ne 502).
+    // Vracet prošlý token by vedlo jen k 401 od Stravy → 502 NEDOSTUPNA.
+    // Session uživatele tím nikdy netrpí (žádné mazání cookie).
+    if (jeStravaNedostupnaChyba(chyba)) throw chyba;
+    if (chyba instanceof StravaVymenaChyba) return null;
+    throw chyba;
   }
 }

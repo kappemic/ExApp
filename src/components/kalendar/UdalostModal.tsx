@@ -24,6 +24,8 @@ interface UdalostModalProps {
     datum?: string,
   ) => void;
   onNovaSchuzka: (datum: string) => void;
+  /** Journal chrome. Omitted on any page that is not the trips journal. */
+  denik?: boolean;
 }
 
 function opakovaniPopisek(schuzka: ApiSchuzka): string {
@@ -55,6 +57,7 @@ export default function UdalostModal(props: UdalostModalProps): JSX.Element {
     onUpravitSchuzku,
     onSmazatSchuzku,
     onNovaSchuzka,
+    denik = false,
   } = props;
 
   /*
@@ -107,7 +110,9 @@ export default function UdalostModal(props: UdalostModalProps): JSX.Element {
   return (
     <>
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 p-4 sm:items-center"
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 p-4 sm:items-center${
+        denik ? " nocturne nahled-modal" : ""
+      }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onZavrit();
       }}
@@ -270,6 +275,7 @@ export default function UdalostModal(props: UdalostModalProps): JSX.Element {
         onZmenaRozsahu={(novy: RozsahMazaniSchuzky) => setRozsah(novy)}
         chyba={chybaMazani ?? null}
         navratElement={spoustecRef.current}
+        trida={denik ? "nahled-ovladani" : undefined}
         onPotvrdit={() =>
           onSmazatSchuzku(
             kPotvereni.id,

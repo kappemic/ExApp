@@ -11,9 +11,11 @@ import ClenDetailModal from "../components/Admin/ClenDetailModal";
 import ClenoveTable from "../components/Admin/ClenoveTable";
 import {
   nactiCleny,
+  smazClena,
   ulozProfilClena,
   type UlozitProfilVstup,
 } from "../lib/admin-clenove";
+import { useAuth } from "../hooks/useAuth";
 import type { UserListItem } from "../shared/api-types";
 
 const POPISKY_PANELU: Record<ClenoveTabId, string> = {
@@ -43,11 +45,12 @@ function jeAktivni(profil: ClenskyProfil): boolean {
 
 /**
  * Shell /admin/clenove — 5 přepínatelných pohledů nad živými users.
- * Guard řeší App.tsx (AdminGate), tady layout + taby + tabulka.
+ * Guard: přihlášení (RequireAuth). Úpravy a mazání jen když `isAdmin`.
  *
  * Zdroj: GET /api/users (jen ADMIN) — DB `clenove` je prázdná,
  * zdrojem je `users` (3D trio + mirror `role`, jedna hodnota).
  * Editace profilu ukládá PATCH /api/users/:id přes `ulozProfilClena`.
+ * Smazání účtu jde přes DELETE /api/users/:id (`smazClena`).
  *
  * Rozhodnutí o 5. tabu „Členové": ponechány Všichni / Aktivní / Rada / Vedení
  * a tab Členové (= základní bez aktivní účasti) pro symetrii — jinak by
@@ -59,6 +62,7 @@ function jeAktivni(profil: ClenskyProfil): boolean {
  * samotný admin je vidět jen ve „Všichni".
  */
 export default function AdminClenovePage(): JSX.Element {
+  const { isAdmin } = useAuth();
   const [aktivniTab, setAktivniTab] = useState<ClenoveTabId>("vsichni");
   const [vybranyId, setVybranyId] = useState<string | null>(null);
   const [clenove, setClenove] = useState<UserListItem[]>([]);
@@ -98,6 +102,18 @@ export default function AdminClenovePage(): JSX.Element {
     return null;
   }
 
+  async function naOdstranit(id: string): Promise<string | null> {
+    const vysledek = await smazClena(id);
+    if (!vysledek.ok) {
+      return vysledek.chyba;
+    }
+    setClenove((predchozi: UserListItem[]) =>
+      predchozi.filter((clen: UserListItem) => clen.id !== id),
+    );
+    setVybranyId(null);
+    return null;
+  }
+
   const pocty: PoctyTabu = useMemo(
     () => ({
       vsichni: clenove.length,
@@ -134,12 +150,12 @@ export default function AdminClenovePage(): JSX.Element {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
       <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Administrace</p>
+        <p className="text-sm font-medium text-mech">Klub</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
           Členové
         </h1>
         <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Správa členů klubu — živý seznam z databáze, role a zařazení.
+          Kontakty a zařazení členů klubu.
         </p>
 
         <AdminTaby
@@ -205,7 +221,8 @@ export default function AdminClenovePage(): JSX.Element {
       <ClenDetailModal
         clen={vybrany}
         onZavrit={() => setVybranyId(null)}
-        onUlozitProfil={naUlozitProfil}
+        onUlozitProfil={isAdmin ? naUlozitProfil : undefined}
+        onOdstranit={isAdmin ? naOdstranit : undefined}
       />
     </main>
   );

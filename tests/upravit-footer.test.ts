@@ -80,30 +80,47 @@ describe("Odpojit aktivitu: viditelnost + fallback + stavový řádek", () => {
     expect(okoli).toContain('role="status"');
   });
 
-  it("fallback: když prop je false, stav se dočte z API (getMojeStatistiky)", () => {
+  it("Krok 16 fix: stav se NEČTE z osobních statistik (žádný getMojeStatistiky)", () => {
     const obsah = cti(PAROVANI);
-    expect(obsah).toContain("getMojeStatistiky");
-    // Fallback hledá záznam expedice (expeditionId) a vytahuje km / activityId.
-    expect(obsah).toContain("expeditionId");
-    expect(obsah).toMatch(/stravaActivityId|dbMaZaznam|fallback/i);
+    expect(obsah).not.toContain("getMojeStatistiky");
+    expect(obsah).not.toMatch(/dbMaZaznam|dbKm/);
+    // Rozhodnutí stojí na props z detailu expedice.
+    expect(obsah).toContain("jeSparovano");
+    expect(obsah).toContain("stravaActivityId");
   });
 
-  it('Odpojit aktivitu se ukaze i pro DB zaznam (km / activityId), nejen pro prop', () => {
+  it("zdroj (rozhodniZdrojPripojeni) platí i pro ruční zápis (km bez Strava id), nejen pro prop id", () => {
     const obsah = cti(PAROVANI);
     expect(obsah).toContain("Odpojit aktivitu");
-    const pozicePripojeno = obsah.indexOf("const pripojeno");
-    expect(pozicePripojeno).toBeGreaterThan(-1);
-    const okoli = obsah.slice(pozicePripojeno, pozicePripojeno + 600);
-    // pripojeno nesmí záviset JEN na props — musí zahrnout DB fallback.
-    expect(okoli).not.toMatch(/=\s*sparovanoId\s*!==\s*null\s*\|\|\s*jeSparovano\s*;/);
+    // Step4: přejmenováno const pripojeno → const zdroj + čistá funkce.
+    expect(obsah).toContain("rozhodniZdrojPripojeni");
+    expect(obsah).toContain("ZdrojPripojeni");
+    const poziceZdroje = obsah.indexOf("const zdroj");
+    expect(poziceZdroje).toBeGreaterThan(-1);
+    const okoli = obsah.slice(poziceZdroje, poziceZdroje + 600);
+    // Ruční zápis (km bez activityId) drží místní příznak mimo props.
+    expect(okoli).toMatch(/rucneSparovano/);
+    expect(okoli).toContain("jeSparovano");
+    // Step4: tři úrovně — Strava větev odpojuje aktivitu, ruční větev maže zápis.
+    expect(obsah).toContain("Smazat ruční zápis");
+    const poziceFunkce = obsah.indexOf("export function rozhodniZdrojPripojeni");
+    expect(poziceFunkce).toBeGreaterThan(-1);
+    const okoliFunkce = obsah.slice(poziceFunkce, poziceFunkce + 1200);
+    expect(okoliFunkce).toMatch(/rucneSparovano/);
+    expect(okoliFunkce).toContain("jeSparovano");
   });
 
-  it("Upravit stále prop-drilluje expeditionId + onOdpojeno (refresh)", () => {
+  it("Upravit předává stav párování z detailu (jeSparovano + stravaActivityId, bez drillu mimo modal)", () => {
     const obsah = cti(MODAL);
     const pozice = obsah.indexOf("<StravaParovani");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(pozice, pozice + 1200);
     expect(okoli).toContain("expeditionId");
+    expect(okoli).toContain("jeSparovano");
+    expect(okoli).toContain("stravaActivityId");
     expect(okoli).toContain("onOdpojeno");
+    // Mapování z detailu žije v prevedExpedici (km NEBO Strava id).
+    expect(obsah).toContain("jeSparovano");
+    expect(obsah).toMatch(/prevedExpedici|maKm/);
   });
 });

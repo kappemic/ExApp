@@ -38,6 +38,10 @@ export interface ExpeditionPhotosProps {
   isAdmin: boolean;
   /** Cover id changed (load, pick, upload, delete). Optional. */
   onZmenaNahledu?: (fotkaId: string | null) => void;
+  /** Frame for the cover inside this block. Default keeps the short production band. */
+  obalClassName?: string;
+  /** Preview journal: drop the empty lined plate and ease portaled controls. */
+  denik?: boolean;
 }
 
 type FotkyStav = "nacitani" | "hotovo" | "chyba";
@@ -56,6 +60,8 @@ export default function ExpeditionPhotos({
   prihlasen,
   isAdmin,
   onZmenaNahledu,
+  obalClassName = "max-h-72 min-h-40 w-full",
+  denik = false,
 }: ExpeditionPhotosProps): JSX.Element | null {
   const nadpisId: string = useId();
   const dialogNadpisId: string = useId();
@@ -65,10 +71,12 @@ export default function ExpeditionPhotos({
   const [fotky, setFotky] = useState<ApiFotka[]>([]);
   const [chyba, setChyba] = useState<string | null>(null);
   const [galerieOtevrena, setGalerieOtevrena] = useState<boolean>(false);
+  const [galerieZavira, setGalerieZavira] = useState<boolean>(false);
 
   const souborRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const zavritRef = useRef<HTMLButtonElement>(null);
+  const galerieZaviraRef = useRef(false);
   const [soubory, setSoubory] = useState<File[]>([]);
   const [chybaSouboru, setChybaSouboru] = useState<string | null>(null);
   const [odesilaSe, setOdesilaSe] = useState<boolean>(false);
@@ -230,18 +238,36 @@ export default function ExpeditionPhotos({
     }
   }
 
+  function zavriGaleriiSPohybem(): void {
+    if (galerieZaviraRef.current) return;
+    const snizitPohyb =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!denik || snizitPohyb) {
+      setGalerieOtevrena(false);
+      resetMazaniFotek();
+      return;
+    }
+    galerieZaviraRef.current = true;
+    setGalerieZavira(true);
+    window.setTimeout(() => {
+      galerieZaviraRef.current = false;
+      setGalerieOtevrena(false);
+      setGalerieZavira(false);
+      resetMazaniFotek();
+    }, 220);
+  }
+
   function zavriGalerii(): void {
     if (mazani.mazaciRezim) {
       mazani.zrusMazani();
       return;
     }
-    setGalerieOtevrena(false);
-    resetMazaniFotek();
+    zavriGaleriiSPohybem();
   }
 
   function zavriGaleriiNatvrdo(): void {
-    setGalerieOtevrena(false);
-    resetMazaniFotek();
+    zavriGaleriiSPohybem();
   }
 
   async function naNahled(fotkaId: string): Promise<void> {
@@ -260,7 +286,9 @@ export default function ExpeditionPhotos({
     galerieOtevrena && typeof document !== "undefined"
       ? createPortal(
           <div
-            className="fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-3 sm:items-center"
+            className={`fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-3 sm:items-center${
+              denik ? ` nahled-ovladani${galerieZavira ? " nahled-zavira" : ""}` : ""
+            }`}
             onMouseDown={zavriGalerii}
           >
             <div
@@ -522,12 +550,12 @@ export default function ExpeditionPhotos({
         </div>
       )}
 
-      {stav === "hotovo" && (
+      {stav === "hotovo" && (nahled !== null || !denik) && (
         <div className="mt-2 overflow-hidden rounded-2xl border-2 border-inkoust bg-papir">
           <PapirObal
             src={nahled !== null ? urlSouboruFotky(expeditionId, nahled.id) : null}
             alt="Fotka z výpravy"
-            className="max-h-72 min-h-40 w-full"
+            className={obalClassName}
           />
         </div>
       )}
@@ -537,6 +565,8 @@ export default function ExpeditionPhotos({
           type="button"
           onClick={() => {
             setNahledChyba(null);
+            galerieZaviraRef.current = false;
+            setGalerieZavira(false);
             setGalerieOtevrena(true);
           }}
           className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} mt-3 w-full rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold text-inkoust`}
@@ -548,6 +578,7 @@ export default function ExpeditionPhotos({
       {galerie}
       {lightboxId !== null ? (
         <FotkyLightbox
+          trida={denik ? "nahled-ovladani" : undefined}
           expeditionId={expeditionId}
           pocatecniId={lightboxId}
           fotky={fotky}
@@ -574,6 +605,7 @@ export default function ExpeditionPhotos({
       ) : null}
       {mazani.potvrzeni !== null ? (
         <ConfirmDialog
+          trida={denik ? "nahled-ovladani" : undefined}
           otevreno
           nadpis={nadpisPotvrzeniMazaniFotek(mazani.potvrzeni, true)}
           popis={popisPotvrzeniMazaniFotek(mazani.potvrzeni, potvrzeniPocet, true)}

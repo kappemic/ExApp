@@ -4,6 +4,8 @@ import {
   type ClenskyProfil,
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
+import AvatarKruh from "../AvatarKruh";
+import { TlacitkoProfilu } from "../clen/ClenProfil";
 
 interface ClenoveTableProps {
   clenove: ReadonlyArray<UserListItem>;
@@ -90,14 +92,20 @@ export default function ClenoveTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border-2 border-inkoust bg-white/60 shadow-denik">
-      <table className="w-full min-w-[640px] border-collapse text-left">
+      <table className="w-full min-w-[880px] border-collapse text-left">
         <caption className="sr-only">
-          {popisek ?? "Seznam členů — jméno, stav a zařazení"}
+          {popisek ?? "Seznam členů — jméno, kontakt, stav a zařazení"}
         </caption>
         <thead>
           <tr className="border-b-2 border-inkoust bg-papir">
             <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
               Jméno
+            </th>
+            <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
+              Telefon
+            </th>
+            <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
+              Discord
             </th>
             <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
               Stav
@@ -119,40 +127,55 @@ export default function ClenoveTable({
                 }`}
               >
                 <th scope="row" className="min-w-0 p-1.5 sm:p-2">
-                  <button
-                    type="button"
-                    onClick={() => onVyber(clen)}
-                    aria-haspopup="dialog"
-                    aria-label={`${clen.jmeno} — otevřít detail člena`}
-                    className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left leading-snug"
-                  >
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-baseline gap-1">
-                        <span className="block min-w-0 max-w-[220px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
-                          {clen.jmeno}
-                        </span>
-                        {profil.isAdmin ? (
-                          <span
-                            title="Administrátor"
-                            className="shrink-0 text-sm font-bold text-jantar"
-                          >
-                            <span aria-hidden="true">★</span>
-                            <span className="sr-only">administrátor</span>
+                  <div className="flex items-center gap-1">
+                    <TlacitkoProfilu
+                      id={clen.id}
+                      jmeno={clen.jmeno}
+                      avatarUrl={clen.avatarUrl}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2"
+                    >
+                      <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-baseline gap-1">
+                          <span className="block min-w-0 max-w-[180px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
+                            {clen.jmeno}
                           </span>
-                        ) : null}
+                          {profil.isAdmin ? (
+                            <span
+                              title="Administrátor"
+                              className="shrink-0 text-sm font-bold text-jantar"
+                            >
+                              <span aria-hidden="true">★</span>
+                              <span className="sr-only">administrátor</span>
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="block max-w-[180px] truncate text-xs font-normal text-mech sm:max-w-none sm:whitespace-normal">
+                          {clen.email}
+                        </span>
                       </span>
-                      <span className="block max-w-[220px] truncate text-xs font-normal text-mech sm:max-w-none sm:whitespace-normal">
-                        {clen.email}
-                      </span>
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="shrink-0 text-xs font-extrabold text-mech"
+                    </TlacitkoProfilu>
+                    <button
+                      type="button"
+                      onClick={() => onVyber(clen)}
+                      aria-haspopup="dialog"
+                      aria-label={`${clen.jmeno} — otevřít detail člena`}
+                      className="inline-flex min-h-[44px] shrink-0 items-center rounded px-2.5 text-xs font-extrabold text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
                     >
                       Detail ›
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 </th>
+                <td className="px-4 py-3 text-sm">
+                  {(clen.telefon ?? "").trim().length > 0
+                    ? clen.telefon
+                    : "—"}
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  {(clen.discordNick ?? "").trim().length > 0
+                    ? clen.discordNick
+                    : "—"}
+                </td>
                 <td className="px-4 py-3">
                   <Stav profil={profil} />
                 </td>

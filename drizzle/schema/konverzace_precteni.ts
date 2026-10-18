@@ -22,6 +22,7 @@
  * žádný DROP / DELETE / UPDATE).
  */
 import { pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { ucastniciSoukromeho } from "../../src/shared/soukromy-klic";
 import { users } from "./users";
 
 /** Sjednocený klíč konverzace pro unread (kopie budoucího API kontraktu). */
@@ -44,6 +45,7 @@ export function konverzaceKlicExpedice(expediceId: string): string {
  */
 export function jeKonverzaceKlic(hodnota: string): boolean {
   if (hodnota === "dulezite" || hodnota === "general") return true;
+  if (ucastniciSoukromeho(hodnota) !== null) return true;
   if (!hodnota.startsWith("expedice:")) return false;
   return hodnota.slice("expedice:".length).length > 0;
 }

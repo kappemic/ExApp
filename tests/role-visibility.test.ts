@@ -59,7 +59,7 @@ describe("role-visibility — správa výprav (dual-guard)", () => {
   });
 });
 
-describe("role-visibility — fotky, členové a kódy jen pro admina", () => {
+describe("role-visibility — fotky a kódy jen pro admina, seznam členů pro všechny", () => {
   it("jen vedoucí/admin spravuje fotky", () => {
     expect(viditelnostProProfil(VEDOUCI).muzeSpravovatFotky).toBe(true);
     expect(viditelnostProProfil(AKTIVNI_CLEN).muzeSpravovatFotky).toBe(false);
@@ -70,6 +70,15 @@ describe("role-visibility — fotky, členové a kódy jen pro admina", () => {
     expect(viditelnostProProfil(VEDOUCI).muzeSpravovatClenyKody).toBe(true);
     expect(viditelnostProProfil(AKTIVNI_CLEN).muzeSpravovatClenyKody).toBe(false);
     expect(viditelnostProProfil(BEZNY_CLEN).muzeSpravovatClenyKody).toBe(false);
+    expect(viditelnostProProfil(VEDOUCI).muzeUpravovatCleny).toBe(true);
+    expect(viditelnostProProfil(AKTIVNI_CLEN).muzeUpravovatCleny).toBe(false);
+    expect(viditelnostProProfil(BEZNY_CLEN).muzeUpravovatCleny).toBe(false);
+  });
+
+  it("seznam členů vidí každá přihlášená role", () => {
+    expect(viditelnostProProfil(VEDOUCI).vidiSeznamClenu).toBe(true);
+    expect(viditelnostProProfil(AKTIVNI_CLEN).vidiSeznamClenu).toBe(true);
+    expect(viditelnostProProfil(BEZNY_CLEN).vidiSeznamClenu).toBe(true);
   });
 });
 

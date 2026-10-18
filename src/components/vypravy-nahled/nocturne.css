@@ -1,0 +1,422 @@
+/* Preview-only journal surface. Scoped so production tokens stay untouched. */
+
+.nocturne {
+  --background: 38 32% 91%;
+  --foreground: 26 32% 12%;
+  --card: 40 36% 94%;
+  --secondary: 36 22% 85%;
+  --muted-foreground: 30 12% 38%;
+  --border: 30 16% 70%;
+  --input: 30 16% 70%;
+  --hairline: 30 14% 62%;
+  --ink: 26 30% 9%;
+  --ink-foreground: 38 30% 88%;
+  /* Same beige, stepped toward yellow. No second hue. */
+  --film-ruz: 36 24% 87%;
+  --film-mech: 46 32% 86%;
+  --film-nebe: 42 26% 83%;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  color: hsl(var(--foreground));
+  background: transparent;
+  font-family: "Archivo", sans-serif;
+  font-synthesis: none;
+  caret-color: hsl(var(--ink));
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  color-scheme: light;
+  accent-color: hsl(var(--ink));
+  /* Calendar utilities read these. Remap only inside the preview. */
+  --color-papir: hsl(40 36% 94%);
+  --color-inkoust: hsl(26 32% 12%);
+  --color-smrk: hsl(26 30% 9%);
+  --color-linka: hsl(30 14% 62%);
+  --color-jantar: hsl(26 32% 12%);
+  --color-mech: hsl(30 12% 38%);
+  --shadow-denik: none;
+  --shadow-razitko: none;
+}
+
+.nocturne .font-expanded {
+  font-stretch: 122%;
+}
+
+.nocturne .font-condensed {
+  font-stretch: 74%;
+}
+
+.nocturne ::selection {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+.nocturne :focus-visible {
+  outline: 2px solid hsl(var(--ink));
+  outline-offset: 3px;
+  border-radius: 0;
+}
+
+.nocturne .na-inkoustu:focus-visible {
+  outline-color: hsl(var(--ink-foreground));
+}
+
+.nahled-press {
+  transition: transform 160ms var(--ease-out);
+}
+
+.nahled-press:active {
+  transform: scale(0.97);
+}
+
+.nahled-press:disabled:active {
+  transform: none;
+}
+
+.nahled-sipka {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 160ms var(--ease-out);
+}
+
+.nahled-radek {
+  transition: background-color 160ms var(--ease-out);
+}
+
+.nahled-karta-foto :is(img, svg) {
+  transition: transform 220ms var(--ease-out);
+}
+
+.nahled-hledani {
+  transition: border-color 160ms var(--ease-out);
+}
+
+.nahled-hledani input:focus,
+.nahled-hledani input:focus-visible {
+  outline: none;
+}
+
+.nahled-hledani:focus-within {
+  border-bottom-color: hsl(var(--ink));
+}
+
+.nahled-odstin-ruz {
+  background-color: hsl(var(--film-ruz));
+}
+
+.nahled-odstin-mech {
+  background-color: hsl(var(--film-mech));
+}
+
+.nahled-odstin-nebe {
+  background-color: hsl(var(--film-nebe));
+}
+
+/* Aged print: the sheet darkens a little toward the edges. */
+.nahled-snimek {
+  box-shadow: inset 0 0 90px hsl(32 28% 18% / 0.07);
+}
+
+.nocturne input[type="search"]::-webkit-search-cancel-button,
+.nocturne input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Keep the expedition band's own radius. Only drop the paper shadow. */
+.nocturne .nahled-kalendar-plocha,
+.nocturne .nahled-kalendar-plocha * {
+  box-shadow: none;
+}
+
+/* Meeting dot sits on the ink band, so it needs a paper rim. */
+.nocturne .nahled-kalendar-plocha .bg-jantar {
+  background-color: hsl(var(--ink-foreground));
+  box-shadow: 0 0 0 1px hsl(var(--ink));
+}
+
+.nocturne .nahled-kalendar-plocha [class*="bg-white"] {
+  background-color: hsl(var(--card));
+}
+
+/* Preview dialog. Square the production chrome; the 4:3 cover stays a plate. */
+.nahled-modal,
+.nahled-modal * {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.nahled-modal .avatar-kruh {
+  border-radius: 9999px;
+}
+
+.nocturne :is(a, button, [role="button"]),
+.nahled-ovladani :is(a, button, [role="button"]) {
+  touch-action: manipulation;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+
+.nocturne :is(a, button, [role="button"]):not(:disabled):active,
+.nahled-ovladani :is(a, button, [role="button"]):not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Shared edges. Scaling the whole control opens a gap in the band. */
+.nocturne .grid.grid-cols-7 > button:active,
+.nocturne button.nahled-radek:not(:disabled):active,
+.nocturne button.nahled-segment:not(:disabled):active {
+  transform: none;
+}
+
+.nocturne button.nahled-radek:not(:disabled):active {
+  background-color: hsl(var(--card));
+}
+
+.nahled-segment-text {
+  display: inline-block;
+  transition: transform 160ms var(--ease-out);
+}
+
+.nocturne button.nahled-segment:not(:disabled):active .nahled-segment-text {
+  transform: scale(0.97);
+}
+
+.nocturne :is(input, textarea, select),
+.nahled-ovladani :is(input, textarea, select) {
+  transition:
+    border-color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+
+.nahled-modal,
+.nahled-ovladani {
+  overscroll-behavior: contain;
+}
+
+.nahled-modal {
+  background-color: hsl(var(--ink) / 0.5);
+  transition: background-color 220ms var(--ease-out);
+
+  @starting-style {
+    background-color: transparent;
+  }
+}
+
+.nahled-modal > [role="dialog"] {
+  opacity: 1;
+  transform: none;
+  transform-origin: center;
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.nahled-modal.nahled-zavira {
+  background-color: transparent;
+  pointer-events: none;
+}
+
+.nahled-ovladani:not([role="dialog"]) {
+  background-color: hsl(var(--ink) / 0.5);
+  transition: background-color 220ms var(--ease-out);
+
+  @starting-style {
+    background-color: transparent;
+  }
+}
+
+.nahled-ovladani.nahled-zavira:not([role="dialog"]) {
+  background-color: transparent;
+  pointer-events: none;
+}
+
+.nahled-ovladani.nahled-zavira > [role="dialog"],
+.nahled-ovladani.nahled-zavira[role="dialog"] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.nahled-ovladani > [role="dialog"],
+.nahled-ovladani[role="dialog"] {
+  opacity: 1;
+  transform: none;
+  transform-origin: center;
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.nahled-modal.nahled-zavira > [role="dialog"] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.nahled-modal .nahled-poslat {
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
+}
+
+.nahled-modal .nahled-poslat:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Thin bars stay clear until that surface is scrolling, then fade in. */
+html.nahled-stranka {
+  --foreground: 26 32% 12%;
+}
+
+.nahled-modal,
+.nahled-modal *,
+html.nahled-stranka {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.nahled-modal.nahled-scrolluje,
+.nahled-modal .nahled-scrolluje,
+html.nahled-stranka.nahled-scrolluje {
+  scrollbar-color: hsl(var(--foreground) / 0.45) transparent;
+}
+
+.nahled-modal::-webkit-scrollbar,
+.nahled-modal *::-webkit-scrollbar,
+html.nahled-stranka::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.nahled-modal::-webkit-scrollbar-thumb,
+.nahled-modal *::-webkit-scrollbar-thumb,
+html.nahled-stranka::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--foreground) / 0.45);
+  opacity: 0;
+  transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.nahled-modal.nahled-scrolluje::-webkit-scrollbar-thumb,
+.nahled-modal .nahled-scrolluje::-webkit-scrollbar-thumb,
+html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
+  opacity: 1;
+  transition-duration: 140ms;
+}
+
+.nahled-pane {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nahled-invert {
+    transition:
+      background-color 160ms var(--ease-out),
+      color 160ms var(--ease-out);
+  }
+
+  .nahled-invert:hover:not(:disabled) {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+
+  .nahled-radek:hover .nahled-sipka {
+    transform: translateX(3px);
+  }
+
+  .nahled-karta:hover .nahled-karta-foto :is(img, svg) {
+    transform: scale(1.03);
+  }
+
+  .nahled-radek:hover {
+    background: hsl(var(--card));
+  }
+
+  .nahled-odkaz:hover {
+    text-decoration-thickness: 2px;
+  }
+
+  /* Ink wash across the outline actions. Clip, not a scale, so the frame stays put. */
+  .nocturne button.nahled-prejeti {
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+    transition:
+      transform 160ms var(--ease-out),
+      color 180ms var(--ease-out),
+      background-color 180ms var(--ease-out),
+      border-color 160ms var(--ease-out);
+  }
+
+  .nocturne button.nahled-prejeti::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: hsl(var(--foreground));
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path 180ms var(--ease-out);
+  }
+
+  .nocturne button.nahled-prejeti:hover:not(:disabled) {
+    color: hsl(var(--background));
+  }
+
+  .nocturne button.nahled-prejeti:hover:not(:disabled)::before {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nahled-press,
+  .nocturne button.nahled-prejeti::before,
+  .nahled-hledani,
+  .nahled-sipka,
+  .nahled-radek,
+  .nahled-invert,
+  .nahled-pane,
+  .nahled-modal > [role="dialog"],
+  .nocturne :is(a, button, input, textarea, select, [role="button"]),
+  .nahled-ovladani :is(a, button, input, textarea, select, [role="button"]),
+  .nahled-modal::-webkit-scrollbar-thumb,
+  .nahled-modal *::-webkit-scrollbar-thumb,
+  html.nahled-stranka::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+
+  .nahled-pane,
+  .nahled-modal > [role="dialog"] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .nahled-press:active,
+  .nahled-karta:hover .nahled-karta-foto :is(img, svg),
+  .nahled-radek:hover .nahled-sipka,
+  .nocturne :is(a, button, [role="button"]):not(:disabled):active,
+  .nahled-ovladani :is(a, button, [role="button"]):not(:disabled):active,
+  .nahled-modal .nahled-poslat:not(:disabled):active,
+  .nocturne button.nahled-segment:not(:disabled):active .nahled-segment-text {
+    transform: none;
+  }
+}

@@ -17,6 +17,7 @@ import { participants } from "../../drizzle/schema/participants";
 import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
+import { soukromeZpravy } from "../../drizzle/schema/soukrome_zpravy";
 import { zpravy } from "../../drizzle/schema/zpravy";
 
 const schema = {
@@ -27,6 +28,7 @@ const schema = {
   participants,
   stravaTokens,
   zpravy,
+  soukromeZpravy,
   diskuzePrecteni,
   konverzacePrecteni,
 };

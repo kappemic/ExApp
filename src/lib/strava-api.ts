@@ -22,6 +22,7 @@ import {
   jeOdpojAktivituOdpoved,
   jeSparujAktivituOdpoved,
   jeStravaCallbackDuvod,
+  jeStravaStavResponse,
   neparovaneAktivityUrl,
   stravaParovaniPath,
   type ApiErrorCode,
@@ -32,6 +33,7 @@ import {
   type OdpojAktivituResponse,
   type SparujAktivituResponse,
   type StravaCallbackDuvod,
+  type StravaStavResponse,
 } from "../shared/api-types";
 
 export type { NeparovanaAktivita };
@@ -40,9 +42,109 @@ export type StravaVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string; kod?: ApiErrorCode };
 
+/**
+ * Druh chyby pro rozlišení větví v UI (Step 3, staví na Step 2 kontraktu
+ * `502 STRAVA_NEDOSTUPNA` + `ApiErrorCode`).
+ * Každá větev má v `StravaParovani` vlastní text i akci.
+ */
+export type StravaChybaDruh =
+  | "validace"
+  | "strava-nedostupna"
+  | "neprihlasen"
+  | "zakazano"
+  | "konflikt"
+  | "obecna";
+
+/**
+ * Mapuje `ApiErrorCode` na druh pro UI.
+ * - 422 `VALIDATION_ERROR` → `validace` (inline hláška, bez retry).
+ * - 502 `STRAVA_NEDOSTUPNA` → `strava-nedostupna` (Propoj Stravu + retry).
+ * - 401 (`NEPRIHLASEN`, `KOD_NEPLATNY`, `SPATNE_HESLO`) → `neprihlasen`.
+ * - 403 `ZAKAZANO` → `zakazano`.
+ * - 409 (`VYPRAVA_UZAVRENA`, `UZ_PRIHLASEN`, `KAPACITA_PLNA`,
+ *   `EMAIL_OBSAZEN`) → `konflikt` (bez slepého retry).
+ * - Zbytek včetně chybějícího kódu → `obecna`.
+ */
+export function druhStravaChyby(kod?: ApiErrorCode): StravaChybaDruh {
+  switch (kod) {
+    case "VALIDATION_ERROR":
+      return "validace";
+    case "STRAVA_NEDOSTUPNA":
+      return "strava-nedostupna";
+    case "NEPRIHLASEN":
+    case "KOD_NEPLATNY":
+    case "SPATNE_HESLO":
+      return "neprihlasen";
+    case "ZAKAZANO":
+      return "zakazano";
+    case "UZ_PRIHLASEN":
+    case "KAPACITA_PLNA":
+    case "VYPRAVA_UZAVRENA":
+    case "EMAIL_OBSAZEN":
+      return "konflikt";
+    default:
+      return "obecna";
+  }
+}
+
+/**
+ * Ruční retry (tlačítko „Zkusit znovu") má smysl jen u výpadku:
+ * 502 `STRAVA_NEDOSTUPNA`, chybějící kód (network fail / BFF mimo)
+ * a 500 `VNITRNI_CHYBA`. U validace, 401/403 ani 409 retry nikdy —
+ * slepé opakování by nepomohlo. Žádný auto-retry: volá jen UI po kliku.
+ */
+export function muzeOpakovatStravaChybu(kod?: ApiErrorCode): boolean {
+  return (
+    kod === undefined ||
+    kod === "STRAVA_NEDOSTUPNA" ||
+    kod === "VNITRNI_CHYBA"
+  );
+}
+
+/**
+ * Sdílená větev „nedostupná" (Step 2 + Step 3):
+ * 502 `STRAVA_NEDOSTUPNA` i network fail (fetch reject → bez kódu)
+ * ukazují stejnou větev — „Propoj Stravu" v profilu + ruční retry.
+ */
+export function jeStravaNedostupnaVetev(kod?: ApiErrorCode): boolean {
+  return kod === "STRAVA_NEDOSTUPNA" || kod === undefined;
+}
+
 export interface StravaStavPropojeni {
   propojeno: boolean;
   stravaId: string | null;
+}
+
+export type { StravaStavResponse };
+
+/**
+ * Rozšířený stav propojení z `GET /api/strava/stav` (Step 5, tenký slice).
+ * Nese `stravaId` (atlet), `scope` a `expirace` (ISO) — nikdy tokeny.
+ * Backend mimo / bez session → `{ ok: false }` (tab ukáže chybu).
+ */
+export async function nactiStravaStavRozsireny(): Promise<
+  StravaVysledek<StravaStavResponse>
+> {
+  const zaklad = apiBaseUrl();
+  if (zaklad.length === 0) return { ok: false, chyba: OBECNA_CHYBA };
+  let odpoved: Response;
+  try {
+    odpoved = await fetch(`${zaklad}/api/strava/stav`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+  } catch {
+    return { ok: false, chyba: OBECNA_CHYBA };
+  }
+  const telo = await ctiTelo(odpoved);
+  if (!odpoved.ok) {
+    if (jeApiChyba(telo)) {
+      return { ok: false, chyba: telo.error.message, kod: telo.error.code };
+    }
+    return { ok: false, chyba: OBECNA_CHYBA };
+  }
+  if (!jeStravaStavResponse(telo)) return { ok: false, chyba: OBECNA_CHYBA };
+  return { ok: true, data: telo };
 }
 
 const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
@@ -193,6 +295,24 @@ export async function getStravaAuthUrl(state = ""): Promise<string | null> {
   const vysledek = await getStravaAuthUrlPodrobne(state);
   if (vysledek.ok) return vysledek.url;
   return null;
+}
+
+/**
+ * Společný Strava connect handler (required fix 7 — jediný zdroj pravdy
+ * pro „Připojit Stravu": sestav URL přes `getStravaAuthUrlPodrobne` a při
+ * úspěchu přesměruj prohlížeč na Strava authorize. Vrací výsledek pro UI
+ * (ProfilPage mapuje `nenastavena` / chybu na stav + hlášku, redirect se
+ * už stal). Bez `window` jen vrátí URL bez redirectu (testy / SSR safe).
+ */
+export async function presmerujNaStravuAutorizaci(
+  state = "",
+): Promise<StravaAuthUrlVysledek> {
+  const vysledek = await getStravaAuthUrlPodrobne(state);
+  if (!vysledek.ok) return vysledek;
+  if (typeof window !== "undefined") {
+    window.location.href = vysledek.url;
+  }
+  return vysledek;
 }
 
 function jeApiUser(hodnota: unknown): hodnota is ApiUser {

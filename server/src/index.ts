@@ -9,7 +9,8 @@
  * - GET  /api/expeditions — seznam výprav z Neon DB (veřejné, Krok 3)
  * - GET  /api/clenove     — seznam členů z Neon DB (jen ADMIN, Krok 3)
  * - PATCH /api/clenove/:id — úprava člena (jen ADMIN, Krok 3)
- * - GET  /api/users       — seznam uživatelů pro selektor (jen ADMIN, Krok 4)
+ * - GET  /api/users       — seznam členů (každý přihlášený, ne anonym)
+ * - DELETE /api/users/:id — smazání účtu (jen ADMIN, ne vlastní účet)
  * - POST /api/expeditions/:id/ucastnici — dodatečné přidání (jen ADMIN,
  *   i po proběhlá, kapacita se nekontroluje)
  * - DELETE /api/expeditions/:id/ucastnici/:ucastnikId — odebrání (jen ADMIN)
@@ -57,6 +58,7 @@ import type {
   SchuzkaDetailResponse,
   SchuzkyListResponse,
   SmazatExpediciResponse,
+  SmazatUzivateleResponse,
   SmazatFotkuResponse,
   SmazatSchuzkuResponse,
   SmazatVyskytSchuzkyResponse,
@@ -65,6 +67,7 @@ import type {
   UcastniciListResponse,
   UpravitClenaResponse,
   UpravitExpediciResponse,
+  UpravitProfilResponse,
   UpravitSchuzkuResponse,
   UpravitUzivateleResponse,
   UserId,
@@ -103,9 +106,13 @@ import {
 import { posliChybu } from "./chyby";
 import {
   FOTKA_TELO_MAX_BAJTU,
+  AVATAR_MAX_BAJTU,
+  AVATAR_TELO_MAX_BAJTU,
   FOTKY_NEJSOU_NASTAVENE_ZPRAVA,
   contentTypeProPriponu,
   ctiR2Nastaveni,
+  klicAvataru,
+  klicAvataruZVerejneUrl,
   klicFotky,
   klicZVerejneUrl,
   nactiObjektR2,
@@ -139,6 +146,7 @@ import {
   validujPoznamkuKodu,
   validujPrihlaseni,
   validujPridaniUcastnikaPoUzavreni,
+  validujProfilUpdate,
   validujRegistraci,
   validujUpravuClena,
   validujUpravuExpedice,
@@ -175,6 +183,7 @@ import {
   vymenCodeZaTokeny,
   zajistiPlatnyAccessToken,
 } from "./strava";
+import { lzeDoplnitArchiv } from "./vyprava-termin";
 import {
   chybaKombinace3D,
   isKnownRole,
@@ -195,6 +204,7 @@ import { photos, type Photo } from "../../drizzle/schema/photos";
 import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
+import { soukromeZpravy } from "../../drizzle/schema/soukrome_zpravy";
 import { zpravy } from "../../drizzle/schema/zpravy";
 import { diskuzePrecteni } from "../../drizzle/schema/diskuze_precteni";
 import {
@@ -211,9 +221,20 @@ import {
   smiPoslatZpravu,
   smiPsatKanal,
   toApiZprava,
+  verejnyAvatarUrl,
   type ProfilProJmeno,
 } from "./diskuze";
+import { nactiSoukromeKonverzace, nactiVlaknoSoukrome, nactiProfily } from "./soukrome";
+import {
+  jeUcastnikSoukromeho,
+  klicSoukromehoChatu,
+  partnerSoukromeho,
+} from "../../src/shared/soukromy-klic";
 import { registrujAlba } from "./alba-routes";
+import {
+  jeProfilBezZmen,
+  sestavProfilDbPatch,
+} from "./services/profile-service";
 import { softSmazFotku } from "./fotky-trash";
 import { toApiSchuzka } from "./schuzky";
 import { agregujStatistiky, type StatistikaRadek } from "./statistiky";
@@ -504,6 +525,273 @@ app.post("/api/logout", (_req: Request, res: Response) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* PATCH /api/me — úprava vlastního profilu (Step 3, USER i ADMIN).     */
+/* Cíl je VŽDY session.user.id (žádné :id v URL) — IDOR vyloučen        */
+/* konstrukcí, aktuální heslo se nevyžaduje (Q3). Bez session → 401     */
+/* NEPRIHLASEN (vyzadujPrihlaseni). Nevalidní pole → 422                */
+/* VALIDATION_ERROR s details. Kolize e-mailu → 409 EMAIL_OBSAZEN.      */
+/* Heslo se hashuje bcrypt (cost 10, stejně jako registr), hash se      */
+/* Avatar POUZE URL v PATCH. Soubor jde přes POST /api/me/avatar. */
+/* ------------------------------------------------------------------ */
+
+app.patch("/api/me", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const overeni = validujProfilUpdate(req.body as unknown);
+        if (!overeni.uspech || overeni.data === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+          return;
+        }
+        const vstup = overeni.data;
+        try {
+          const db = getDb();
+          const id = (req as AutentizovanyRequest).uzivatel.id;
+          const nalezeni = await db
+            .select()
+            .from(users)
+            .where(sql`${users.id} = ${id}::uuid`)
+            .limit(1);
+          const stavajici = nalezeni[0];
+          if (stavajici === undefined) {
+            posliChybu(res, "NEPRIHLASEN", "Účet už neexistuje. Přihlas se znovu.");
+            return;
+          }
+
+          // E-mail: normalizován na lowercase už ve validaci. Unikátnost
+          // case-insensitive; stejná hodnota jako dosud = beze změny.
+          let novyEmail: string | undefined;
+          if (
+            vstup.email !== undefined &&
+            vstup.email !== stavajici.email.toLowerCase()
+          ) {
+            const kolize = await db
+              .select({ id: users.id })
+              .from(users)
+              .where(sql`lower(${users.email}) = ${vstup.email}`)
+              .limit(1);
+            const cizi = kolize[0];
+            if (cizi !== undefined && cizi.id !== stavajici.id) {
+              posliChybu(res, "EMAIL_OBSAZEN", "Tento e-mail je už obsazený.");
+              return;
+            }
+            novyEmail = vstup.email;
+          }
+
+          // Heslo: plaintext hashuje bcrypt (stejný cost jako registr).
+          // Nikdy se nevrací (toApiUser) ani neloguje (žádný log body).
+          let novyHash: string | undefined;
+          if (vstup.heslo !== undefined) {
+            novyHash = await hashHesla(vstup.heslo);
+          }
+
+          if (
+            jeProfilBezZmen(vstup) &&
+            novyEmail === undefined &&
+            novyHash === undefined
+          ) {
+            const telo: UpravitProfilResponse = {
+              user: toApiUser(stavajici),
+            };
+            res.json(telo);
+            return;
+          }
+
+          const patch = sestavProfilDbPatch(vstup);
+          const aktualizovane = await db
+            .update(users)
+            .set({
+              ...patch,
+              ...(novyEmail !== undefined ? { email: novyEmail } : {}),
+              ...(novyHash !== undefined ? { passwordHash: novyHash } : {}),
+            })
+            .where(sql`${users.id} = ${id}::uuid`)
+            .returning();
+          const radek = aktualizovane[0];
+          if (radek === undefined) {
+            posliChybu(res, "NEPRIHLASEN", "Účet už neexistuje. Přihlas se znovu.");
+            return;
+          }
+          const telo: UpravitProfilResponse = { user: toApiUser(radek) };
+          res.json(telo);
+        } catch (chyba) {
+          if (jeUnikatniKolize(chyba)) {
+            // Závod dvou změn na stejný e-mail.
+            posliChybu(res, "EMAIL_OBSAZEN", "Tento e-mail je už obsazený.");
+            return;
+          }
+          if (!res.headersSent) {
+            posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+          }
+        }
+      })();
+    });
+  })();
+});
+
+/* POST /api/me/avatar — vlastní fotka (přihlášený). multipart pole `soubor`, */
+/* nejvýš 5 MB, JPEG/PNG/WebP. Uloží do R2 a zapíše `users.avatar_url`.       */
+/* Předchozí vlastní objekt v R2 se po úspěchu smaže. Bez session → 401.      */
+
+app.post("/api/me/avatar", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const contentType = req.header("content-type") ?? "";
+        if (!contentType.includes("multipart/form-data")) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            soubor: ["Vyber fotku z telefonu nebo počítače."],
+          });
+          return;
+        }
+        const nastaveniR2 = ctiR2Nastaveni(process.env);
+        if (nastaveniR2 === null) {
+          posliChybu(res, "FOTKY_NEJSOU_NASTAVENE", FOTKY_NEJSOU_NASTAVENE_ZPRAVA);
+          return;
+        }
+        let teloSouboru: Buffer;
+        try {
+          teloSouboru = await ctiSuroveTelo(req, AVATAR_TELO_MAX_BAJTU);
+        } catch (chyba: unknown) {
+          const velikost = chyba instanceof Error && chyba.message === "velikost";
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            soubor: [
+              velikost
+                ? "Avatar je moc velký (nejvýš 5 MB)."
+                : "Vyber fotku z telefonu nebo počítače.",
+            ],
+          });
+          return;
+        }
+        const rozdelene = rozdelMultipart(teloSouboru, contentType);
+        if (!rozdelene.ok) {
+          const text =
+            rozdelene.duvod === "velikost"
+              ? "Avatar je moc velký (nejvýš 5 MB)."
+              : rozdelene.duvod === "format"
+                ? "Avatar musí být obrázek (JPEG, PNG nebo WebP)."
+                : "Vyber fotku z telefonu nebo počítače.";
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            soubor: [text],
+          });
+          return;
+        }
+        if (rozdelene.fotka.bajty.length > AVATAR_MAX_BAJTU) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            soubor: ["Avatar je moc velký (nejvýš 5 MB)."],
+          });
+          return;
+        }
+        const pripona = rozpoznajObrazek(rozdelene.fotka.bajty);
+        if (pripona === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            soubor: ["Avatar musí být obrázek (JPEG, PNG nebo WebP)."],
+          });
+          return;
+        }
+        const id = (req as AutentizovanyRequest).uzivatel.id;
+        const klic = klicAvataru(id, pripona);
+        if (klic === null) {
+          posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+          return;
+        }
+        let urlKUlozeni: string;
+        try {
+          urlKUlozeni = await ulozFotkuDoR2(
+            nastaveniR2,
+            klic,
+            rozdelene.fotka.bajty,
+            contentTypeProPriponu(pripona),
+          );
+        } catch {
+          vnitrniChyba(res);
+          return;
+        }
+        try {
+          const db = getDb();
+          const nalezeni = await db
+            .select()
+            .from(users)
+            .where(sql`${users.id} = ${id}::uuid`)
+            .limit(1);
+          const stavajici = nalezeni[0];
+          if (stavajici === undefined) {
+            posliChybu(res, "NEPRIHLASEN", "Účet už neexistuje. Přihlas se znovu.");
+            return;
+          }
+          const aktualizovane = await db
+            .update(users)
+            .set({ avatarUrl: urlKUlozeni, updatedAt: new Date() })
+            .where(sql`${users.id} = ${id}::uuid`)
+            .returning();
+          const radek = aktualizovane[0];
+          if (radek === undefined) {
+            posliChybu(res, "NEPRIHLASEN", "Účet už neexistuje. Přihlas se znovu.");
+            return;
+          }
+          const staryKlic = klicAvataruZVerejneUrl(
+            typeof stavajici.avatarUrl === "string" ? stavajici.avatarUrl : "",
+            nastaveniR2.publicBaseUrl,
+            id,
+          );
+          if (staryKlic !== null && staryKlic !== klic) {
+            try {
+              await smazObjektR2(nastaveniR2, staryKlic);
+            } catch {
+              /* New avatar is already saved. Old object can linger. */
+            }
+          }
+          const teloOdpoved: UpravitProfilResponse = { user: toApiUser(radek) };
+          res.json(teloOdpoved);
+        } catch {
+          if (!res.headersSent) {
+            posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+          }
+        }
+      })();
+    });
+  })();
+});
+
+/* GET /api/users/:id/avatar — public bytes. The bucket is private, so   */
+/* the browser loads this stream (same idea as expedition photos).       */
+app.get("/api/users/:id/avatar", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    const id = typeof req.params.id === "string" ? req.params.id : "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      posliChybu(res, "NENALEZENO", "Avatar nenalezen.");
+      return;
+    }
+    try {
+      const db = getDb();
+      const nalezeni = await db
+        .select({ avatarUrl: users.avatarUrl })
+        .from(users)
+        .where(sql`${users.id} = ${id}::uuid`)
+        .limit(1);
+      const radek = nalezeni[0];
+      const nastaveniR2 = ctiR2Nastaveni(process.env);
+      const ulozena = radek === undefined || typeof radek.avatarUrl !== "string" ? "" : radek.avatarUrl;
+      const klic =
+        nastaveniR2 === null ? null : klicAvataruZVerejneUrl(ulozena, nastaveniR2.publicBaseUrl, id);
+      if (klic === null || nastaveniR2 === null) {
+        posliChybu(res, "NENALEZENO", "Avatar nenalezen.");
+        return;
+      }
+      const objekt = await nactiObjektR2(nastaveniR2, klic);
+      res.status(200);
+      res.setHeader("Content-Type", objekt.contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Content-Length", objekt.bajty.length);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.end(objekt.bajty);
+    } catch {
+      if (!res.headersSent) vnitrniChyba(res);
+    }
+  })();
+});
+
+/* ------------------------------------------------------------------ */
 /* GET /api/expeditions — veřejné čtení z Neon DB (Krok 3 + Krok 2      */
 /* query dle kontraktu: ?stav=proběhlá = historie, ?page&pageSize).      */
 /* Autoritativní zdroj: tabulka `expeditions`, řazeno datem.             */
@@ -725,60 +1013,20 @@ app.patch("/api/clenove/:id", (req: Request, res: Response) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* GET /api/users — jen ADMIN (Krok 4 + správa členů). Úzký tvar         */
-/* `[{ id, jmeno (složené), email, role }]` — role je primární DB role  */
-/* (jedna hodnota z roles.ts, users.role CHECK). Bez session → 401      */
-/* NEPRIHLASEN, přihlášený USER → 403 ZAKAZANO. Nikdy nevrací hash      */
-/* hesla (stejně jako ApiUser). Řazeno e-mailem.                        */
+/* GET /api/users — každý přihlášený (USER i ADMIN). Úzký tvar           */
+/* `UserListItem` včetně e-mailu, telefonu a Discordu. Bez session →    */
+/* 401 NEPRIHLASEN. Úpravy a mazání zůstávají na PATCH/DELETE za        */
+/* `vyzadujAdmina`. Nikdy nevrací hash hesla. Řazeno e-mailem.          */
 /* ------------------------------------------------------------------ */
 
 app.get("/api/users", (req: Request, res: Response) => {
-  vyzadujAdmina(req, res, () => {
+  void vyzadujPrihlaseni(req, res, () => {
     void (async (): Promise<void> => {
       try {
         const db = getDb();
-        const radky = await db
-          .select({
-            id: users.id,
-            jmeno: users.jmeno,
-            prijmeni: users.prijmeni,
-            email: users.email,
-            role: users.role,
-            clenstvi: users.clenstvi,
-            funkce: users.funkce,
-            isAdmin: users.isAdmin,
-            skola: users.skola,
-            trida: users.trida,
-            discordNick: users.discordNick,
-          })
-          .from(users)
-          .orderBy(asc(users.email));
+        const radky = await db.select().from(users).orderBy(asc(users.email));
         const telo: UsersListResponse = {
-          users: radky.map((radek): UserListItem => {
-            const cele = `${radek.jmeno} ${radek.prijmeni}`
-              .trim()
-              .replace(/\s+/g, " ");
-            const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
-            const clenstvi: Clenstvi =
-              radek.clenstvi === "aktivni_clen" ? "aktivni_clen" : "clen";
-            const funkce: Funkce =
-              radek.funkce === "vedeni" || radek.funkce === "rada"
-                ? radek.funkce
-                : null;
-            return {
-              id: radek.id as UserId,
-              jmeno: cele.length > 0 ? cele : radek.email,
-              email: radek.email,
-              role,
-              clenstvi,
-              funkce,
-              isAdmin: radek.isAdmin,
-              skola: typeof radek.skola === "string" ? radek.skola : "",
-              trida: typeof radek.trida === "string" ? radek.trida : "",
-              discordNick:
-                typeof radek.discordNick === "string" ? radek.discordNick : null,
-            };
-          }),
+          users: radky.map((radek) => toUserListItem(radek)),
         };
         res.json(telo);
       } catch {
@@ -814,6 +1062,8 @@ function toUserListItem(radek: UserRow): UserListItem {
     trida: typeof radek.trida === "string" ? radek.trida : "",
     discordNick:
       typeof radek.discordNick === "string" ? radek.discordNick : null,
+    telefon: typeof radek.telefon === "string" ? radek.telefon : null,
+    avatarUrl: verejnyAvatarUrl(radek.avatarUrl),
   };
 }
 
@@ -939,6 +1189,51 @@ app.patch("/api/users/:id", (req: Request, res: Response) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* DELETE /api/users/:id — smazání přihlašovacího účtu (jen ADMIN).     */
+/* Vlastní účet (session id === :id) → 403. Neznámé id → 404.           */
+/* Související řádky řeší ON DELETE v DB. `clenove` se nemaže.          */
+/* ------------------------------------------------------------------ */
+
+app.delete("/api/users/:id", (req: Request, res: Response) => {
+  vyzadujAdmina(req, res, () => {
+    void (async (): Promise<void> => {
+      const suroveId: unknown = (req.params as Record<string, unknown>)["id"];
+      const id = typeof suroveId === "string" ? suroveId.trim() : "";
+      if (id.length === 0) {
+        posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+        return;
+      }
+      const session = (req as AutentizovanyRequest).uzivatel;
+      if (session.id === id) {
+        posliChybu(
+          res,
+          "ZAKAZANO",
+          "Vlastní účet z administrace smazat nejde.",
+        );
+        return;
+      }
+      try {
+        const db = getDb();
+        const smazane = await db
+          .delete(users)
+          .where(eq(users.id, id))
+          .returning({ id: users.id });
+        if (smazane.length === 0) {
+          posliChybu(res, "NENALEZENO", "Uživatel nenalezen.");
+          return;
+        }
+        const telo: SmazatUzivateleResponse = { ok: true };
+        res.json(telo);
+      } catch {
+        if (!res.headersSent) {
+          posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+        }
+      }
+    })();
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /* Krok 3b — Expedice CRUD + účast + uzavření (kontrakt api-types §8).   */
 /* Matice: POST/PATCH/DELETE detailu + PATCH /uzavrit + správa účastníků */
 /* po uzavření = dual-guard (admin nebo aktivní člen);                   */
@@ -1011,6 +1306,7 @@ async function nactiExpediciSDetailem(
     ),
   ];
   const jmena = new Map<string, string>();
+  const avatary = new Map<string, string | null>();
   if (userIds.length > 0) {
     const ucty = await db
       .select()
@@ -1019,6 +1315,7 @@ async function nactiExpediciSDetailem(
     for (const ucet of ucty) {
       const cele = `${ucet.jmeno} ${ucet.prijmeni}`.trim().replace(/\s+/g, " ");
       jmena.set(`user:${ucet.id}`, cele.length > 0 ? cele : ucet.email);
+      avatary.set(ucet.id, verejnyAvatarUrl(ucet.avatarUrl));
     }
   }
   if (clenIds.length > 0) {
@@ -1037,7 +1334,11 @@ async function nactiExpediciSDetailem(
         : prihlaska.clenId !== null
           ? `clen:${prihlaska.clenId}`
           : null;
-    const api = toApiUcastnik(prihlaska, klic === null ? "" : (jmena.get(klic) ?? ""));
+    const api = toApiUcastnik(
+      prihlaska,
+      klic === null ? "" : (jmena.get(klic) ?? ""),
+      prihlaska.userId === null ? null : (avatary.get(prihlaska.userId) ?? null),
+    );
     if (api !== null) ucastnici.push(api);
   }
 
@@ -1423,11 +1724,17 @@ app.post("/api/expeditions/:id/prihlasit", (req: Request, res: Response) => {
             posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
             return;
           }
-          if (radek.stav === "proběhlá") {
+          if (
+            lzeDoplnitArchiv({
+              stav: radek.stav,
+              datum: radek.datum,
+              datumDo: radek.datumDo,
+            })
+          ) {
             posliChybu(
               res,
               "VYPRAVA_UZAVRENA",
-              "Tahle výprava už proběhla. Přihlásit se nejde.",
+              "Termín už skončil. Přihlásit se nejde.",
             );
             return;
           }
@@ -1517,6 +1824,7 @@ app.post("/api/expeditions/:id/prihlasit", (req: Request, res: Response) => {
                     createdAt: vlozenyCas,
                   },
                   celeJmeno,
+                  verejnyAvatarUrl(mujRadek?.avatarUrl),
                 );
           if (api === null || ucastnik === null) {
             vnitrniChyba(res);
@@ -1559,11 +1867,17 @@ app.delete("/api/expeditions/:id/odhlasit", (req: Request, res: Response) => {
             posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
             return;
           }
-          if (radek.stav === "proběhlá") {
+          if (
+            lzeDoplnitArchiv({
+              stav: radek.stav,
+              datum: radek.datum,
+              datumDo: radek.datumDo,
+            })
+          ) {
             posliChybu(
               res,
               "VYPRAVA_UZAVRENA",
-              "Tahle výprava už proběhla. Odhlásit se nejde.",
+              "Termín už skončil. Odhlásit se nejde.",
             );
             return;
           }
@@ -2003,11 +2317,17 @@ app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
           posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
           return;
         }
-        let vyprava: { stav: string } | undefined;
+        let vyprava:
+          | { stav: string; datum: string; datumDo: string | null }
+          | undefined;
         try {
           const dbPred = getDb();
           const existuje = await dbPred
-            .select({ stav: expeditions.stav })
+            .select({
+              stav: expeditions.stav,
+              datum: expeditions.datum,
+              datumDo: expeditions.datumDo,
+            })
             .from(expeditions)
             .where(eq(expeditions.id, idProKlic))
             .limit(1);
@@ -2020,11 +2340,11 @@ app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
           posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
           return;
         }
-        if (vyprava.stav !== "proběhlá") {
+        if (!lzeDoplnitArchiv(vyprava)) {
           posliChybu(
             res,
             "VYPRAVA_UZAVRENA",
-            "Fotky jdou přidat až k proběhlé výpravě. Nejdřív ji uzavři s docházkou.",
+            "Fotky jdou přidat až po skončení výpravy.",
           );
           return;
         }
@@ -2067,11 +2387,17 @@ app.post("/api/expeditions/:id/fotky", (req: Request, res: Response) => {
           posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
           return;
         }
-        if (radek.stav !== "proběhlá") {
+        if (
+          !lzeDoplnitArchiv({
+            stav: radek.stav,
+            datum: radek.datum,
+            datumDo: radek.datumDo,
+          })
+        ) {
           posliChybu(
             res,
             "VYPRAVA_UZAVRENA",
-            "Fotky jdou přidat až k proběhlé výpravě. Nejdřív ji uzavři s docházkou.",
+            "Fotky jdou přidat až po skončení výpravy.",
           );
           return;
         }
@@ -2210,7 +2536,12 @@ app.post("/api/expeditions/:id/fotky/:fotkaId/nahled", (req: Request, res: Respo
       try {
         const db = getDb();
         const vypravy = await db
-          .select({ id: expeditions.id, stav: expeditions.stav })
+          .select({
+            id: expeditions.id,
+            stav: expeditions.stav,
+            datum: expeditions.datum,
+            datumDo: expeditions.datumDo,
+          })
           .from(expeditions)
           .where(eq(expeditions.id, id))
           .limit(1);
@@ -2219,11 +2550,11 @@ app.post("/api/expeditions/:id/fotky/:fotkaId/nahled", (req: Request, res: Respo
           posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
           return;
         }
-        if (vyprava.stav !== "proběhlá") {
+        if (!lzeDoplnitArchiv(vyprava)) {
           posliChybu(
             res,
             "VYPRAVA_UZAVRENA",
-            "Náhled jde vybrat jen u proběhlé výpravy.",
+            "Náhled jde vybrat až po skončení výpravy.",
           );
           return;
         }
@@ -2935,6 +3266,8 @@ app.post("/api/expeditions/:id/strava-parovani", (req: Request, res: Response) =
         );
         const rozhodnuti = rozhodniParovani({
           stav: radek.stav,
+          datum: radek.datum,
+          datumDo: radek.datumDo,
           expediceSparovana: radek.stravaActivityId !== null,
           aktivitaUzSparovana: aktivitaUzJinde,
         });
@@ -3049,6 +3382,8 @@ app.delete("/api/expeditions/:id/strava-parovani", (req: Request, res: Response)
           radek.trasaPolyline !== null;
         const rozhodnuti = rozhodniOdpojeni({
           stav: radek.stav,
+          datum: radek.datum,
+          datumDo: radek.datumDo,
           expediceSparovana: pripojeno,
         });
         if (!rozhodnuti.ok) {
@@ -3134,11 +3469,17 @@ app.post("/api/expeditions/:id/aktivita-ruchne", (req: Request, res: Response) =
           posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
           return;
         }
-        if (radek.stav !== "proběhlá") {
+        if (
+          !lzeDoplnitArchiv({
+            stav: radek.stav,
+            datum: radek.datum,
+            datumDo: radek.datumDo,
+          })
+        ) {
           posliChybu(
             res,
             "VYPRAVA_UZAVRENA",
-            "Kilometry jdou zapsat až k proběhlé výpravě. Nejdřív ji uzavři s docházkou.",
+            "Kilometry jdou zapsat až po skončení výpravy.",
           );
           return;
         }
@@ -3176,6 +3517,157 @@ app.post("/api/expeditions/:id/aktivita-ruchne", (req: Request, res: Response) =
 });
 
 /* DELETE /api/strava/odpojit — USER, smazání tokenů + strava_id=NULL. */app.delete("/api/strava/odpojit", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        try {
+          const db = getDb();
+          const id = (req as AutentizovanyRequest).uzivatel.id;
+          await db.delete(stravaTokens).where(eq(stravaTokens.userId, id));
+          await db
+            .update(users)
+            .set({ stravaId: null, updatedAt: new Date() })
+            .where(eq(users.id, id));
+          res.json({ ok: true });
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* ------------------------------------------------------------------ */
+/* Step 5 (tenký slice) — stav propojení + aliasy connect/disconnect.   */
+/* GET /api/strava/stav (USER): `{ propojeno, stravaId, scope,          */
+/* expirace }` — jen veřejný stav, NIKDY tokeny ani secret. Bez          */
+/* propojení → `{ propojeno: false, stravaId: null, scope: null,         */
+/* expirace: null }` (profil ukáže výzvu, nikdy 404).                    */
+/* GET /api/strava/connect = alias auth-url (stejný PUBLIC handler,      */
+/* scope `read,activity:read`). DELETE /api/strava/disconnect = alias    */
+/* odpojit (stejné idempotentní `{ ok: true }`). Párování aktivit, km,   */
+/* heatmapa i leaderboard jsou mimo scope — DB sloupce už existují       */
+/* (`users.strava_id` + `strava_tokens`), nová migrace netřeba.          */
+/* ------------------------------------------------------------------ */
+
+app.get("/api/strava/stav", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        try {
+          const db = getDb();
+          const id = (req as AutentizovanyRequest).uzivatel.id;
+          const ucty = await db
+            .select({ stravaId: users.stravaId })
+            .from(users)
+            .where(eq(users.id, id))
+            .limit(1);
+          const ucet = ucty[0];
+          if (ucet === undefined) {
+            posliChybu(res, "NEPRIHLASEN", "Účet už neexistuje. Přihlas se znovu.");
+            return;
+          }
+          if (ucet.stravaId === null) {
+            res.json({
+              propojeno: false,
+              stravaId: null,
+              scope: null,
+              expirace: null,
+            });
+            return;
+          }
+          const tokeny = await db
+            .select({ scope: stravaTokens.scope, expirace: stravaTokens.expirace })
+            .from(stravaTokens)
+            .where(eq(stravaTokens.userId, id))
+            .limit(1);
+          const radek = tokeny[0];
+          if (radek === undefined) {
+            // Osiřelé strava_id bez řádku tokenů (např. po ručním zásahu do DB)
+            // → tváříme se jako nepropojeno, ať UI navede k Propoj Stravu
+            // (místo propojeno:true s fallback expirací, po kterém by párování
+            // končilo 422/502).
+            res.json({
+              propojeno: false,
+              stravaId: null,
+              scope: null,
+              expirace: null,
+            });
+            return;
+          }
+          // Obnovit stav má viditelně měnit UI: když je token expirovaný,
+          // zkusíme best-effort refresh (stejná cesta jako párování).
+          // Úspěch → čerstvá expirace/scope; odmítnutý refresh (null) →
+          // nepropojeno (návod k reconnectu); výpadek Stravy → stale DB
+          // hodnoty (nezasekne se, párování pak nabídne retry). Tokeny ani
+          // secret se nikdy nevracejí (jen scope/expirace).
+          try {
+            const platny = await zajistiPlatnyAccessToken(db, id);
+            if (platny === null) {
+              res.json({
+                propojeno: false,
+                stravaId: null,
+                scope: null,
+                expirace: null,
+              });
+              return;
+            }
+            const cerstve = await db
+              .select({ scope: stravaTokens.scope, expirace: stravaTokens.expirace })
+              .from(stravaTokens)
+              .where(eq(stravaTokens.userId, id))
+              .limit(1);
+            const aktualni = cerstve[0] ?? radek;
+            res.json({
+              propojeno: true,
+              stravaId: ucet.stravaId,
+              scope: aktualni.scope ?? STRAVA_SCOPE_DEFAULT,
+              expirace: aktualni.expirace ? aktualni.expirace.toISOString() : null,
+            });
+          } catch {
+            res.json({
+              propojeno: true,
+              stravaId: ucet.stravaId,
+              scope: radek.scope ?? STRAVA_SCOPE_DEFAULT,
+              expirace: radek.expirace ? radek.expirace.toISOString() : null,
+            });
+          }
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* GET /api/strava/connect — PUBLIC alias auth-url (jen veřejné URL). */
+app.get("/api/strava/connect", (req: Request, res: Response) => {
+  const dotaz = req.query as Record<string, unknown>;
+  const suroveState: unknown = dotaz["state"];
+  const surovyState =
+    typeof suroveState === "string" ? suroveState.trim().slice(0, 256) : "";
+  if (!jePlatnyStravaState(surovyState)) {
+    posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+      state: ["Stav propojení je neplatný. Zkus to znovu."],
+    });
+    return;
+  }
+  const clientId = ctiStravaClientId();
+  if (!jeRealneClientId(clientId)) {
+    posliChybu(res, "STRAVA_NENI_NASTAVENA", STRAVA_NENI_NASTAVENA_ZPRAVA);
+    return;
+  }
+  const url = sestavStravaAuthUrl({
+    clientId,
+    redirectUri: ctiStravaRedirectUri(),
+    state: surovyState,
+    scope: STRAVA_SCOPE_DEFAULT,
+  });
+  res.json({ url });
+});
+
+/* DELETE /api/strava/disconnect — USER alias odpojit (idempotentní). */
+app.delete("/api/strava/disconnect", (req: Request, res: Response) => {
   void (async (): Promise<void> => {
     await vyzadujPrihlaseni(req, res, () => {
       void (async (): Promise<void> => {
@@ -3498,6 +3990,7 @@ async function nactiJmenaAutoru(
       prijmeni: users.prijmeni,
       discordNick: users.discordNick,
       email: users.email,
+      avatarUrl: users.avatarUrl,
     })
     .from(users)
     .where(inArray(users.id, unikatni));
@@ -3507,6 +4000,7 @@ async function nactiJmenaAutoru(
       prijmeni: radek.prijmeni,
       discordNick: radek.discordNick,
       email: radek.email,
+      avatarUrl: verejnyAvatarUrl(radek.avatarUrl),
     });
   }
   return mapa;
@@ -3632,6 +4126,7 @@ app.post("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
               prijmeni: users.prijmeni,
               discordNick: users.discordNick,
               email: users.email,
+              avatarUrl: users.avatarUrl,
             })
             .from(users)
             .where(eq(users.id, autorId))
@@ -3644,6 +4139,7 @@ app.post("/api/expeditions/:id/zpravy", (req: Request, res: Response) => {
                   prijmeni: autorRadky[0].prijmeni,
                   discordNick: autorRadky[0].discordNick,
                   email: autorRadky[0].email,
+                  avatarUrl: verejnyAvatarUrl(autorRadky[0].avatarUrl),
                 };
           const snapshot: string =
             autorProfil === null ? "" : slozZobrazovaneJmeno(autorProfil);
@@ -3841,6 +4337,7 @@ app.post("/api/diskuze/zpravy", (req: Request, res: Response) => {
               prijmeni: users.prijmeni,
               discordNick: users.discordNick,
               email: users.email,
+              avatarUrl: users.avatarUrl,
             })
             .from(users)
             .where(eq(users.id, uzivatel.id))
@@ -3853,6 +4350,7 @@ app.post("/api/diskuze/zpravy", (req: Request, res: Response) => {
                   prijmeni: autorRadky[0].prijmeni,
                   discordNick: autorRadky[0].discordNick,
                   email: autorRadky[0].email,
+                  avatarUrl: verejnyAvatarUrl(autorRadky[0].avatarUrl),
                 };
           const snapshot: string =
             autorProfil === null ? "" : slozZobrazovaneJmeno(autorProfil);
@@ -3875,6 +4373,95 @@ app.post("/api/diskuze/zpravy", (req: Request, res: Response) => {
           }
           const odpoved: PosliGlobalZpravuResponse = { zprava: api };
           res.status(201).json(odpoved);
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* GET /api/diskuze/soukrome?klic= — jen účastník dvojice. */
+app.get("/api/diskuze/soukrome", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const klic = typeof req.query.klic === "string" ? req.query.klic.trim() : "";
+        const userId = (req as AutentizovanyRequest).uzivatel.id;
+        if (!jeUcastnikSoukromeho(klic, userId)) {
+          posliChybu(res, "ZAKAZANO", "Tenhle soukromý chat není tvůj.");
+          return;
+        }
+        try {
+          const vlakno = await nactiVlaknoSoukrome(getDb(), klic, userId);
+          res.json({ zpravy: vlakno ?? [], nextCursor: null });
+        } catch {
+          vnitrniChyba(res);
+        }
+      })();
+    });
+  })();
+});
+
+/* POST /api/diskuze/soukrome { partnerId, text } — soukromá zpráva jednomu členovi. */
+app.post("/api/diskuze/soukrome", (req: Request, res: Response) => {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
+        const ip = ctiIpZRequestu(req);
+        if (!smiPoslatZpravu(ip)) {
+          posliChybu(res, "MOC_POZADAVKU", "Posíláš zprávy moc rychle. Počkej chvíli a zkus to znovu.");
+          return;
+        }
+        const telo = req.body as unknown;
+        const partnerSurovy =
+          typeof telo === "object" && telo !== null
+            ? (telo as Record<string, unknown>)["partnerId"]
+            : undefined;
+        const partnerId = typeof partnerSurovy === "string" ? partnerSurovy.trim() : "";
+        const ja = (req as AutentizovanyRequest).uzivatel.id;
+        const klic = klicSoukromehoChatu(ja, partnerId);
+        if (klic === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+            partnerId: ["Vyber člena, kterému chceš napsat."],
+          });
+          return;
+        }
+        const overeni = validujZpravu(telo);
+        if (!overeni.uspech || overeni.data === null) {
+          posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+          return;
+        }
+        try {
+          const db = getDb();
+          const profily = await nactiProfily(db, [ja, partnerId]);
+          if (!profily.has(partnerId.toLowerCase())) {
+            posliChybu(res, "NENALEZENO", "Člen nenalezen.");
+            return;
+          }
+          const autor = profily.get(ja.toLowerCase()) ?? null;
+          const jmeno = autor === null ? "" : slozZobrazovaneJmeno(autor);
+          const vlozene = await db
+            .insert(soukromeZpravy)
+            .values({
+              klic,
+              autorId: ja,
+              autorJmeno: jmeno,
+              text: overeni.data.text,
+            })
+            .returning();
+          const radek = vlozene[0];
+          if (radek === undefined) {
+            vnitrniChyba(res);
+            return;
+          }
+          const vlakno = await nactiVlaknoSoukrome(db, klic, ja);
+          const zprava = vlakno?.find((polozka) => polozka.id === radek.id) ?? null;
+          if (zprava === null) {
+            vnitrniChyba(res);
+            return;
+          }
+          res.status(201).json({ zprava });
         } catch {
           vnitrniChyba(res);
         }
@@ -3933,7 +4520,11 @@ app.get("/api/diskuze/konverzace", (req: Request, res: Response) => {
         precteni = mapa;
       }
       const seskupene: ApiKonverzace[] = seskupKonverzace(vlakno, precteni);
-      const hotove: ApiKonverzace[] = [...seskupene];
+      const soukrome: ApiKonverzace[] =
+        session === null
+          ? []
+          : await nactiSoukromeKonverzace(db, session.id, precteni);
+      const hotove: ApiKonverzace[] = [...seskupene, ...soukrome];
       const klice = new Set(hotove.map((konverzace) => konverzace.key));
       const globalniKanals: ReadonlyArray<KanalDiskuze> = ["dulezite", "general"];
       for (const kanal of globalniKanals) {
@@ -3986,6 +4577,10 @@ app.post("/api/diskuze/konverzace/read", (req: Request, res: Response) => {
             }
           }
           const userId: string = (req as AutentizovanyRequest).uzivatel.id;
+          if (key.startsWith("soukrome:") && !jeUcastnikSoukromeho(key, userId)) {
+            posliChybu(res, "ZAKAZANO", "Tenhle soukromý chat není tvůj.");
+            return;
+          }
           const ted = new Date();
           await db
             .insert(konverzacePrecteni)

@@ -19,6 +19,8 @@
  *
  * Spuštění:  npm run seed:test-uzivatele
  * Přihlášení: POST /api/login { email, heslo } (viz docs/testovaci-ucty.md).
+ * Smoke Fotky: nastav SMOKE_ADMIN_EMAIL=test-vedouci@example.cz a
+ * SMOKE_ADMIN_HESLO na stejné heslo jako TEST_SEED_HESLO_VEDOUCI, pak npm run smoke:fotky.
  */
 
 import { neon } from "@neondatabase/serverless";

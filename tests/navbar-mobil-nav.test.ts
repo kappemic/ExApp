@@ -34,7 +34,7 @@ function blokMobileBar(navbar: string): string {
   return match![0];
 }
 
-describe("MOBIL_POLOZKY — pět položek bez Chatu", () => {
+describe("MOBIL_POLOZKY — tři položky bez Chatu, Domů a Profilu", () => {
   const navbar: string = ctiZdroj("src/components/Navbar/Navbar.tsx");
   const mobil: string = blokMobilPolozky(navbar);
 
@@ -43,19 +43,17 @@ describe("MOBIL_POLOZKY — pět položek bez Chatu", () => {
     expect(mobil).not.toMatch(/popisek:\s*"Chat"/);
   });
 
-  it("má přesně pět odkazů (Domů, Výpravy, Fotky, Žebříčky, Profil)", () => {
+  it("má přesně tři odkazy (Výpravy, Fotky, Žebříčky)", () => {
     const cesty: RegExpMatchArray | null = mobil.match(/to:\s*"[^"]+"/g);
-    expect(cesty).not.toBeNull();
-    expect(cesty!.length).toBe(5);
-    expect(cesty!.join(" ")).toContain('to: "/"');
-    expect(cesty!.join(" ")).toContain('to: "/vypravy"');
-    expect(cesty!.join(" ")).toContain('to: "/fotky"');
-    expect(cesty!.join(" ")).toContain('to: "/zebricky"');
-    expect(cesty!.join(" ")).toContain('to: "/profil"');
+    expect(cesty).toEqual([
+      'to: "/vypravy"',
+      'to: "/fotky"',
+      'to: "/zebricky"',
+    ]);
   });
 
   it("dokumentuje produktové rozhodnutí (Chat v hlavičce)", () => {
-    expect(navbar).toMatch(/Chat záměrně chybí[\s\S]*const MOBIL_POLOZKY/);
+    expect(navbar).toMatch(/Chat is intentionally absent[\s\S]*const MOBIL_POLOZKY/);
     expect(navbar).toContain("`AppHeader`");
   });
 });
@@ -80,9 +78,20 @@ describe("AppHeader — mobilní Chat + unread badge", () => {
     expect(header).toContain("min-h-[44px] min-w-[44px]");
     expect(header).toContain("[touch-action:manipulation]");
   });
+
+  it("profil je na telefonu avatar vpravo nahoře, na desktopu zůstává v menu", () => {
+    expect(header).toContain('to="/profil"');
+    expect(header).toContain("AvatarKruh");
+    expect(header).toContain('aria-label="Profil"');
+    expect(header).toContain("lg:hidden");
+    const desktop = navbar.match(/const DESKTOP_POLOZKY[\s\S]*?^\];/m);
+    expect(desktop).not.toBeNull();
+    expect(desktop![0]).toContain('to: "/profil"');
+    expect(desktop![0]).not.toMatch(/to:\s*"\/"/);
+  });
 });
 
-describe("MobileBar — čitelná pět položková lišta", () => {
+describe("MobileBar — čitelná lišta bez Domů a Profilu", () => {
   const navbar: string = ctiZdroj("src/components/Navbar/Navbar.tsx");
   const bar: string = blokMobileBar(navbar);
 
@@ -102,5 +111,13 @@ describe("MobileBar — čitelná pět položková lišta", () => {
     expect(navbar).toContain("tridyMobilOdkazu");
     expect(navbar).toMatch(/min-h-\[48px\][\s\S]*min-w-\[44px\]/);
     expect(navbar).toContain("text-[11px]");
+  });
+
+  it("Členové jsou v liště vždy, Kódy jen pro admina", () => {
+    const navbar: string = ctiZdroj("src/components/Navbar/Navbar.tsx");
+    const bar: string = blokMobileBar(navbar);
+    expect(bar).toContain("ADMIN_POLOZKA");
+    expect(bar).toContain("...(videtAdmin ? [KODY_POLOZKA] : [])");
+    expect(bar).not.toContain("...(videtAdmin ? [KODY_POLOZKA, ADMIN_POLOZKA] : [])");
   });
 });

@@ -125,6 +125,7 @@ export function vytvorSlugExpedice(nazev: string, pripona: string): string {
 export function toApiUcastnik(
   radek: Participant,
   jmeno: string,
+  avatarUrl: string | null = null,
 ): ApiUcastnik | null {
   if (radek.id.length === 0 || radek.expeditionId.length === 0) return null;
   if (jmeno.trim().length === 0) return null;
@@ -137,6 +138,7 @@ export function toApiUcastnik(
     userId: radek.userId as UserId | null,
     clenId: radek.clenId,
     jmeno,
+    avatarUrl: radek.userId !== null ? avatarUrl : null,
     status: radek.status,
     createdAt: radek.createdAt.toISOString(),
   };

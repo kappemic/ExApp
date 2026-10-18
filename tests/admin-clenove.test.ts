@@ -14,9 +14,10 @@
  * přes veřejné `nactiCleny` s mocknutým fetchem (žádné HTTP, žádná DB):
  * `skola`/`trida` musí být string (i ""), jiný tvar odpověď odmítne.
  */
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HTTP_STATUS_PRO_KOD } from "../src/shared/api-types";
-import { nactiCleny } from "../src/lib/admin-clenove";
+import { nactiCleny, smazClena } from "../src/lib/admin-clenove";
 import {
   validujUpravuRoleUzivatele,
   validujUpravuUzivatele,
@@ -123,6 +124,7 @@ describe("nactiCleny — guard/mapper se skola/trida/discordNick (mock fetch, be
       skola: "ZŠ Lesní",
       trida: "5.A",
       discordNick: "anezka.hraje",
+      telefon: "+420777111222",
     };
   }
 
@@ -202,5 +204,127 @@ describe("nactiCleny — guard/mapper se skola/trida/discordNick (mock fetch, be
     mockFetch(odpovedJson({ users: [clen] }, 200));
     const vysledek = await nactiCleny();
     expect(vysledek.ok).toBe(false);
+  });
+
+  it("null telefon (nevyplněn) projde", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    clen["telefon"] = null;
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.telefon).toBeNull();
+    }
+  });
+
+  it("chybějící telefon odpověď odmítne", async () => {
+    const clen: Record<string, unknown> = dobryClen();
+    delete clen["telefon"];
+    mockFetch(odpovedJson({ users: [clen] }, 200));
+    const vysledek = await nactiCleny();
+    expect(vysledek.ok).toBe(false);
+  });
+});
+
+describe("smazClena — DELETE /api/users/:id (mock fetch, bez HTTP)", () => {
+  const API_ZAKLAD = "https://api.test";
+  const ID = "11111111-1111-4111-8111-111111111111";
+
+  function odpovedJson(telo: unknown, status: number): Response {
+    return new Response(JSON.stringify(telo), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_API_BASE_URL", API_ZAKLAD);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("200 a { ok: true } je úspěch a volá DELETE na detail uživatele", async () => {
+    const volani: Array<{ url: string; method: string; credentials: RequestCredentials | undefined }> = [];
+    vi.stubGlobal("fetch", (vstup: RequestInfo | URL, init?: RequestInit) => {
+      volani.push({
+        url: String(vstup),
+        method: init?.method ?? "GET",
+        credentials: init?.credentials,
+      });
+      return Promise.resolve(odpovedJson({ ok: true }, 200));
+    });
+    const vysledek = await smazClena(ID);
+    expect(vysledek.ok).toBe(true);
+    expect(volani).toEqual([
+      {
+        url: `${API_ZAKLAD}/api/users/${ID}`,
+        method: "DELETE",
+        credentials: "include",
+      },
+    ]);
+  });
+
+  it("403 vlastní účet vrátí českou hlášku ze serveru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      () =>
+        Promise.resolve(
+          odpovedJson(
+            {
+              error: {
+                code: "ZAKAZANO",
+                message: "Vlastní účet z administrace smazat nejde.",
+              },
+            },
+            403,
+          ),
+        ),
+    );
+    const vysledek = await smazClena(ID);
+    expect(vysledek.ok).toBe(false);
+    if (!vysledek.ok) {
+      expect(vysledek.chyba).toBe("Vlastní účet z administrace smazat nejde.");
+      expect(vysledek.kod).toBe("ZAKAZANO");
+    }
+  });
+
+  it("pád sítě vrátí offline hlášku", async () => {
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
+    const vysledek = await smazClena(ID);
+    expect(vysledek.ok).toBe(false);
+    if (!vysledek.ok) {
+      expect(vysledek.chyba).toContain("Bez připojení");
+    }
+  });
+});
+
+describe("DELETE /api/users/:id — admin guard a zákaz vlastního účtu", () => {
+  it("route hlídá vyzadujAdmina a porovná id session", () => {
+    const server = readFileSync("server/src/index.ts", "utf8");
+    const start = server.indexOf("app.delete(\"/api/users/:id\"");
+    expect(start).toBeGreaterThan(-1);
+    const konec = server.indexOf("app.delete(", start + 10);
+    const route = server.slice(start, konec === -1 ? undefined : konec);
+    expect(route).toContain("vyzadujAdmina");
+    expect(route).toContain("session.id === id");
+    expect(route).toContain("Vlastní účet z administrace smazat nejde.");
+  });
+});
+
+describe("GET /api/users — čtení pro přihlášené, úprava dál jen admin", () => {
+  it("seznam hlídá přihlášení a mapper nese telefon", () => {
+    const server = readFileSync("server/src/index.ts", "utf8");
+    const start = server.indexOf("app.get(\"/api/users\"");
+    expect(start).toBeGreaterThan(-1);
+    const konec = server.indexOf("app.patch(\"/api/users/:id\"");
+    const usek = server.slice(start, konec);
+    expect(usek).toContain("vyzadujPrihlaseni");
+    expect(usek).not.toContain("vyzadujAdmina");
+    expect(usek).toContain("telefon:");
+    const patch = server.slice(konec, server.indexOf("app.delete(\"/api/users/:id\""));
+    expect(patch).toContain("vyzadujAdmina");
   });
 });

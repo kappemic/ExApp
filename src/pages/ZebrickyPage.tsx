@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { Link } from "react-router-dom";
+import { TlacitkoProfilu } from "../components/clen/ClenProfil";
 import { useAuth } from "../hooks/useAuth";
 import { getZebricek } from "../lib/zebricky-api";
 import type { ZebrickyRadek } from "../shared/api-types";
@@ -199,12 +200,18 @@ export default function ZebrickyPage(): JSX.Element {
                         {index + 1}.
                       </td>
                       <td className="px-4 py-3">
-                        {radek.jmeno}
-                        {jsemJa && (
-                          <span className="ml-2 rounded-full border border-inkoust bg-smrk px-2 py-0.5 text-xs font-bold text-papir">
-                            ty
-                          </span>
-                        )}
+                        <TlacitkoProfilu
+                          id={radek.userId}
+                          jmeno={radek.jmeno}
+                          className="bg-transparent p-0"
+                        >
+                          {radek.jmeno}
+                          {jsemJa && (
+                            <span className="ml-2 rounded-full border border-inkoust bg-smrk px-2 py-0.5 text-xs font-bold text-papir">
+                              ty
+                            </span>
+                          )}
+                        </TlacitkoProfilu>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {radek.vypravy}

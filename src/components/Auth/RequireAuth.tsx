@@ -65,10 +65,10 @@ export default function RequireAuth({
             Tato stránka je jen pro vedoucí (admin).
           </p>
           <Link
-            to="/"
+            to="/vypravy"
             className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
           >
-            <span aria-hidden="true">←</span> Domů
+            <span aria-hidden="true">←</span> Výpravy
           </Link>
         </div>
       </main>

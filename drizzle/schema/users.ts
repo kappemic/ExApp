@@ -8,12 +8,20 @@
  * - Role: jediný zdroj pravdy `src/config/roles.ts` (union `Role`).
  *   DB CHECK kopíruje stejných 5 hodnot, validace kombinací zůstává
  *   v TS (`chybaKombinaceRole`), DB hlídá jen jednotlivou hodnotu.
+ *   Potvrzeno pro Step 1 (kanály, BEZE změny sloupců):
+ *   `role` TEXT NOT NULL DEFAULT 'clen' + trio `clenstvi` / `funkce` /
+ *   `isAdmin` (migrace 0005) zůstává jediným zdrojem práv —
+ *   `dulezite` smí psát `funkce = 'vedeni' | 'rada'` NEBO `isAdmin`,
+ *   `general` každý přihlášený, čtení PUBLIC. Žádný displayName
+ *   sloupec — zobrazované jméno = `jmeno + prijmeni` (fallback
+ *   `discordNick`, pak `email`); otisk drží `zpravy.autor_jmeno`.
  *
  * Vyžaduje: `npm i drizzle-orm` + `npm i -D drizzle-kit`
  * (`pgcrypto` pro `gen_random_uuid()` — na Neonu dostupné by default).
  */
 import {
   boolean,
+  date,
   pgTable,
   uuid,
   text,
@@ -60,6 +68,17 @@ export const users = pgTable("users", {
   trida: text("trida").notNull().default(""),
   /** Strava OAuth subject (Fáze 4). NULL = nepropojeno. */
   stravaId: text("strava_id").unique(),
+  /**
+   * Avatar (Step 3 — POUZE URL, migrace 0015). NULL = nevyplněno.
+   * Upload (binární soubor) přijde až ve Stepu 4 přes stejné
+   * `PATCH /api/me { avatarUrl }` — kontrakt se nemění.
+   * Server validuje jen tvar https:// URL (max 2048), nikdy blob.
+   */
+  avatarUrl: text("avatar_url"),
+  /** Krátké představení (Step 3, migrace 0015). "" = nevyplněno. */
+  bio: text("bio").notNull().default(""),
+  /** Narozeniny (Step 3, migrace 0015, DATE YYYY-MM-DD). NULL = nevyplněno. */
+  narozeniny: date("narozeniny"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

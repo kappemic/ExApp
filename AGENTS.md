@@ -32,6 +32,10 @@ Při generování kódů a navrhování architektury se striktně drž následuj
    * Registrace vyžaduje ověření platnosti 10minutového kódu z DB.
    * Admin operace (mazání, úpravy výprav, generování kódů) musí být zabezpečeny na úrovni API serverových cest (middleware/API routes).
 
+### Coordinator (planner)
+
+Hlavní agent nejdřív spustí **planner** subagenta i u menších úkolů (vynechat jen čistě mechanické opravy bez produktového rozhodnutí). Planner před plánem spustí `npx skills find` dle skillu find-skills, doporučí nejlepší skill (včetně skills.sh odkazu) a vrátí krokový plán; coordinator kroky automaticky vykoná v pořadí (viz `.cursor/rules/planner-auto-execute.mdc`).
+
 ---
 
 ## 3. Postup vývoje podle Fází (Feature Implementation Roadmap)

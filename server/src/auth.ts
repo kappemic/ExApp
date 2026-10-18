@@ -131,6 +131,15 @@ export function toApiUser(radek: DbUserRow): ApiUser {
     funkce: trio.funkce,
     isAdmin: trio.isAdmin,
     stravaId: radek.stravaId,
+    // Step 3 profil (migrace 0015) — fallbacky drží i řádky z doby před
+    // migrací (server mapuje s typeof-guards, nikdy nevyhazuje).
+    avatarUrl: typeof radek.avatarUrl === "string" ? radek.avatarUrl : null,
+    bio: typeof radek.bio === "string" ? radek.bio : "",
+    narozeniny: typeof radek.narozeniny === "string" ? radek.narozeniny : null,
+    // Škola / třída (DB NOT NULL DEFAULT '') — aditivně optional v ApiUser,
+    // server mapuje s typeof-guard fallbackem '' (round-trip ulož → reload drží).
+    skola: typeof radek.skola === "string" ? radek.skola : "",
+    trida: typeof radek.trida === "string" ? radek.trida : "",
     createdAt: radek.createdAt.toISOString(),
     updatedAt: radek.updatedAt.toISOString(),
   };

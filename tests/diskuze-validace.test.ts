@@ -114,6 +114,9 @@ describe("toApiZprava (DB řádek → ApiZprava)", () => {
       id: "11111111-1111-4111-8111-111111111111",
       expeditionId: "sumava-2026",
       autorId: "22222222-2222-4222-8222-222222222222",
+      authorName: "Bývalý člen",
+      authorAvatarUrl: null,
+      channel: "expedice",
       text: "Ahoj z výpravy",
       createdAt: "2026-10-01T10:00:00.000Z",
     });
@@ -205,6 +208,8 @@ describe("kontrakt diskuze (§ Diskuze)", () => {
         id: "z1",
         expeditionId: "abc",
         autorId: null,
+        authorName: "Bývalý člen",
+        channel: "expedice",
         text: "Ahoj",
         createdAt: "2026-10-01T10:00:00.000Z",
       }),
@@ -217,6 +222,8 @@ describe("kontrakt diskuze (§ Diskuze)", () => {
         id: "z1",
         expeditionId: "abc",
         autorId: null,
+        authorName: "Bývalý člen",
+        channel: "expedice",
         createdAt: "2026-10-01T10:00:00.000Z",
       }),
     ).toBe(false);

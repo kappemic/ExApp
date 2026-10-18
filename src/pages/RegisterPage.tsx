@@ -90,7 +90,7 @@ export default function RegisterPage(): JSX.Element {
       kod,
     });
     if (vysledek.uspech) {
-      navigate("/", { replace: true });
+      navigate("/vypravy", { replace: true });
       return;
     }
     setChyby(vysledek.chybyPoli);

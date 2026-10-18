@@ -48,6 +48,8 @@ function zprava(
   return {
     expeditionId: "vyprava-1",
     autorId: "autor-1",
+    authorName: "Jan Novák",
+    channel: "expedice",
     text: "Ahoj",
     createdAt: "2026-10-10T10:00:00.000Z",
     ...cast,
@@ -137,17 +139,29 @@ describe("DiskuzeBox pure: optimistic insert s rollbackem", () => {
   });
 });
 
-describe("DiskuzeBox pure: autor popisky (dlouhý nick / e-mail / smazaný)", () => {
-  it("moje zpráva je Ty, cizí nese krátké id, smazaný je Bývalý člen", () => {
+describe("DiskuzeBox pure: autor popisky (Step 2 jména z JOINu)", () => {
+  it("moje zpráva je Ty, cizí nese authorName, smazaný je Bývalý člen", () => {
     expect(
       vyberAutorPopisek(zprava({ autorId: "moje-id" }), "moje-id"),
     ).toBe("Ty");
     expect(
-      vyberAutorPopisek(zprava({ autorId: "cizi-dlouhe-id-123" }), "moje-id"),
+      vyberAutorPopisek(
+        zprava({ autorId: "cizi-dlouhe-id-123", authorName: "Jan Novák" }),
+        "moje-id",
+      ),
+    ).toBe("Jan Novák");
+    expect(
+      vyberAutorPopisek(zprava({ autorId: null, authorName: "" }), "moje-id"),
+    ).toBe("Bývalý člen");
+  });
+
+  it("prázdné authorName padá na starý fallback (porušená data)", () => {
+    expect(
+      vyberAutorPopisek(
+        zprava({ autorId: "cizi-dlouhe-id-123", authorName: "   " }),
+        "moje-id",
+      ),
     ).toBe("Člen · cizi-dlo");
-    expect(vyberAutorPopisek(zprava({ autorId: null }), "moje-id")).toBe(
-      "Bývalý člen",
-    );
   });
 });
 
@@ -234,10 +248,10 @@ describe("ChatPage pure: nástěnka (nejnovější napříč výpravami)", () =>
     expect(tvarVypravy(0)).toBe("výprav");
   });
 
-  it('ChatPage pouziva tvarVypravy(pocetVyprav) — zadna inline vetev', () => {
+  it("ChatPage exportuje pluralizace (legacy nástěnka + Step 3 konverzace)", () => {
     const chat: string = ctiZdroj("src/pages/ChatPage.tsx");
-    expect(chat).toContain("tvarVypravy(pocetVyprav)");
     expect(chat).toContain("tvarVypravy");
+    expect(chat).toContain("tvarKonverzace");
   });
 });
 
@@ -360,22 +374,26 @@ describe("ExpeditionModal slot + ChatPage proklik (zdroj-kontrakt)", () => {
     }
   });
 
-  it("ChatPage je živá nástěnka: skeleton, prázdný stav, proklik na výpravu", () => {
+  it("ChatPage je seznam konverzací + detail (Step 3, pinned Důležité + General)", () => {
     const chat: string = ctiZdroj("src/pages/ChatPage.tsx");
     expect(chat).not.toContain("Brzy");
     expect(chat).toContain("Nástěnka");
-    expect(chat).toContain('role="status"');
-    expect(chat).toContain("Zatím tu je ticho");
-    expect(chat).toContain("Otevřít výpravu");
-    expect(chat).toContain('to="/vypravy"');
-    expect(chat).toContain("getZpravy");
+    expect(chat).toContain("ConversationList");
+    expect(chat).toContain("KonverzaceDetail");
+    expect(chat).toContain("getKonverzace");
+    expect(chat).toContain("konverzace");
     expect(chat).toContain("min-w-0");
-    expect(chat).toContain("anywhere");
+    /* break-ui hardening žije v řádcích/bublinách, stránka ho skládá. */
+    expect(ctiZdroj("src/components/chat/ConversationList.tsx")).toContain(
+      "anywhere",
+    );
   });
 
-  it("ChatPage bez composeru (psaní patří do modalu) + bez secretu", () => {
+  it("ChatPage drží legacy helpery nástěnky + bez secretu", () => {
     const chat: string = ctiZdroj("src/pages/ChatPage.tsx");
-    expect(chat).not.toContain("<textarea");
+    expect(chat).toContain("seradNastenkuSestupne");
+    expect(chat).toContain("tvarVypravy");
+    expect(chat).toContain("vezmiNejnovesi");
     expect(chat).not.toContain("DATABASE_URL");
   });
 });

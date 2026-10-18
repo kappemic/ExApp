@@ -32,6 +32,7 @@ import {
   vyzadujPrihlaseni,
 } from "./auth";
 import { posliChybu } from "./chyby";
+import { lzeDoplnitArchiv } from "./vyprava-termin";
 import { getDb } from "./db";
 import { jeAlbumKos } from "../../src/shared/fotky-kos";
 import {
@@ -65,7 +66,7 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VYPRAVA_UZAVRENA_ZPRAVA =
-  "Fotky jdou přidat až k proběhlé výpravě. Nejdřív ji uzavři s docházkou.";
+  "Fotky jdou přidat až po skončení výpravy.";
 
 function jeUuid(id: string): boolean {
   return UUID_RE.test(id);
@@ -591,13 +592,18 @@ export function registrujAlba(app: Express): void {
         try {
           const dbPred = getDb();
           const vypravy = await dbPred
-            .select({ id: expeditions.id, stav: expeditions.stav })
+            .select({
+              id: expeditions.id,
+              stav: expeditions.stav,
+              datum: expeditions.datum,
+              datumDo: expeditions.datumDo,
+            })
             .from(expeditions)
             .where(eq(expeditions.id, id))
             .limit(1);
           const vyprava = vypravy[0];
           if (vyprava !== undefined) {
-            if (vyprava.stav !== "proběhlá") {
+            if (!lzeDoplnitArchiv(vyprava)) {
               posliChybu(res, "VYPRAVA_UZAVRENA", VYPRAVA_UZAVRENA_ZPRAVA);
               return;
             }
@@ -681,17 +687,21 @@ export function registrujAlba(app: Express): void {
           const userId = (req as AutentizovanyRequest).uzivatel.id;
           if (cil.druh === "vyprava") {
             const znovu = await db
-              .select({ stav: expeditions.stav })
+              .select({
+                stav: expeditions.stav,
+                datum: expeditions.datum,
+                datumDo: expeditions.datumDo,
+              })
               .from(expeditions)
               .where(eq(expeditions.id, id))
               .limit(1);
-            const stav = znovu[0]?.stav;
-            if (stav === undefined) {
+            const radek = znovu[0];
+            if (radek === undefined) {
               await uklidR2(nastaveniR2, nahrane.map((polozka) => polozka.klic));
               posliChybu(res, "NENALEZENO", "Výprava nenalezena.");
               return;
             }
-            if (stav !== "proběhlá") {
+            if (!lzeDoplnitArchiv(radek)) {
               await uklidR2(nastaveniR2, nahrane.map((polozka) => polozka.klic));
               posliChybu(res, "VYPRAVA_UZAVRENA", VYPRAVA_UZAVRENA_ZPRAVA);
               return;

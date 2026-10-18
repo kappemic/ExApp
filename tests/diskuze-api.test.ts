@@ -56,6 +56,8 @@ function dobraZprava(): Record<string, string | null> {
     id: "z1",
     expeditionId: "abc",
     autorId: null,
+    authorName: "Jan Novák",
+    channel: "expedice",
     text: "Ahoj z výpravy",
     createdAt: "2026-10-01T10:00:00.000Z",
   };

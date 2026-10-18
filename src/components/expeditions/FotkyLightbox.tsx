@@ -46,6 +46,8 @@ export interface FotkyLightboxProps {
   onZrusMazani?: () => void;
   onSmazatVybrane?: () => void;
   onSmazatVse?: () => void;
+  /** Extra class on the portaled layer. Preview uses it for press easing. */
+  trida?: string;
 }
 
 /**
@@ -68,6 +70,7 @@ export default function FotkyLightbox({
   onZrusMazani,
   onSmazatVybrane,
   onSmazatVse,
+  trida,
 }: FotkyLightboxProps): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
   const zavritRef = useRef<HTMLButtonElement>(null);
@@ -223,7 +226,9 @@ export default function FotkyLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="Fotka z výpravy"
-      className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-inkoust/85"
+      className={`fixed inset-0 z-[100] flex flex-col overscroll-contain bg-inkoust/85${
+        trida !== undefined && trida.length > 0 ? ` ${trida}` : ""
+      }`}
       onMouseDown={zavrit}
     >
       <div

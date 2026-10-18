@@ -8,6 +8,7 @@ import {
   type JSX,
 } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { oznacVlaknoJakoPrectene } from "../../hooks/useUnreadExpeditions";
 import {
   getZpravy,
   posliZpravu,
@@ -48,6 +49,7 @@ export function vytvorOptimistickouZpravu(
   idVypravy: string,
   autorId: string | null,
   text: string,
+  authorName = "Ty",
 ): ApiZprava {
   const nahodne: string =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -57,6 +59,8 @@ export function vytvorOptimistickouZpravu(
     id: `optimistic-${Date.now().toString(36)}-${nahodne}`,
     expeditionId: idVypravy,
     autorId,
+    authorName,
+    channel: "expedice",
     text: text.trim(),
     createdAt: new Date().toISOString(),
   };
@@ -98,14 +102,29 @@ export function seradZpravy(zpravy: ApiZprava[]): ApiZprava[] {
 }
 
 /**
- * Popisek autora bez dalšího fetch (kontrakt nese jen autorId).
- * Moje → „Ty", cizí s id → „Člen · xxxx", smazaný účet → „Bývalý člen".
+ * Popisek autora bez dalšího fetch (Step 2: jméno nese `authorName` z JOINu).
+ * Moje → „Ty" (jen při shodě `autorId === currentUserId`), cizí → živé
+ * `authorName`, smazaný účet bez jména → „Bývalý člen". Starý fallback
+ * `Člen · xxxx` zůstává jen pro porušená data s prázdným `authorName`.
  */
+const VYSKA_RADKU = 44;
+const STROP_POLE = 160;
+
+/** Grow the composer once the text no longer fits on one line. */
+function prizpusobVysku(pole: HTMLTextAreaElement): void {
+  pole.style.height = `${VYSKA_RADKU}px`;
+  const potreba = pole.scrollHeight;
+  pole.style.height = `${Math.min(potreba, STROP_POLE)}px`;
+  pole.style.overflowY = potreba > STROP_POLE ? "auto" : "hidden";
+}
+
 export function vyberAutorPopisek(
   zprava: ApiZprava,
   mojeId: string | null,
 ): string {
   if (mojeId !== null && zprava.autorId === mojeId) return "Ty";
+  const zive: string = zprava.authorName.trim().replace(/\s+/g, " ");
+  if (zive.length > 0) return zive;
   if (zprava.autorId === null) return "Bývalý člen";
   return `Člen · ${zprava.autorId.slice(0, 8)}`;
 }
@@ -115,10 +134,9 @@ export function vyberAutorPopisek(
  *
  * - List: `role="log"` + `aria-live="polite"` (čtečka hlásí nové zprávy),
  *   prázdný stav `role="status"`, chyba `role="alert"`.
- * - Composer: textarea 16px (bez iOS zoomu), `enterkeyhint="send"`,
- *   počítadlo `1000 - délka`, všechna tlačítka 44px+, sticky spodek
- *   se safe-area paddingem (klávesnice composer nezakrývá — formulář je
- *   v toku dialogu, na focus doscrolluje do viditelnosti).
+ * - Composer: 16px field (no iOS zoom), `enterkeyhint="send"`. It stays
+ *   one line until the text wraps, then grows up to a short cap. It sits
+ *   under the thread, not inside `data-vlakno-scroll`.
  * - Optimistic insert s rollbackem: zpráva se objeví hned (`optimistic-*`,
  *   „Odesílá se…"), 201 ji potvrdí, chyba ji odstraní + ukáže alert.
  * - Anonym: vlákno čte (PUBLIC), psát musí po přihlášení (POST = USER).
@@ -132,7 +150,11 @@ export default function DiskuzeBox({
   const composerId: string = useId();
   const pocitadloId: string = useId();
   const listRef = useRef<HTMLUListElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const poleRef = useRef<HTMLTextAreaElement>(null);
+  const obalRef = useRef<HTMLDivElement>(null);
+  /* Messages scroll here. The composer is a sibling below this node. */
+  const vlaknoRef = useRef<HTMLDivElement>(null);
+  const oznacenoRef = useRef<string | null>(null);
 
   const [stav, setStav] = useState<StavVlakna>("nacitani");
   const [zpravy, setZpravy] = useState<ApiZprava[]>([]);
@@ -143,6 +165,11 @@ export default function DiskuzeBox({
   const [mazeId, setMazeId] = useState<string | null>(null);
   const [chybaMazani, setChybaMazani] = useState<string | null>(null);
   const [oznameni, setOznamenie] = useState<string | null>(null);
+
+  useEffect(() => {
+    const pole = poleRef.current;
+    if (pole !== null) prizpusobVysku(pole);
+  }, [text]);
 
   const mojeId: string | null = user?.id ?? null;
   const prihlasen: boolean = user !== null;
@@ -168,17 +195,50 @@ export default function DiskuzeBox({
     void nacti();
   }, [nacti]);
 
-  /* Nová zpráva doscrolluje na konec vlákna (bez skoku při psaní). */
+  /* Nová zpráva doscrolluje jen vlastní vlákno (thread-local scrollTop).
+     `scrollIntoView` na poslední bublině by bublalo do scrollu celého
+     modalu a tahalo detail za chatem — proto saháme jen na vlaknoRef. */
   const pocetZprav: number = zpravy.length;
   useEffect(() => {
-    listRef.current?.lastElementChild?.scrollIntoView({
-      block: "nearest",
-    });
+    const vlakno: HTMLDivElement | null = vlaknoRef.current;
+    if (vlakno === null) return;
+    vlakno.scrollTop = vlakno.scrollHeight;
   }, [pocetZprav]);
 
-  function doscrollujComposer(): void {
-    textareaRef.current?.scrollIntoView({ block: "nearest" });
-  }
+  /*
+   * Krok 3 — trigger visible: vlákno se označí jako přečtené, jakmile je
+   * DiskuzeBox skutečně vidět (IntersectionObserver, práh 35 %).
+   * Jednou na idVypravy, jen pro přihlášené (anonym unread nikdy nesvítí).
+   * Po úspěchu hook zhasne tečku eventem bez reloadu.
+   */
+  useEffect(() => {
+    oznacenoRef.current = null;
+    const prvek: HTMLDivElement | null = obalRef.current;
+    if (prvek === null) return;
+    if (stav !== "hotovo") return;
+    if (!prihlasen) return;
+    function oznac(): void {
+      if (oznacenoRef.current === idVypravy) return;
+      oznacenoRef.current = idVypravy;
+      void oznacVlaknoJakoPrectene(idVypravy);
+    }
+    if (typeof IntersectionObserver === "undefined") {
+      oznac();
+      return;
+    }
+    const pozorovatel = new IntersectionObserver(
+      ( zaznamy ) => {
+        for (const zaznam of zaznamy) {
+          if (zaznam.isIntersecting) oznac();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    pozorovatel.observe(prvek);
+    return () => {
+      pozorovatel.disconnect();
+    };
+  }, [idVypravy, stav, prihlasen]);
 
   async function naOdeslat(udalost: FormEvent<HTMLFormElement>): Promise<void> {
     udalost.preventDefault();
@@ -204,6 +264,9 @@ export default function DiskuzeBox({
       potvrdOptimistickouZpravu(prev, docasna.id, vysledek.data.zprava),
     );
     setOznamenie("Zpráva odeslána.");
+    /* Krok 3 — trigger onSend: vlastní zpráva vlákno rovnou přečte. */
+    oznacenoRef.current = idVypravy;
+    void oznacVlaknoJakoPrectene(idVypravy);
   }
 
   async function naSmazat(idZpravy: string): Promise<void> {
@@ -229,7 +292,7 @@ export default function DiskuzeBox({
       : "Diskuze k výpravě";
 
   return (
-    <div className="min-w-0">
+    <div ref={obalRef} className="min-w-0">
       <h3
         id={nadpisId}
         className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60"
@@ -280,23 +343,34 @@ export default function DiskuzeBox({
               {oznameni}
             </p>
           )}
+          {/* Thread scrolls on its own. The composer sits underneath,
+              so typing does not move the messages. */}
+          <div
+            ref={vlaknoRef}
+            data-vlakno-scroll="diskuze"
+            className="mt-2 max-h-80 min-w-0 overflow-y-auto overscroll-contain rounded-2xl border border-inkoust/15 bg-papir/60 p-3"
+          >
           {zpravy.length === 0 ? (
             <p
               role="status"
-              className="mt-2 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70"
+              className="min-w-0 break-words rounded-xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70"
             >
               Zatím tu není žádná zpráva — začni domluvu první vzkazem níže.
             </p>
           ) : (
-            <ul
-              ref={listRef}
-              role="log"
-              aria-live="polite"
-              aria-relevant="additions"
-              aria-label={popisVlakna}
-              aria-labelledby={`${nadpisId}`}
-              className="mt-2 max-h-80 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-inkoust/15 bg-papir/60 p-3"
-            >
+            <>
+              {/* M2: jediná pravda pro název vlákna je popisek s názvem
+                výpravy. Odkaz na generický nadpis „Diskuze" se nesmí
+                kombinovat — čtečka by upřednostnila nadpis bez kontextu
+                a popisek s názvem by ignorovala. */}
+              <ul
+                ref={listRef}
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+                aria-label={popisVlakna}
+                className="min-w-0 space-y-3"
+              >
               {zpravy.map((zprava) => {
                 const jeMoje: boolean =
                   mojeId !== null && zprava.autorId === mojeId;
@@ -314,7 +388,8 @@ export default function DiskuzeBox({
                   />
                 );
               })}
-            </ul>
+              </ul>
+            </>
           )}
 
           {chybaMazani !== null && (
@@ -322,40 +397,62 @@ export default function DiskuzeBox({
               {chybaMazani}
             </p>
           )}
+          </div>
 
           {muzePsat ? (
             <form
               onSubmit={(e) => void naOdeslat(e)}
-              className="sticky bottom-0 mt-3 rounded-2xl border-2 border-inkoust bg-papir p-3 shadow-denik"
+              /* One line under the thread. Safe-area keeps it above the keyboard.
+                 Not sticky inside the message scroller, so focus does not jump. */
+              className="mt-2 rounded-2xl border-2 border-inkoust bg-papir p-1 shadow-denik"
               style={{
-                paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
+                paddingBottom: "calc(0.25rem + env(safe-area-inset-bottom, 0px))",
               }}
             >
-              <label
-                htmlFor={composerId}
-                className="mb-1 block text-[13px] font-bold text-inkoust/70"
-              >
+              <label htmlFor={composerId} className="sr-only">
                 Napsat vzkaz
               </label>
-              <textarea
-                ref={textareaRef}
-                id={composerId}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onFocus={doscrollujComposer}
-                rows={2}
-                maxLength={MAX_DELKA + 50}
-                placeholder="Domluv sraz, odvoz, svačinu…"
-                autoComplete="off"
-                enterKeyHint="send"
-                aria-describedby={pocitadloId}
-                className="block min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 py-2 text-base leading-relaxed placeholder:text-inkoust/40"
-              />
-              <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-1">
+                <textarea
+                  ref={poleRef}
+                  id={composerId}
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    prizpusobVysku(e.target);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || e.shiftKey) return;
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }}
+                  rows={1}
+                  enterKeyHint="send"
+                  maxLength={MAX_DELKA + 50}
+                  placeholder="Vzkaz…"
+                  autoComplete="off"
+                  aria-describedby={zbyva <= 80 ? pocitadloId : undefined}
+                  className="block h-11 min-h-[44px] min-w-0 flex-1 resize-none overflow-hidden rounded-xl border-2 border-inkoust/25 bg-papir px-3 py-2.5 text-base leading-5 placeholder:text-inkoust/40"
+                />
+                <button
+                  type="submit"
+                  disabled={!muzeOdeslat(text, odesilaSe)}
+                  aria-label={
+                    odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu do diskuze"
+                  }
+                  title={
+                    odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu do diskuze"
+                  }
+                  className="nahled-poslat inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-3 text-sm font-bold text-papir [touch-action:manipulation] motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {odesilaSe ? "…" : "Poslat"}
+                </button>
+              </div>
+              {zbyva <= 80 ? (
                 <span
                   id={pocitadloId}
                   role="status"
-                  className={`text-[12px] font-semibold tabular-nums ${
+                  className={`mt-1 block px-1 text-[12px] font-semibold tabular-nums ${
                     zbyva < 0 ? "text-red-800" : "text-inkoust/60"
                   }`}
                 >
@@ -363,17 +460,7 @@ export default function DiskuzeBox({
                     ? `O ${Math.abs(zbyva)} znaků přes limit`
                     : `Zbývá ${zbyva} z ${MAX_DELKA}`}
                 </span>
-                <button
-                  type="submit"
-                  disabled={!muzeOdeslat(text, odesilaSe)}
-                  title={
-                    odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu do diskuze"
-                  }
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir [touch-action:manipulation] motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {odesilaSe ? "Posílám…" : "Poslat"}
-                </button>
-              </div>
+              ) : null}
               {chybaOdeslani !== null && (
                 <p
                   role="alert"
@@ -386,7 +473,7 @@ export default function DiskuzeBox({
           ) : (
             <p
               role="status"
-              className="mt-3 rounded-2xl bg-mech/10 p-3 text-center text-sm text-inkoust/70"
+              className="mt-3 min-w-0 break-words rounded-2xl bg-mech/10 p-3 text-center text-sm text-inkoust/70"
             >
               Diskuzi čte každý, psát můžou přihlášení — přihlas se a přidej
               vzkaz.
