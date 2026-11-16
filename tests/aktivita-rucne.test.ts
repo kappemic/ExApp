@@ -166,7 +166,7 @@ describe("route guardy (dual-guard + jen proběhlá, staticky nad index.ts)", ()
   }
 
   it("POST :id/aktivita-ruchne stojí za vyzadujSpravceVyprav", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("aktivita-ruchne");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 2000);
@@ -174,7 +174,7 @@ describe("route guardy (dual-guard + jen proběhlá, staticky nad index.ts)", ()
   });
 
   it("ne-proběhlá vrací 409 VYPRAVA_UZAVRENA", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("aktivita-ruchne");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 4000);
@@ -182,12 +182,12 @@ describe("route guardy (dual-guard + jen proběhlá, staticky nad index.ts)", ()
   });
 
   it("žádná routa strava-odkaz neexistuje (odkaz flow odebrán)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     expect(obsah).not.toContain("strava-odkaz");
   });
 
   it("komentář vysvětluje, že Strava read API je zdarma bez předplatného", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("aktivita-ruchne");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah

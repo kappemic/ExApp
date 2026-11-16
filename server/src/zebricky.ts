@@ -1,5 +1,5 @@
 /**
- * server/src/zebricky.ts — čistá agregace veřejného žebříčku (Krok 5 Fáze 4).
+ * server/src/zebricky.ts — čistá agregace žebříčku přihlášených (Krok 5 Fáze 4).
  *
  * Vstupem je výsledek JEDNOHO GROUP BY dotazu
  * (`participants(status=ucastnil_se) ⋈ expeditions ⋈ users`)

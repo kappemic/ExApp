@@ -22,6 +22,11 @@ export interface Expedition {
   popis: string;
   /** Odkaz na naplánovanou trasu (mapy.com) — "" = bez odkazu. */
   trasaOdkaz: string;
+  /**
+   * User id of whoever created the expedition.
+   * null/undefined = not recorded (older rows).
+   */
+  organizatorId?: string | null;
   kapacita: ExpeditionCapacity;
   stav: ExpeditionStatus;
   /**

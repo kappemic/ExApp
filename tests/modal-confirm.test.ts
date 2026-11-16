@@ -237,7 +237,8 @@ describe("ConfirmDialog — zdroj-kontrakt (a11y + focus-trap + destruktivnost)"
   it('bezpečný default fokusu na Ponechat, obě tlačítka 44px+, chyba role=alert', () => {
     expect(zdroj).toContain('"Ano, odebrat"');
     expect(zdroj).toContain('"Ponechat"');
-    expect(zdroj).toContain("min-h-[44px]");
+    // Dotykový cíl aspoň 44 px (C2 používá 48 px).
+    expect(zdroj).toMatch(/min-h-\[(4[4-9]|[5-9]\d)px\]/);
     expect(zdroj).toContain('role="alert"');
     expect(zdroj).toContain("disabled={probiha}");
     expect(zdroj).toContain('"Mažu…"');
@@ -334,13 +335,13 @@ describe("ExpeditionModal — docházka (pure) + zdroj-kontrakt mazání/uzavře
     expect(zdroj).toContain("Ano, odstranit");
   });
 
-  it("Uzavřít nese docházku s checkboxy a volá uzavriVypravu", () => {
+  it("Uzavřít neptá se na docházku a volá uzavriVypravu", () => {
     const zdroj: string = ctiZdroj(
       "src/components/expeditions/ExpeditionModal.tsx",
     );
     expect(zdroj).toContain('rezim === "uzavirani"');
-    expect(zdroj).toContain("Docházka");
-    expect(zdroj).toContain('type="checkbox"');
+    expect(zdroj).not.toContain("kdo doopravdy dorazil");
+    expect(zdroj).not.toContain('id={`dochazka-');
     expect(zdroj).toContain("uzavriVypravu(expedice.id");
     expect(zdroj).toContain("uzavriChyba");
     expect(zdroj).toContain("Bez přihlášených nelze uzavřít");

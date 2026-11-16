@@ -7,8 +7,9 @@
  *   fallback `Authorization: Bearer` pro nativní klienty.
  * - `ApiUser` nikdy nenese hash — mapuje ho `toApiUser`.
  * - Admin se pozná POUZE podle čerstvého `is_admin` z DB (sloupec
- *   `users.is_admin`, migrace 0005). Staré `role === 'admin'` se pro
- *   guardy nečte — `role` je jen dual-write mirror (trioNaRoli).
+ *   `users.is_admin`, migrace 0005). SUPERADMIN je `is_superadmin`
+ *   (migrace 0019) a vždy implikuje admina. Staré `role === 'admin'`
+ *   se pro guardy nečte — `role` je jen dual-write mirror (trioNaRoli).
  * - `vyzadujSpravceVyprav` je dual-guard pro mutující expedice-routy:
  *   projde `is_admin` NEBO `smiNaVypravy` z tria čteného čerstvě z DB.
  */
@@ -28,6 +29,8 @@ import type { ApiUser, AuthRole, UserId } from "../../src/shared/api-types";
 import { posliChybu } from "./chyby";
 import { getDb } from "./db";
 import { users } from "../../drizzle/schema/users";
+import { jeProdukce, ctiEnv } from "./prostredi";
+
 
 export const COOKIE_NAME = "exapp_session";
 const BCRYPT_COST = 10;
@@ -46,6 +49,8 @@ export interface SessionUzivatel {
   clenstvi: Clenstvi;
   funkce: Funkce;
   isAdmin: boolean;
+  /** Čerstvé `users.is_superadmin`. Token ho nenosí. */
+  isSuperadmin: boolean;
 }
 
 export interface AutentizovanyRequest extends Request {
@@ -54,14 +59,26 @@ export interface AutentizovanyRequest extends Request {
 
 type DbUserRow = typeof users.$inferSelect;
 
+/** Placeholder shipped in `.env.example`. It is long enough, and public. */
+const JWT_TAJEMSTVI_Z_EXAMPLE = "zamen-za-minimalne-32-znaku-nahodny-retezec";
+
+/** True when the value can sign sessions. The example string cannot. */
+export function jePouzitelneJwtTajnemstvi(secret: string | undefined): boolean {
+  return (
+    secret !== undefined &&
+    secret.length >= 32 &&
+    secret !== JWT_TAJEMSTVI_Z_EXAMPLE
+  );
+}
+
 function jwtSecret(): string {
-  const secret = process.env["AUTH_JWT_SECRET"];
-  if (secret === undefined || secret.length < 32) {
+  const secret = ctiEnv("AUTH_JWT_SECRET");
+  if (!jePouzitelneJwtTajnemstvi(secret)) {
     throw new Error(
-      "Chybí AUTH_JWT_SECRET (aspoň 32 znaků). Nastav ho v .env.local — nikdy do klienta.",
+      "AUTH_JWT_SECRET musí být vlastní náhodný řetězec, aspoň 32 znaků. Ukázka z .env.example se nesmí použít.",
     );
   }
-  return secret;
+  return secret as string;
 }
 
 /** Bcrypt hash hesla — server-only, nikdy se neposílá klientovi. */
@@ -77,6 +94,23 @@ export async function overHeslo(heslo: string, hash: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Fixed cost-10 hash so a missing account still spends a bcrypt compare. */
+const ATRAPA_HESLA =
+  "$2b$10$l7mIz.hmT.ZHD3cf0amD.eGaIzKkbzbrSi23YjkqD62MD4.7xlM0i";
+
+/**
+ * Same work for a real hash and for a missing account.
+ * A missing or empty hash always returns false, after one compare.
+ */
+export async function overHesloNeboAtrapa(
+  heslo: string,
+  hash: string | null | undefined,
+): Promise<boolean> {
+  const maHash = hash !== undefined && hash !== null && hash.length > 0;
+  const shoda = await overHeslo(heslo, maHash ? hash : ATRAPA_HESLA);
+  return maHash && shoda;
 }
 
 /** Podepíše krátký JWT (jen sub). Roli si middleware vždy čte čerstvě z DB. */
@@ -113,10 +147,56 @@ function ctiTokenZRequestu(req: Request): string | null {
   return null;
 }
 
+/**
+ * True when the request authenticates only by Bearer token. The session cookie
+ * wins in `ctiTokenZRequestu`, so a request carrying it stays CSRF-relevant.
+ */
+export function jeBearerBezSessionCookie(req: Request): boolean {
+  const cookies = req.cookies as unknown;
+  if (typeof cookies === "object" && cookies !== null) {
+    const kandidat = (cookies as Record<string, unknown>)[COOKIE_NAME];
+    if (typeof kandidat === "string" && kandidat.length > 0) return false;
+  }
+  const hlavicka = req.headers.authorization;
+  return typeof hlavicka === "string" && hlavicka.startsWith("Bearer ");
+}
+
+/**
+ * SUPERADMIN beats ADMIN. A superadmin row is also an admin
+ * (`is_superadmin` implies `is_admin`).
+ */
+export function authRoleZRadku(isAdmin: boolean, isSuperadmin: boolean): AuthRole {
+  if (isSuperadmin) return "SUPERADMIN";
+  if (isAdmin) return "ADMIN";
+  return "USER";
+}
+
+/**
+ * Setting isSuperadmin forces isAdmin. Clearing isAdmin clears isSuperadmin
+ * so the DB CHECK (`is_superadmin` implies `is_admin`) holds in one UPDATE.
+ * An explicit isSuperadmin=true wins over isAdmin=false in the same body.
+ */
+export function slucAdminASuperadmin(
+  stavajici: { isAdmin: boolean; isSuperadmin: boolean },
+  vstup: { isAdmin?: boolean; isSuperadmin?: boolean },
+): { isAdmin: boolean; isSuperadmin: boolean } {
+  let isAdmin = vstup.isAdmin ?? stavajici.isAdmin;
+  let isSuperadmin = vstup.isSuperadmin ?? stavajici.isSuperadmin;
+  if (vstup.isSuperadmin === true) {
+    isAdmin = true;
+    isSuperadmin = true;
+  }
+  if (!isAdmin) {
+    isSuperadmin = false;
+  }
+  return { isAdmin, isSuperadmin };
+}
+
 /** DB řádek → veřejný ApiUser. Hash se záměrně nikdy nekopíruje. */
 export function toApiUser(radek: DbUserRow): ApiUser {
   const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
-  const authRole: AuthRole = radek.isAdmin ? "ADMIN" : "USER";
+  const isSuperadmin = radek.isSuperadmin === true;
+  const authRole: AuthRole = authRoleZRadku(radek.isAdmin, isSuperadmin);
   const trio = ctiTrioZRadku(radek);
   return {
     id: radek.id as UserId,
@@ -130,11 +210,13 @@ export function toApiUser(radek: DbUserRow): ApiUser {
     clenstvi: trio.clenstvi,
     funkce: trio.funkce,
     isAdmin: trio.isAdmin,
+    isSuperadmin,
     stravaId: radek.stravaId,
     // Step 3 profil (migrace 0015) — fallbacky drží i řádky z doby před
     // migrací (server mapuje s typeof-guards, nikdy nevyhazuje).
     avatarUrl: typeof radek.avatarUrl === "string" ? radek.avatarUrl : null,
     bio: typeof radek.bio === "string" ? radek.bio : "",
+    oblibenaBarva: typeof radek.oblibenaBarva === "string" ? radek.oblibenaBarva : "",
     narozeniny: typeof radek.narozeniny === "string" ? radek.narozeniny : null,
     // Škola / třída (DB NOT NULL DEFAULT '') — aditivně optional v ApiUser,
     // server mapuje s typeof-guard fallbackem '' (round-trip ulož → reload drží).
@@ -173,7 +255,7 @@ function ctiTrioZRadku(radek: DbUserRow): ClenskyProfil {
   return { clenstvi, funkce, isAdmin: radek.isAdmin };
 }
 
-/** True, když v systému ještě není žádný ADMIN (prvotní nastavení). */
+/** True when no row has is_admin. The public codes route does not call this. */
 export async function jeSystemBezAdmina(): Promise<boolean> {
   const db = getDb();
   const admini = await db
@@ -223,14 +305,16 @@ export async function vyzadujPrihlaseni(
   }
   const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
   const trio = ctiTrioZRadku(radek);
+  const isSuperadmin = radek.isSuperadmin === true;
   (req as AutentizovanyRequest).uzivatel = {
     id: radek.id,
     email: radek.email,
     role,
-    authRole: trio.isAdmin ? "ADMIN" : "USER",
+    authRole: authRoleZRadku(trio.isAdmin, isSuperadmin),
     clenstvi: trio.clenstvi,
     funkce: trio.funkce,
     isAdmin: trio.isAdmin,
+    isSuperadmin,
   };
   next();
 }
@@ -256,20 +340,23 @@ export async function ctiVolitelnehoUzivatele(
   if (radek === null) return null;
   const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
   const trio = ctiTrioZRadku(radek);
+  const isSuperadmin = radek.isSuperadmin === true;
   return {
     id: radek.id,
     email: radek.email,
     role,
-    authRole: trio.isAdmin ? "ADMIN" : "USER",
+    authRole: authRoleZRadku(trio.isAdmin, isSuperadmin),
     clenstvi: trio.clenstvi,
     funkce: trio.funkce,
     isAdmin: trio.isAdmin,
+    isSuperadmin,
   };
 }
 
 /**
- * Middleware: vyžaduje session s čerstvým `is_admin = TRUE` z DB.
- * Bez session → 401 NEPRIHLASEN, přihlášený bez admin příznaku → 403 ZAKAZANO.
+ * Middleware: vyžaduje session s čerstvým `is_admin` nebo `is_superadmin`.
+ * SUPERADMIN prochází (výpravy, kódy, fotky). Bez session → 401,
+ * přihlášený bez admin příznaku → 403 ZAKAZANO.
  */
 export function vyzadujAdmina(
   req: Request,
@@ -279,8 +366,29 @@ export function vyzadujAdmina(
   void (async (): Promise<void> => {
     await vyzadujPrihlaseni(req, res, () => {
       const uzivatel = (req as AutentizovanyRequest).uzivatel;
-      if (!uzivatel.isAdmin) {
+      if (!uzivatel.isAdmin && !uzivatel.isSuperadmin) {
         posliChybu(res, "ZAKAZANO", "Tuhle akci může jen admin.");
+        return;
+      }
+      next();
+    });
+  })();
+}
+
+/**
+ * Middleware: jen čerstvé `is_superadmin` z DB.
+ * Bez session → 401 NEPRIHLASEN, admin bez superadmin bitu → 403.
+ */
+export function vyzadujSuperadmina(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  void (async (): Promise<void> => {
+    await vyzadujPrihlaseni(req, res, () => {
+      const uzivatel = (req as AutentizovanyRequest).uzivatel;
+      if (!uzivatel.isSuperadmin) {
+        posliChybu(res, "ZAKAZANO", "Tuhle akci může jen hlavní admin.");
         return;
       }
       next();
@@ -318,11 +426,11 @@ export function vyzadujSpravceVyprav(
 
 /** Nastaví httpOnly session cookie (JWT). */
 export function nastavSessionCookie(res: Response, token: string): void {
-  const jeProdukce = process.env["NODE_ENV"] === "production";
+  const produkce = jeProdukce();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: jeProdukce,
+    secure: produkce,
     path: "/",
     maxAge: SESSION_MAX_AGE_MS,
   });
@@ -330,11 +438,11 @@ export function nastavSessionCookie(res: Response, token: string): void {
 
 /** Smaže session cookie (odhlášení). */
 export function smazSessionCookie(res: Response): void {
-  const jeProdukce = process.env["NODE_ENV"] === "production";
+  const produkce = jeProdukce();
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     sameSite: "lax",
-    secure: jeProdukce,
+    secure: produkce,
     path: "/",
   });
 }

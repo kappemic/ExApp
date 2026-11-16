@@ -71,7 +71,7 @@ export default function AdminTaby({
             aria-controls={aktivni ? `${idPrefix}-panel-${tab.id}` : undefined}
             tabIndex={aktivni ? 0 : -1}
             onClick={() => onZmena(tab.id)}
-            className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded px-4 py-2 text-sm font-bold transition-colors ${
+            className={`bez-prejeti inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded px-4 py-2 text-sm font-bold transition-colors ${
               aktivni
                 ? "bg-inkoust text-papir"
                 : "text-inkoust hover:bg-linka/60"

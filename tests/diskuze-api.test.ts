@@ -51,7 +51,7 @@ function mockFetchOffline(): void {
   vi.stubGlobal("fetch", mock);
 }
 
-function dobraZprava(): Record<string, string | null> {
+function dobraZprava(): Record<string, unknown> {
   return {
     id: "z1",
     expeditionId: "abc",
@@ -59,6 +59,7 @@ function dobraZprava(): Record<string, string | null> {
     authorName: "Jan Novák",
     channel: "expedice",
     text: "Ahoj z výpravy",
+    prilohy: [],
     createdAt: "2026-10-01T10:00:00.000Z",
   };
 }
@@ -73,7 +74,7 @@ afterEach(() => {
 });
 
 describe("getZpravy — klient bez HTTP (mock fetch)", () => {
-  it("vrátí vlákno seřazené od serveru (200, PUBLIC i anonymně)", async () => {
+  it("vrátí vlákno seřazené od serveru (200, cookie session)", async () => {
     const zachyt: { url: string; metoda: string } = { url: "", metoda: "" };
     mockFetchZachytUrl(
       odpovedJson({ zpravy: [dobraZprava()], nextCursor: null }, 200),

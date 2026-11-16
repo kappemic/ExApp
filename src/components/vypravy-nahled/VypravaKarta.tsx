@@ -3,8 +3,12 @@ import VypravaNahled from "../expeditions/VypravaNahled";
 import { useNahledFotkaId } from "../../hooks/useNahledFotkaId";
 import type { Expedition } from "../../lib/mock-expeditions";
 import { formatRozsahData, jeBezOmezeni } from "../../lib/expedition-utils";
+import KrajinaVypravy from "./KrajinaVypravy";
 
-/** Closed-trip card from the journal guide: square frame, 4:3 photo, no shadow. */
+/**
+ * Proběhlá výprava (C2): fotka z alba v zaobleném výřezu, pod ní text.
+ * Bez fotky ukáže krajinu výpravy.
+ */
 export default function VypravaKarta({
   expedice,
   neprecteno,
@@ -15,50 +19,38 @@ export default function VypravaKarta({
   onDetail: (expedice: Expedition) => void;
 }): JSX.Element {
   const fotkaId = useNahledFotkaId(expedice.id, expedice.nahledFotkaId);
-  const kapacita = jeBezOmezeni(expedice)
+  const ucast = jeBezOmezeni(expedice)
     ? `${expedice.kapacita.prihlaseno} přihlášeno`
-    : `${expedice.kapacita.prihlaseno}/${expedice.kapacita.celkem}`;
+    : `${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`;
 
   return (
     <button
       type="button"
       onClick={() => onDetail(expedice)}
       aria-label={`Detail výpravy ${expedice.nazev}`}
-      className="nahled-press nahled-karta flex h-full w-full flex-col border border-[hsl(var(--foreground))] bg-[hsl(var(--card))] text-left text-[hsl(var(--foreground))]"
+      className="nahled-press nahled-karta group flex h-full w-full flex-col gap-3 rounded-3xl text-left text-inkoust focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-smrk"
     >
-      <span className="nahled-karta-foto relative block aspect-[4/3] overflow-hidden border-b border-[hsl(var(--foreground))]">
-        <VypravaNahled expeditionId={expedice.id} fotkaId={fotkaId} probehla />
+      <span className="nahled-karta-foto relative block aspect-[4/3] overflow-hidden rounded-3xl bg-mlha">
+        {fotkaId !== null ? (
+          <VypravaNahled expeditionId={expedice.id} fotkaId={fotkaId} probehla />
+        ) : (
+          <KrajinaVypravy id={expedice.id} datum={expedice.datum} />
+        )}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col p-4">
+      <span className="flex min-w-0 flex-col px-1">
         <span className="flex min-w-0 items-start gap-2">
-          <span className="font-expanded min-w-0 flex-1 text-lg font-extrabold leading-tight tracking-tight">
+          <span className="font-display min-w-0 flex-1 text-lg font-bold leading-snug tracking-tight">
             {expedice.nazev}
           </span>
           {neprecteno ? (
-            <span className="shrink-0 pt-1 font-condensed text-[11px] uppercase tracking-[0.18em]">
-              nové
-            </span>
+            <span className="shrink-0 pt-1 text-[13px] font-semibold text-smrk">nové</span>
           ) : null}
         </span>
-        <time
-          dateTime={expedice.datum}
-          className="mt-2 block font-condensed text-xs uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))]"
-        >
-          {formatRozsahData(expedice.datum, expedice.datumDo)}
+        <time dateTime={expedice.datum} className="mt-0.5 block text-sm text-mech">
+          {formatRozsahData(expedice.datum, expedice.datumDo)}, {ucast}
         </time>
-        <span className="mt-2 line-clamp-3 text-sm leading-relaxed">
-          {expedice.popis}
-        </span>
-        <span className="mt-3 block text-sm">
-          <span className="font-condensed text-[11px] font-semibold uppercase tracking-[0.2em]">
-            Sraz
-          </span>{" "}
-          {expedice.sraz}
-        </span>
-        <span className="mt-auto pt-4 font-condensed text-xs uppercase tracking-[0.18em]">
-          {kapacita} · archiv
-        </span>
       </span>
     </button>
   );
 }
+

@@ -297,7 +297,7 @@ describe("route guardy (dual-guard + 409/403, staticky nad index.ts)", () => {
   }
 
   it("POST :id/strava-parovani stojí za vyzadujSpravceVyprav (403 pro USER bez práva)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("strava-parovani");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 2000);
@@ -305,7 +305,7 @@ describe("route guardy (dual-guard + 409/403, staticky nad index.ts)", () => {
   });
 
   it("ne-proběhlá vrací 409 VYPRAVA_UZAVRENA", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("strava-parovani");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 4000);
@@ -313,7 +313,7 @@ describe("route guardy (dual-guard + 409/403, staticky nad index.ts)", () => {
   });
 
   it("GET /api/strava/neparovane vyžaduje přihlášení (401 bez session)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     expect(obsah).toContain("/api/strava/neparovane");
     const pozice = obsah.indexOf("/api/strava/neparovane");
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 2000);

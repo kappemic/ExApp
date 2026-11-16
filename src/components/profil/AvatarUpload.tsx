@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef, useState, type ChangeEvent, type JSX } from "react";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 import {
   inicialyProAvatar,
   overSouborAvataru,
@@ -121,13 +122,12 @@ export default function AvatarUpload({
             </span>
           </div>
         ) : (
-          <img
+          <PostupnaFotka
             src={zobrazenyUrl ?? ""}
             alt=""
             aria-hidden="true"
             width={96}
             height={96}
-            loading="lazy"
             onError={() => setRozbity(true)}
             className="h-24 w-24 shrink-0 rounded-full border-2 border-inkoust bg-linka object-cover"
           />

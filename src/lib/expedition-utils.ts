@@ -4,6 +4,9 @@
  */
 
 import type { Expedition } from "./mock-expeditions";
+import { stavPodleObsazenosti } from "../shared/obsazenost-vypravy";
+
+export { stavPodleObsazenosti };
 
 const celyDatum = new Intl.DateTimeFormat("cs-CZ", {
   day: "numeric",
@@ -83,6 +86,16 @@ export function obsazenostProcenta(expedice: Expedition): number {
     (expedice.kapacita.prihlaseno / expedice.kapacita.celkem) * 100,
   );
   return Math.min(100, Math.max(0, pct));
+}
+
+/** Almost full only when 1–3 seats remain. Unlimited capacity never qualifies. */
+export function jeSkoroPlno(expedice: Pick<Expedition, "kapacita">): boolean {
+  return (
+    stavPodleObsazenosti(
+      expedice.kapacita.celkem,
+      expedice.kapacita.prihlaseno,
+    ) === "skoro plno"
+  );
 }
 
 /** Kapacita 0 = bez omezení (prázdné / nula při tvorbě). */

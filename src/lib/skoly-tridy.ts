@@ -1,3 +1,5 @@
+import { apiBase } from "./api-base";
+import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 /**
  * Klient pro číselník škol a tříd (GET /api/meta/skoly-tridy, PUBLIC).
  * Tenký BFF fetch-first: `VITE_API_BASE_URL` + kontrakt `src/shared/api-types.ts`.
@@ -9,7 +11,6 @@
 
 import {
   META_SKOLY_TRIDY_PATH,
-  jeApiChyba,
   jeSkolyTridyOdpoved,
   type SkolyTridyResponse,
 } from "../shared/api-types";
@@ -19,23 +20,7 @@ export type SkolyTridyVysledek =
   | { ok: true; data: SkolyTridyResponse }
   | { ok: false; chyba: string };
 
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
 const OFFLINE_CHYBA = "Seznam škol a tříd je bez připojení nedostupný.";
-
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-/** Bezpečné čtení JSON — prázdné / ne-JSON tělo → null. */
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Načte číselník škol a tříd pro našeptávání (PUBLIC — i bez přihlášení).
@@ -50,14 +35,11 @@ export async function nactiSkolyTridy(): Promise<SkolyTridyVysledek> {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.ok && jeSkolyTridyOdpoved(telo)) {
       return { ok: true, data: telo };
     }
-    if (jeApiChyba(telo)) {
-      return { ok: false, chyba: telo.error.message };
-    }
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: chybaZApiTela(telo).chyba };
   } catch {
     return { ok: false, chyba: OFFLINE_CHYBA };
   }

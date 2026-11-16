@@ -98,9 +98,10 @@ describe("Karta + seznam — tečka mimo tap-target", () => {
 });
 
 describe("3 místa synchronně — jedna mapa, jeden event", () => {
-  it("VypravyPage čte jednu mapu hookem a dává ji všem 3 sekcím", () => {
+  it("VypravyPage čte jednu mapu z přehledu konverzací a dává ji všem 3 sekcím", () => {
     const zdroj: string = ctiZdroj(STRANKA);
-    expect(zdroj).toContain("useUnreadExpeditions(idsVypravProUnread)");
+    expect(zdroj).toContain("useKonverzacePrehled()");
+    expect(zdroj).toContain("neprecteneVypravy");
     const pocetPredani: number =
       zdroj.split("neprectene={neprecteneMapa}").length - 1;
     expect(pocetPredani).toBe(3);

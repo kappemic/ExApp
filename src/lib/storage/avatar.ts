@@ -14,6 +14,7 @@
  */
 
 import { FOTKY_BUCKET, vychoziStorage } from "../../config/storage";
+import { apiBase } from "../api-base";
 
 /** Kam budoucí serverová routa avatary uloží (dnes jen dokumentace, žádný klientský upload). */
 export const AVATAR_BUCKET = FOTKY_BUCKET;
@@ -64,10 +65,6 @@ export async function overAvatarUrl(url: string): Promise<string> {
 const KLIC_AVATARA =
   /\/avatary\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(?:jpg|png|webp)(?:\?.*)?$/i;
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  return typeof raw === "string" ? raw.replace(/\/+$/, "") : "";
-}
 
 /**
  * URL for an `<img>`. Our R2 objects are private, so a stored

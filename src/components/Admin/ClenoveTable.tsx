@@ -3,7 +3,8 @@ import {
   mapujRoliNaProfil,
   type ClenskyProfil,
 } from "../../config/roles";
-import type { UserListItem } from "../../shared/api-types";
+import { OBLIBENE_BARVY, jeOblibenaBarva, type UserListItem } from "../../shared/api-types";
+import { zobrazeniTelefonu } from "../../shared/telefon";
 import AvatarKruh from "../AvatarKruh";
 import { TlacitkoProfilu } from "../clen/ClenProfil";
 
@@ -44,6 +45,23 @@ function Zarazeni({ profil }: { profil: ClenskyProfil }): JSX.Element {
           Vedení
         </span>
       )}
+    </span>
+  );
+}
+
+/** Color dot beside a member name. The Czech name stays for screen readers. */
+function KoleckoBarvy({ nazev }: { nazev: string }): JSX.Element | null {
+  if (!jeOblibenaBarva(nazev)) return null;
+  const hex = OBLIBENE_BARVY.find((barva) => barva.nazev === nazev)?.hex;
+  const popisek = nazev.charAt(0).toLocaleUpperCase("cs-CZ") + nazev.slice(1);
+  return (
+    <span title={popisek} className="inline-flex shrink-0">
+      <span
+        aria-hidden="true"
+        className="h-3.5 w-3.5 rounded-full border-2 border-inkoust"
+        style={{ backgroundColor: hex }}
+      />
+      <span className="sr-only">{popisek}</span>
     </span>
   );
 }
@@ -92,7 +110,14 @@ export default function ClenoveTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border-2 border-inkoust bg-white/60 shadow-denik">
-      <table className="w-full min-w-[880px] border-collapse text-left">
+      <table className="w-full min-w-[880px] border-collapse text-left lg:min-w-0 lg:table-fixed">
+        <colgroup className="max-lg:hidden">
+          <col className="w-[30%]" />
+          <col className="w-[18%]" />
+          <col className="w-[22%]" />
+          <col className="w-[15%]" />
+          <col className="w-[15%]" />
+        </colgroup>
         <caption className="sr-only">
           {popisek ?? "Seznam členů — jméno, kontakt, stav a zařazení"}
         </caption>
@@ -119,6 +144,7 @@ export default function ClenoveTable({
           {clenove.map((clen) => {
             const vybran: boolean = vybranyId === clen.id;
             const profil: ClenskyProfil = profilClena(clen);
+            const telefonText = zobrazeniTelefonu(clen.telefon).text;
             return (
               <tr
                 key={clen.id}
@@ -136,11 +162,20 @@ export default function ClenoveTable({
                     >
                       <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
                       <span className="min-w-0">
-                        <span className="flex min-w-0 items-baseline gap-1">
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
                           <span className="block min-w-0 max-w-[180px] truncate text-sm font-bold sm:max-w-none sm:whitespace-normal">
                             {clen.jmeno}
                           </span>
-                          {profil.isAdmin ? (
+                          <KoleckoBarvy nazev={clen.oblibenaBarva ?? ""} />
+                          {clen.isSuperadmin ? (
+                            <span
+                              title="Hlavní admin"
+                              className="shrink-0 text-sm font-bold text-jantar"
+                            >
+                              <span aria-hidden="true">☆</span>
+                              <span className="sr-only">Hlavní admin</span>
+                            </span>
+                          ) : profil.isAdmin ? (
                             <span
                               title="Administrátor"
                               className="shrink-0 text-sm font-bold text-jantar"
@@ -160,16 +195,14 @@ export default function ClenoveTable({
                       onClick={() => onVyber(clen)}
                       aria-haspopup="dialog"
                       aria-label={`${clen.jmeno} — otevřít detail člena`}
-                      className="inline-flex min-h-[44px] shrink-0 items-center rounded px-2.5 text-xs font-extrabold text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+                      className="bez-prejeti nahled-press inline-flex min-h-[44px] shrink-0 items-center rounded px-2.5 text-xs font-extrabold text-mech transition-[transform,background-color,color] duration-200 ease-out hover:-translate-y-px hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none motion-reduce:hover:translate-y-0 [touch-action:manipulation]"
                     >
                       Detail ›
                     </button>
                   </div>
                 </th>
                 <td className="px-4 py-3 text-sm">
-                  {(clen.telefon ?? "").trim().length > 0
-                    ? clen.telefon
-                    : "—"}
+                  {telefonText.length > 0 ? telefonText : "—"}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {(clen.discordNick ?? "").trim().length > 0

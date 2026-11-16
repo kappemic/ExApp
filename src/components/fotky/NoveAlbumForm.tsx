@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type JSX } from "react";
 import { vytvorAlbum, type ApiAlbum } from "../../lib/alba-api";
-import { fotkyHoverBgSmrkPlne, fotkyTlacitkoZaklad } from "./fotky-ui";
+import { fotkyHoverBgOkrPlne, fotkyTlacitkoZaklad } from "./fotky-ui";
 
 interface NoveAlbumFormProps {
   onVytvoreno: (album: ApiAlbum | null, nazev: string) => void;
@@ -55,7 +55,7 @@ export default function NoveAlbumForm({ onVytvoreno }: NoveAlbumFormProps): JSX.
       <button
         type="submit"
         disabled={odesila}
-        className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrkPlne} w-auto self-start rounded-md border-2 border-inkoust bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60`}
+        className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgOkrPlne} w-auto self-start rounded-md border-2 border-okr bg-okr px-4 text-sm font-bold text-inkoust disabled:opacity-60`}
       >
         {odesila ? "Zakládám…" : "Založit album"}
       </button>

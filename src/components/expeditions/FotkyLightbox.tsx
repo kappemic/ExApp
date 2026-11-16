@@ -10,13 +10,13 @@ import {
 import { createPortal } from "react-dom";
 import { nactiFotky, urlSouboruFotky, type ApiFotka } from "../../lib/expedition-fotky";
 import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 import FotkyLightboxNav from "../fotky/FotkyLightboxNav";
-import { fotkyHoverBgLinka, fotkyHoverOpacity, fotkyTlacitkoZaklad } from "../fotky/fotky-ui";
+import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "../fotky/LightboxProhlizeni";
+import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "../fotky/fotky-ui";
 
 const FOCUSOVATELNE =
   'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
-
-const TLACITKO_KRUH = `${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border-2 border-inkoust bg-papir text-inkoust`;
 
 let otevreneLightboxy = 0;
 
@@ -208,9 +208,14 @@ export default function FotkyLightbox({
     setRozbita(false);
   }, [index]);
 
+  const aktualniPred = seznam[index];
+  const srcProhlizeni =
+    aktualniPred === undefined ? "" : urlSouboruFotky(expeditionId, aktualniPred.id);
+  const prohlizeni = useFotkaProhlizeni(srcProhlizeni, aktualniPred?.createdAt ?? null);
+
   if (typeof document === "undefined") return null;
 
-  const aktualni: ApiFotka | undefined = seznam[index];
+  const aktualni: ApiFotka | undefined = aktualniPred;
   if (aktualni === undefined) return null;
   const pocet: number = seznam.length;
   const maPredchozi: boolean = index > 0;
@@ -226,41 +231,33 @@ export default function FotkyLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="Fotka z výpravy"
-      className={`fixed inset-0 z-[100] flex flex-col overscroll-contain bg-inkoust/85${
+      className={`nocturne lightbox-pozadi fixed inset-0 z-[100] flex flex-col overscroll-contain${
         trida !== undefined && trida.length > 0 ? ` ${trida}` : ""
       }`}
       onMouseDown={zavrit}
     >
       <div
-        className={`flex gap-3 border-b-2 border-inkoust bg-papir px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-inkoust ${
-          mazaciRezim ? "flex-col items-stretch" : "items-center justify-between"
+        className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex gap-1 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-[max(0.5rem,env(safe-area-inset-top))] text-inkoust sm:gap-2 sm:px-[max(0.75rem,env(safe-area-inset-left))] sm:pr-[max(0.75rem,env(safe-area-inset-right))] ${
+          mazaciRezim ? "flex-col items-stretch sm:flex-row sm:items-start sm:justify-between" : "items-center justify-between"
         }`}
         onMouseDown={zastav}
       >
-        <p className="text-sm font-bold tabular-nums">
+        <p className={`w-fit shrink-0 ${fotkyLightboxPocet}`}>
           {index + 1} / {pocet}
         </p>
         <div
           className={
             mazaciRezim
-              ? "flex w-full min-w-0 flex-col gap-2"
-              : "flex flex-wrap items-center justify-end gap-2"
+              ? "pointer-events-auto flex w-full min-w-0 flex-col gap-2 border-2 border-inkoust bg-papir p-2 shadow-denik sm:w-auto"
+              : "pointer-events-auto flex min-w-0 flex-col items-end gap-1"
           }
         >
+          <div className={mazaciRezim ? "contents" : fotkyLightboxRadek}>
+          {!mazaciRezim ? <LightboxNastroje stav={prohlizeni} /> : null}
           {aktualni.jeNahled ? (
-            <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-smrk">
+            <p className="px-1 text-[12px] font-bold text-papir drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
               Náhled
             </p>
-          ) : null}
-          {isAdmin && !aktualni.jeNahled && !mazaciRezim ? (
-            <button
-              type="button"
-              onClick={() => onHighlight(aktualni.id)}
-              disabled={nastavujeNahled}
-              className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold text-inkoust disabled:opacity-60`}
-            >
-              {nastavujeNahled ? "Ukládám…" : "Nastavit náhled"}
-            </button>
           ) : null}
           {onZacniMazani !== undefined &&
           onZrusMazani !== undefined &&
@@ -276,6 +273,7 @@ export default function FotkyLightbox({
               onZrusMazani={onZrusMazani}
               onSmazatVybrane={onSmazatVybrane}
               onSmazatVse={onSmazatVse}
+              bezRamce
             />
           ) : null}
           {!mazaciRezim ? (
@@ -284,12 +282,24 @@ export default function FotkyLightbox({
               type="button"
               onClick={zavrit}
               aria-label="Zavřít fotku"
-              className={`${TLACITKO_KRUH} text-xl font-extrabold leading-none`}
+              className={`${fotkyLightboxIkona} text-xl font-extrabold leading-none`}
             >
               <span aria-hidden="true">×</span>
             </button>
           ) : null}
+          </div>
+          {isAdmin && !aktualni.jeNahled && !mazaciRezim ? (
+            <button
+              type="button"
+              onClick={() => onHighlight(aktualni.id)}
+              disabled={nastavujeNahled}
+              className={`${fotkyTlacitkoZaklad} bez-prejeti nahled-press border-0 bg-transparent px-2 text-sm font-bold text-papir shadow-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] disabled:opacity-40`}
+            >
+              {nastavujeNahled ? "Ukládám…" : "Nastavit náhled"}
+            </button>
+          ) : null}
         </div>
+        <LightboxInfo stav={prohlizeni} />
       </div>
       {nahledChyba !== null ? (
         <p
@@ -301,7 +311,8 @@ export default function FotkyLightbox({
         </p>
       ) : null}
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center pb-[env(safe-area-inset-bottom)]"
+        data-lightbox-jeviste
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-16"
         onMouseDown={zavrit}
       >
         {rozbita ? (
@@ -313,11 +324,18 @@ export default function FotkyLightbox({
             Fotku se nepodařilo načíst.
           </p>
         ) : (
-          <img
-            src={urlSouboruFotky(expeditionId, aktualni.id)}
+          <PostupnaFotka
+            prednost
+            zamlzeni
+            src={srcProhlizeni}
             alt="Fotka z výpravy"
-            className="max-h-full max-w-full object-contain"
+            className={`max-h-full max-w-full object-contain ${prohlizeni.zoom ? "touch-none cursor-grab active:cursor-grabbing" : ""}`}
+            style={prohlizeni.stylObrazku}
             onMouseDown={zastav}
+            onPointerDown={prohlizeni.naPointerDown}
+            onPointerMove={prohlizeni.naPointerMove}
+            onPointerUp={prohlizeni.naPointerUp}
+            onPointerCancel={prohlizeni.naPointerUp}
             onError={() => setRozbita(true)}
           />
         )}

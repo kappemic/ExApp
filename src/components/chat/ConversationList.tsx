@@ -1,8 +1,11 @@
-import { useId, useState, type JSX } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type JSX, type ReactNode } from "react";
 import type { ApiKonverzace, KanalDiskuze, UserListItem } from "../../shared/api-types";
 import { formatCasKratce } from "../../lib/format-cas";
+import type { PravoSkupiny } from "../../lib/skupiny-pristup";
+import { KostraRadky } from "../StrankaKostra";
 import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "./NeprectenaTecka";
+import SkupinaForm from "./SkupinaForm";
 
 /**
  * Jedna řádka seznamu konverzací (Step 3).
@@ -19,6 +22,8 @@ export interface PolozkaSeznamu {
   pinned: boolean;
   lastMessageNazev: string;
   lastMessageText: string;
+  /** First attachment name when the latest message has files. */
+  lastMessagePriloha?: string;
   lastMessageAt: string | null;
   unreadCount: number;
   /** Druhý účastník soukromého chatu. U skupin chybí. */
@@ -36,6 +41,26 @@ export interface ConversationListProps {
   clenove?: readonly UserListItem[];
   jaId?: string | null;
   onZacitSClenem?: (clen: UserListItem) => void;
+  zalozka: ZalozkaChatu;
+  onZalozka: (zalozka: ZalozkaChatu) => void;
+  /** Leadership may create, edit access, and delete custom groups. */
+  muzeSpravovatSkupiny?: boolean;
+  onNovaSkupina?: () => void;
+  /** Create form, rendered directly under the new-group button. */
+  novaSkupina?: ReactNode;
+  onUpravitSkupinu?: (key: string) => void;
+  /** Open access editor for one custom group; rendered under that row. */
+  upravaSkupiny?: UpravaSkupinyVRadku | null;
+}
+
+export interface UpravaSkupinyVRadku {
+  key: string;
+  nazev: string;
+  prava: readonly PravoSkupiny[];
+  ukladaSe: boolean;
+  chyba: string | null;
+  onZrusit: () => void;
+  onUlozit: (nazev: string, prava: PravoSkupiny[]) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -49,6 +74,10 @@ export function vyberNazevKonverzace(
 ): string {
   if (konverzace.channel === "dulezite") return "Důležité";
   if (konverzace.channel === "general") return "General";
+  if (konverzace.channel === "skupina") {
+    const jmeno = (konverzace.nazev ?? "").trim();
+    return jmeno.length > 0 ? jmeno : "Skupina";
+  }
   if (konverzace.channel === "soukrome") {
     const jmeno = (konverzace.partnerJmeno ?? "").trim();
     return jmeno.length > 0 ? jmeno : "Soukromá zpráva";
@@ -82,6 +111,10 @@ export function prevedNaPolozky(
     pinned: jePinnedKanal(k.channel),
     lastMessageNazev: k.lastMessage === null ? "" : k.lastMessage.authorName,
     lastMessageText: k.lastMessage === null ? "" : k.lastMessage.text,
+    lastMessagePriloha:
+      k.lastMessage === null || k.lastMessage.prilohy.length === 0
+        ? ""
+        : k.lastMessage.prilohy[0]?.nazev ?? "",
     lastMessageAt: k.lastMessage === null ? null : k.lastMessage.createdAt,
     unreadCount: k.unreadCount,
     partnerId: k.partnerId ?? null,
@@ -112,6 +145,45 @@ export function seradKonverzace(polozky: PolozkaSeznamu[]): PolozkaSeznamu[] {
   });
 }
 
+export type ZalozkaChatu = "skupiny" | "vypravy" | "clenove";
+
+/** Skupiny = Důležité a General, Výpravy = vlákna výprav, Členové = soukromé. */
+export function zalozkaProKanal(channel: KanalDiskuze): ZalozkaChatu {
+  if (channel === "expedice") return "vypravy";
+  if (channel === "soukrome") return "clenove";
+  return "skupiny";
+}
+
+export function filtrujPolozkyZalozky(
+  polozky: readonly PolozkaSeznamu[],
+  zalozka: ZalozkaChatu,
+): PolozkaSeznamu[] {
+  return polozky.filter((polozka) => zalozkaProKanal(polozka.channel) === zalozka);
+}
+
+export function maNeprecteneVZalozce(
+  polozky: readonly PolozkaSeznamu[],
+  zalozka: ZalozkaChatu,
+): boolean {
+  return filtrujPolozkyZalozky(polozky, zalozka).some(
+    (polozka) => polozka.unreadCount > 0,
+  );
+}
+
+/**
+ * Subtitle of a conversation row. A file-only message shows the file name.
+ * The empty-thread sentence is only for a thread with no message at all.
+ */
+export function textNahleduKonverzace(
+  polozka: Pick<PolozkaSeznamu, "lastMessageNazev" | "lastMessageText" | "lastMessagePriloha">,
+): string {
+  const soubor: string = polozka.lastMessagePriloha ?? "";
+  const obsah: string = polozka.lastMessageText.length > 0 ? polozka.lastMessageText : soubor;
+  if (obsah.length === 0) return "Zatím bez zpráv — začni první vzkazem.";
+  if (polozka.lastMessageNazev.length > 0) return `${polozka.lastMessageNazev}: ${obsah}`;
+  return obsah;
+}
+
 /** Česká pluralizace nepřečtených: 1 nepřečtená / 2–4 nepřečtené / 5+ nepřečtených. */
 export function popisekNeprectenychKonverzace(pocet: number): string {
   const cele: number = Number.isFinite(pocet) ? Math.max(0, Math.floor(pocet)) : 0;
@@ -126,6 +198,7 @@ function znackaKanalu(channel: KanalDiskuze): { znak: string; popis: string } {
   if (channel === "dulezite") return { znak: "!", popis: "Důležité oznámení" };
   if (channel === "general") return { znak: "#", popis: "Obecná diskuze" };
   if (channel === "soukrome") return { znak: "@", popis: "Soukromý chat" };
+  if (channel === "skupina") return { znak: "G", popis: "Skupina" };
   return { znak: "▲", popis: "Výprava" };
 }
 
@@ -166,6 +239,48 @@ interface RadekKonverzaceProps {
   vybrana: boolean;
   onVybrat: (key: string) => void;
   clen: UserListItem | null;
+  onUpravit?: (key: string) => void;
+  uprava?: UpravaSkupinyVRadku | null;
+  pristupOtevren?: boolean;
+}
+
+/** Height animation for the access editor under a group row. */
+function Vysunuti({ otevreno, children }: { otevreno: boolean; children: ReactNode }): JSX.Element | null {
+  const [drzet, setDrzet] = useState<boolean>(otevreno);
+  const [vysunuto, setVysunuto] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (otevreno) {
+      setDrzet(true);
+      const ramecek = requestAnimationFrame(() => {
+        setVysunuto(true);
+      });
+      return () => cancelAnimationFrame(ramecek);
+    }
+    setVysunuto(false);
+    const cas = window.setTimeout(() => setDrzet(false), 280);
+    return () => window.clearTimeout(cas);
+  }, [otevreno]);
+
+  if (!drzet) return null;
+
+  return (
+    <div
+      className={`grid motion-safe:transition-[grid-template-rows] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${
+        vysunuto ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div
+          className={`pt-2 motion-safe:transition-[transform,opacity] motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none ${
+            vysunuto ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
+          }`}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** One conversation row: channel badge, or avatar when the partner is known. */
@@ -174,20 +289,20 @@ function RadekKonverzace({
   vybrana,
   onVybrat,
   clen,
+  onUpravit,
+  uprava,
+  pristupOtevren = false,
 }: RadekKonverzaceProps): JSX.Element {
   const znacka = znackaKanalu(polozka.channel);
   const cas: string =
     polozka.lastMessageAt === null ? "" : formatCasKratce(polozka.lastMessageAt);
   const maNeprectene: boolean = polozka.unreadCount > 0;
-  const nahled: string =
-    polozka.lastMessageText.length > 0
-      ? polozka.lastMessageNazev.length > 0
-        ? `${polozka.lastMessageNazev}: ${polozka.lastMessageText}`
-        : polozka.lastMessageText
-      : "Zatím bez zpráv — začni první vzkazem.";
+  const nahled: string = textNahleduKonverzace(polozka);
+  const panelId: string = useId();
 
   return (
     <li className="min-w-0">
+      <div className="relative min-w-0">
       <button
         type="button"
         role="option"
@@ -195,7 +310,9 @@ function RadekKonverzace({
         aria-label={`${polozka.nazev} — ${maNeprectene ? popisekNeprectenychKonverzace(polozka.unreadCount) : "přečteno"}`}
         title={polozka.nazev}
         onClick={() => onVybrat(polozka.key)}
-        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left shadow-denik [touch-action:manipulation] motion-safe:transition-colors ${
+        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left shadow-denik [touch-action:pan-y] motion-safe:transition-colors ${
+          onUpravit !== undefined ? "pr-12" : ""
+        } ${
           vybrana
             ? "border-inkoust bg-smrk text-papir"
             : "border-inkoust bg-papir text-inkoust motion-safe:hover:bg-linka/50"
@@ -266,6 +383,40 @@ function RadekKonverzace({
           </span>
         )}
       </button>
+      {onUpravit !== undefined && (
+        <button
+          type="button"
+          aria-expanded={pristupOtevren}
+          aria-controls={panelId}
+          aria-label={`Upravit přístup skupiny ${polozka.nazev}`}
+          onClick={() => onUpravit(polozka.key)}
+          className={`bez-prejeti nahled-press absolute top-1/2 right-1.5 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full [touch-action:pan-y] ${
+            vybrana ? "text-papir" : "text-inkoust"
+          }`}
+        >
+          <span aria-hidden="true" className="flex flex-col items-center gap-[3px]">
+            <span className="h-1 w-1 rounded-full bg-current" />
+            <span className="h-1 w-1 rounded-full bg-current" />
+            <span className="h-1 w-1 rounded-full bg-current" />
+          </span>
+        </button>
+      )}
+      </div>
+      {uprava !== null && uprava !== undefined && (
+        <Vysunuti otevreno={pristupOtevren}>
+          <div id={panelId}>
+            <SkupinaForm
+              key={uprava.key}
+              nazev={uprava.nazev}
+              prava={uprava.prava}
+              ukladaSe={uprava.ukladaSe}
+              chyba={uprava.chyba}
+              onZrusit={uprava.onZrusit}
+              onUlozit={uprava.onUlozit}
+            />
+          </div>
+        </Vysunuti>
+      )}
     </li>
   );
 }
@@ -290,7 +441,7 @@ function RadekNovehoClena({ clen, onZacit }: RadekNovehoClenaProps): JSX.Element
         onClick={() => {
           if (onZacit !== undefined) onZacit(clen);
         }}
-        className="flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 border-inkoust bg-papir px-3 py-2 text-left text-inkoust shadow-denik [touch-action:manipulation] motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+        className="flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 border-inkoust bg-papir px-3 py-2 text-left text-inkoust shadow-denik [touch-action:pan-y] motion-safe:transition-colors motion-safe:hover:bg-linka/50"
       >
         <span className="shrink-0">
           <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
@@ -316,40 +467,16 @@ function RadekNovehoClena({ clen, onZacit }: RadekNovehoClenaProps): JSX.Element
   );
 }
 
-interface HlavickaSekceProps {
-  nazev: string;
-  otevreno: boolean;
-  panelId: string;
-  onPrepnout: () => void;
-}
-
-function HlavickaSekce({
-  nazev,
-  otevreno,
-  panelId,
-  onPrepnout,
-}: HlavickaSekceProps): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-expanded={otevreno}
-      aria-controls={panelId}
-      onClick={onPrepnout}
-      className="flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-xl px-1 text-left text-xs font-extrabold uppercase tracking-wider text-inkoust/80 [touch-action:manipulation]"
-    >
-      <span aria-hidden="true" className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-base">
-        {otevreno ? "▾" : "▸"}
-      </span>
-      <span className="min-w-0 truncate">{nazev}</span>
-    </button>
-  );
-}
+const ZALOZKY: readonly { id: ZalozkaChatu; nazev: string }[] = [
+  { id: "skupiny", nazev: "Skupiny" },
+  { id: "vypravy", nazev: "Výpravy" },
+  { id: "clenove", nazev: "Členové" },
+];
 
 /**
  * Seznam konverzací — master sloupec.
  *
- * Dvě sbalitelné sekce (obě ve výchozím stavu otevřené):
- * skupiny (vše kromě soukromých) a členové (soukromá vlákna + hledání).
+ * Tři záložky: Skupiny (Důležité, General), Výpravy, Členové.
  * Řádek zůstává jedna konverzace, nikdy jedna zpráva.
  */
 export default function ConversationList({
@@ -362,26 +489,83 @@ export default function ConversationList({
   clenove = [],
   jaId = null,
   onZacitSClenem,
+  zalozka,
+  onZalozka,
+  muzeSpravovatSkupiny = false,
+  onNovaSkupina,
+  novaSkupina = null,
+  onUpravitSkupinu,
+  upravaSkupiny = null,
 }: ConversationListProps): JSX.Element {
-  const skupinyPanelId: string = useId();
-  const clenovePanelId: string = useId();
-  const [skupinyOtevreno, setSkupinyOtevreno] = useState<boolean>(true);
-  const [clenoveOtevreno, setClenoveOtevreno] = useState<boolean>(true);
+  const panelId: string = useId();
   const [dotaz, setDotaz] = useState<string>("");
+  const [drzenaUprava, setDrzenaUprava] = useState<UpravaSkupinyVRadku | null>(upravaSkupiny);
+  const seznamRef = useRef<HTMLUListElement>(null);
+  const scrollujeCasRef = useRef<number | null>(null);
+  const [scrolluje, setScrolluje] = useState<boolean>(false);
+  const [okrajSeznamu, setOkrajSeznamu] = useState<{ nahoru: boolean; dolu: boolean }>({
+    nahoru: false,
+    dolu: false,
+  });
+
+  const zmerSeznam = useCallback((): void => {
+    const seznam: HTMLUListElement | null = seznamRef.current;
+    if (seznam === null) {
+      setOkrajSeznamu((pred) =>
+        pred.nahoru || pred.dolu ? { nahoru: false, dolu: false } : pred,
+      );
+      return;
+    }
+    const dolu: boolean = seznam.scrollTop + seznam.clientHeight < seznam.scrollHeight - 4;
+    const nahoru: boolean = seznam.scrollTop > 4;
+    setOkrajSeznamu((pred) =>
+      pred.nahoru === nahoru && pred.dolu === dolu ? pred : { nahoru, dolu },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (upravaSkupiny !== null) {
+      setDrzenaUprava(upravaSkupiny);
+      return;
+    }
+    const cas = window.setTimeout(() => setDrzenaUprava(null), 280);
+    return () => window.clearTimeout(cas);
+  }, [upravaSkupiny]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollujeCasRef.current !== null) window.clearTimeout(scrollujeCasRef.current);
+    };
+  }, []);
+
+  function naScrollSeznamu(): void {
+    zmerSeznam();
+    setScrolluje(true);
+    if (scrollujeCasRef.current !== null) window.clearTimeout(scrollujeCasRef.current);
+    scrollujeCasRef.current = window.setTimeout(() => {
+      scrollujeCasRef.current = null;
+      setScrolluje(false);
+    }, 700);
+  }
+
+  useEffect(() => {
+    const seznam: HTMLUListElement | null = seznamRef.current;
+    if (seznam !== null) seznam.scrollTop = 0;
+    zmerSeznam();
+  }, [zalozka, zmerSeznam]);
+
+  useEffect(() => {
+    zmerSeznam();
+    const seznam: HTMLUListElement | null = seznamRef.current;
+    if (seznam === null) return;
+    const pozorovani = new ResizeObserver(() => zmerSeznam());
+    pozorovani.observe(seznam);
+    return () => pozorovani.disconnect();
+  }, [zmerSeznam, stav, polozky]);
 
   if (stav === "nacitani") {
     return (
-      <div className="space-y-3" aria-busy="true" aria-label="Načítám konverzace">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-20 animate-pulse rounded-2xl bg-inkoust/10 motion-reduce:animate-none"
-          />
-        ))}
-        <p role="status" className="text-sm text-inkoust/70">
-          Načítám konverzace…
-        </p>
-      </div>
+      <KostraRadky pocet={4} popisek="Načítám konverzace" sAvatarem />
     );
   }
 
@@ -394,7 +578,7 @@ export default function ConversationList({
         <button
           type="button"
           onClick={onZkusitZnovu}
-          className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-inkoust px-6 text-sm font-bold text-papir [touch-action:manipulation]"
+          className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-inkoust px-6 text-sm font-bold text-papir [touch-action:manipulation]"
         >
           Zkusit znovu
         </button>
@@ -403,10 +587,13 @@ export default function ConversationList({
   }
 
   const skupiny: PolozkaSeznamu[] = seradKonverzace(
-    polozky.filter((polozka) => polozka.channel !== "soukrome"),
+    filtrujPolozkyZalozky(polozky, "skupiny"),
+  );
+  const vypravy: PolozkaSeznamu[] = seradKonverzace(
+    filtrujPolozkyZalozky(polozky, "vypravy"),
   );
   const soukrome: PolozkaSeznamu[] = seradKonverzace(
-    polozky.filter((polozka) => polozka.channel === "soukrome"),
+    filtrujPolozkyZalozky(polozky, "clenove"),
   );
   const q: string = normalizovanyDotaz(dotaz);
   const hleda: boolean = q.length > 0;
@@ -428,44 +615,72 @@ export default function ConversationList({
     : [];
   const clenovePrazdni: boolean = viditelnaVlakna.length === 0 && noviClenove.length === 0;
 
-  return (
-    <div className="min-w-0 space-y-4">
-      <section className="min-w-0">
-        <HlavickaSekce
-          nazev="Skupiny"
-          otevreno={skupinyOtevreno}
-          panelId={skupinyPanelId}
-          onPrepnout={() => setSkupinyOtevreno((otevreno) => !otevreno)}
-        />
-        <div id={skupinyPanelId} hidden={!skupinyOtevreno} className="min-w-0">
-          {skupiny.length === 0 ? (
-            <p className="min-w-0 break-words px-2 py-2 text-sm text-inkoust/70">
-              Zatím žádná skupina.
-            </p>
-          ) : (
-            <ul role="listbox" aria-label="Skupiny" className="min-w-0 space-y-2">
-              {skupiny.map((polozka) => (
-                <RadekKonverzace
-                  key={polozka.key}
-                  polozka={polozka}
-                  vybrana={polozka.key === vybranyKey}
-                  onVybrat={onVybrat}
-                  clen={null}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+  const radkyZalozky: PolozkaSeznamu[] =
+    zalozka === "skupiny" ? skupiny : zalozka === "vypravy" ? vypravy : viditelnaVlakna;
+  const prazdnyText: string =
+    zalozka === "skupiny"
+      ? "Zatím žádná skupina."
+      : zalozka === "vypravy"
+        ? "Zatím žádný chat výpravy."
+        : hleda
+          ? "Nikdo takový v klubu není."
+          : "Ještě sis s nikým nepsal. Najdi člena výše.";
+  const seznamPrazdny: boolean =
+    zalozka === "clenove" ? clenovePrazdni : radkyZalozky.length === 0;
 
-      <section className="min-w-0">
-        <HlavickaSekce
-          nazev="Členové"
-          otevreno={clenoveOtevreno}
-          panelId={clenovePanelId}
-          onPrepnout={() => setClenoveOtevreno((otevreno) => !otevreno)}
-        />
-        <div id={clenovePanelId} hidden={!clenoveOtevreno} className="min-w-0 space-y-2">
+  return (
+    <div className="min-w-0 space-y-3">
+      <div role="tablist" aria-label="Druh konverzací" className="grid grid-cols-3 gap-1">
+        {ZALOZKY.map((polozka) => {
+          const vybrana: boolean = zalozka === polozka.id;
+          const maNeprectene: boolean = maNeprecteneVZalozce(polozky, polozka.id);
+          return (
+            <button
+              key={polozka.id}
+              type="button"
+              role="tab"
+              id={`zalozka-${polozka.id}`}
+              aria-selected={vybrana}
+              aria-controls={panelId}
+              onClick={() => onZalozka(polozka.id)}
+              className={`bez-prejeti inline-flex min-h-[44px] min-w-0 touch-manipulation items-center justify-center gap-1.5 rounded-xl border-2 px-2 text-xs font-extrabold select-none transition-colors motion-reduce:transition-none ${
+                vybrana
+                  ? "border-inkoust bg-inkoust text-papir"
+                  : "border-inkoust bg-papir text-inkoust hover:bg-linka/60"
+              }`}
+            >
+              <span className="truncate">{polozka.nazev}</span>
+              <span className="relative z-10">
+                <NeprectenaTecka
+                  viditelna={maNeprectene}
+                  velikost="nadpis"
+                  nazevVypravy={polozka.nazev}
+                />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={`zalozka-${zalozka}`}
+        className="min-w-0 space-y-2"
+      >
+        {zalozka === "skupiny" && muzeSpravovatSkupiny && onNovaSkupina !== undefined && (
+          <button
+            type="button"
+            onClick={onNovaSkupina}
+            className="nahled-prejeti relative inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-3 text-sm font-extrabold text-inkoust [touch-action:manipulation] motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-denik"
+          >
+            <span className="relative z-10">
+              Nová skupina
+            </span>
+          </button>
+        )}
+        {zalozka === "skupiny" && novaSkupina}
+        {zalozka === "clenove" && (
           <input
             type="search"
             value={dotaz}
@@ -475,30 +690,66 @@ export default function ConversationList({
             autoComplete="off"
             className="w-full min-h-[44px] rounded-xl border-2 border-inkoust bg-papir px-3 text-base text-inkoust outline-none placeholder:text-inkoust/45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
           />
-          {clenovePrazdni ? (
-            <p className="min-w-0 break-words px-2 py-2 text-sm text-inkoust/70">
-              {hleda
-                ? "Nikdo takový v klubu není."
-                : "Ještě sis s nikým nepsal. Najdi člena výše."}
-            </p>
-          ) : (
-            <ul role="listbox" aria-label="Členové" className="min-w-0 space-y-2">
-              {viditelnaVlakna.map((polozka) => (
-                <RadekKonverzace
-                  key={polozka.key}
-                  polozka={polozka}
-                  vybrana={polozka.key === vybranyKey}
-                  onVybrat={onVybrat}
-                  clen={clenVlakna(polozka, clenove)}
-                />
-              ))}
-              {noviClenove.map((clen) => (
+        )}
+        {seznamPrazdny ? (
+          <p className="min-w-0 break-words px-2 py-2 text-sm text-inkoust/70">{prazdnyText}</p>
+        ) : (
+          <div className="relative">
+          <ul
+            ref={seznamRef}
+            role="listbox"
+            aria-label={ZALOZKY.find((z) => z.id === zalozka)?.nazev}
+            onScroll={naScrollSeznamu}
+            className={`seznam-scroll min-w-0 space-y-2 max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
+              scrolluje ? "seznam-scrolluje" : ""
+            }`}
+          >
+            {radkyZalozky.map((polozka) => {
+              const obsahUpravy =
+                upravaSkupiny?.key === polozka.key
+                  ? upravaSkupiny
+                  : drzenaUprava?.key === polozka.key
+                    ? drzenaUprava
+                    : null;
+              return (
+              <RadekKonverzace
+                key={polozka.key}
+                polozka={polozka}
+                vybrana={polozka.key === vybranyKey}
+                onVybrat={onVybrat}
+                clen={zalozka === "clenove" ? clenVlakna(polozka, clenove) : null}
+                onUpravit={
+                  zalozka === "skupiny" &&
+                  polozka.channel === "skupina" &&
+                  onUpravitSkupinu !== undefined
+                    ? onUpravitSkupinu
+                    : undefined
+                }
+                uprava={obsahUpravy}
+                pristupOtevren={upravaSkupiny?.key === polozka.key}
+              />
+              );
+            })}
+            {zalozka === "clenove" &&
+              noviClenove.map((clen) => (
                 <RadekNovehoClena key={clen.id} clen={clen} onZacit={onZacitSClenem} />
               ))}
-            </ul>
+          </ul>
+          {okrajSeznamu.nahoru && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-7 bg-gradient-to-b from-papir to-transparent"
+            />
           )}
-        </div>
-      </section>
+          {okrajSeznamu.dolu && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-papir to-transparent"
+            />
+          )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

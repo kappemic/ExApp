@@ -2,7 +2,8 @@
  * scripts/seed-test-uzivatele.ts — Krok 18: testovací přihlášení (DEV ONLY).
  *
  * Vytvoří/aktualizuje 3 testovací účty v DEV DB (DATABASE_URL z .env.local):
- * - test-vedouci@example.cz — vedoucí + admin (aktivni_clen, vedeni, isAdmin)
+ * - test-vedouci@example.cz — vedoucí + admin + hlavní admin
+ *   (aktivni_clen, vedeni, isAdmin, isSuperadmin). `users.role` zůstává `admin`.
  * - test-aktivni@example.cz — aktivní člen (aktivni_clen, bez funkce) + účast
  *   v historii (participants.status = 'ucastnil_se' u proběhlé výpravy)
  * - test-clen@example.cz    — běžný člen (clen, bez funkce, bez účasti)
@@ -46,6 +47,11 @@ interface SeedUcet {
   clenstvi: Clenstvi;
   funkce: Funkce;
   isAdmin: boolean;
+  /**
+   * Only the lead test account sets this. Other accounts omit the field
+   * so insert uses the column default and update leaves `is_superadmin` alone.
+   */
+  isSuperadmin?: boolean;
   envHeslo: string;
 }
 
@@ -71,6 +77,7 @@ const UCTY: readonly SeedUcet[] = [
     clenstvi: "aktivni_clen",
     funkce: "vedeni",
     isAdmin: true,
+    isSuperadmin: true,
     envHeslo: "TEST_SEED_HESLO_VEDOUCI",
   },
   {
@@ -130,6 +137,17 @@ async function main(): Promise<void> {
     }
     const hash = await bcrypt.hash(heslo, 10);
     const role = mirrorRole(ucet);
+    // Idempotent profile write. isSuperadmin is included only when true,
+    // so the other seed accounts never touch that column.
+    const profil = {
+      jmeno: ucet.jmeno,
+      passwordHash: hash,
+      role,
+      clenstvi: ucet.clenstvi,
+      funkce: ucet.funkce,
+      isAdmin: ucet.isAdmin,
+      ...(ucet.isSuperadmin === true ? { isSuperadmin: true } : {}),
+    };
 
     const stavajici = await db
       .select({ id: users.id })
@@ -140,24 +158,12 @@ async function main(): Promise<void> {
     if (prvni === undefined) {
       await db.insert(users).values({
         email: ucet.email,
-        jmeno: ucet.jmeno,
-        passwordHash: hash,
-        role,
-        clenstvi: ucet.clenstvi,
-        funkce: ucet.funkce,
-        isAdmin: ucet.isAdmin,
+        ...profil,
       });
     } else {
       await db
         .update(users)
-        .set({
-          jmeno: ucet.jmeno,
-          passwordHash: hash,
-          role,
-          clenstvi: ucet.clenstvi,
-          funkce: ucet.funkce,
-          isAdmin: ucet.isAdmin,
-        })
+        .set(profil)
         .where(eq(users.email, ucet.email));
     }
 
@@ -198,8 +204,10 @@ async function main(): Promise<void> {
     }
 
     // Vypisujeme jen mail + roli + zdroj hesla. Heslo z env NIKDY netiskneme.
+    const hlavniAdmin =
+      ucet.isSuperadmin === true ? ", hlavní admin" : "";
     process.stdout.write(
-      `ok - ${ucet.email} (role ${role}, heslo: ${hesloZdroj})\n`,
+      `ok - ${ucet.email} (role ${role}${hlavniAdmin}, heslo: ${hesloZdroj})\n`,
     );
     if (hesloZdroj.startsWith("GENEROVÁNO")) {
       process.stdout.write(

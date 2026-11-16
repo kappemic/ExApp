@@ -6,6 +6,9 @@
  * Matice: GET = PUBLIC (čte každý), POST + DELETE = ADMIN.
  */
 
+import { apiBase } from "./api-base";
+import { volitelnyRozmer } from "./fotky-rozmery";
+import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 import {
   fotkaDetailPath,
   fotkaNahledPath,
@@ -27,38 +30,19 @@ export type FotkyVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string; kod?: ApiErrorCode; chybyPoli?: Record<string, string> };
 
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-/** Bezpečné čtení JSON — prázdné / ne-JSON tělo → null. */
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
-
-function chybaZTela(telo: unknown): FotkyVysledek<never> {
-  if (jeApiChyba(telo)) {
-    return { ok: false, chyba: telo.error.message, kod: telo.error.code };
-  }
-  return { ok: false, chyba: OBECNA_CHYBA };
-}
-
 function jeFotkyOdpoved(telo: unknown): telo is FotkyListResponse {
   if (typeof telo !== "object" || telo === null) return false;
   return Array.isArray((telo as Record<string, unknown>)["fotky"]);
 }
 
-/** Missing flag from an older response counts as not highlighted. */
+/** Missing flag from an older response counts as not highlighted. Dimensions stay optional. */
 function sJeNahledem(fotka: ApiFotka): ApiFotka {
-  return { ...fotka, jeNahled: fotka.jeNahled === true };
+  const { sirka: surovaSirka, vyska: surovaVyska, ...zbytek } = fotka;
+  const sirka = volitelnyRozmer(surovaSirka);
+  const vyska = volitelnyRozmer(surovaVyska);
+  const zaklad: ApiFotka = { ...zbytek, jeNahled: fotka.jeNahled === true };
+  if (sirka === undefined || vyska === undefined) return zaklad;
+  return { ...zaklad, sirka, vyska };
 }
 
 function normalizujFotky(fotky: ApiFotka[]): ApiFotka[] {
@@ -104,7 +88,7 @@ function jePridatOdpoved(telo: unknown): telo is PridatFotkuResponse {
   return typeof (telo as Record<string, unknown>)["fotka"] === "object";
 }
 
-/** Seznam fotek pro modal/historii (PUBLIC — i bez přihlášení). */
+/** Expedition photo list. Logged-in members only. */
 export async function nactiFotky(
   idVypravy: string,
 ): Promise<FotkyVysledek<{ fotky: ApiFotka[] }>> {
@@ -112,13 +96,14 @@ export async function nactiFotky(
   if (zaklad.length === 0) return { ok: true, data: { fotky: [] } };
   try {
     const odpoved: Response = await fetch(`${zaklad}${fotkyPath(idVypravy)}`, {
+      credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.ok && jeFotkyOdpoved(telo)) {
       return { ok: true, data: { fotky: normalizujFotky(telo.fotky) } };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Fotky jsou bez připojení nedostupné." };
   }
@@ -144,7 +129,7 @@ export async function pridejFotkuSouborem(
       headers: { Accept: "application/json" },
       body: telo,
     });
-    const json: unknown = await ctiTelo(odpoved);
+    const json: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.status === 201 && jePridatOdpoved(json)) {
       return { ok: true, data: { fotka: sJeNahledem(json.fotka) } };
     }
@@ -157,7 +142,7 @@ export async function pridejFotkuSouborem(
       }
       return { ok: false, chyba: json.error.message, kod: json.error.code, chybyPoli };
     }
-    return chybaZTela(json);
+    return chybaZApiTela(json);
   } catch {
     return { ok: false, chyba: "Bez připojení fotku přidat nejde. Zkus to později." };
   }
@@ -180,7 +165,7 @@ export async function pridejFotku(
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ url, popis }),
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.status === 201 && jePridatOdpoved(telo)) {
       return { ok: true, data: { fotka: sJeNahledem(telo.fotka) } };
     }
@@ -193,7 +178,7 @@ export async function pridejFotku(
       }
       return { ok: false, chyba: telo.error.message, kod: telo.error.code, chybyPoli };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Bez připojení fotku přidat nejde. Zkus to později." };
   }
@@ -220,14 +205,14 @@ export async function nastavNahledFotky(
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.ok && jeNahledOdpoved(telo)) {
       return {
         ok: true,
         data: { fotkaId: telo.fotkaId, fotky: normalizujFotky(telo.fotky) },
       };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Bez připojení náhled vybrat nejde. Zkus to později." };
   }
@@ -248,11 +233,11 @@ export async function smazFotku(
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.ok && typeof telo === "object" && telo !== null && (telo as Record<string, unknown>)["ok"] === true) {
       return { ok: true, data: { ok: true } };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Bez připojení smazat nejde. Zkus to později." };
   }

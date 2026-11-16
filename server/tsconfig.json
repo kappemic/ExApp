@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["src", "../drizzle/schema", "../src/shared/api-types.ts", "../src/config/roles.ts"]
+  "include": ["src", "../drizzle/schema", "../src/shared", "../src/shared/api-types.ts", "../src/shared/telefon.ts", "../src/config/roles.ts"]
 }

@@ -12,7 +12,8 @@
  * `kapacita_celkem` vs COUNT řádků v `participants`.
  */
 
-import { count, eq, inArray } from "drizzle-orm";
+import { count, eq, inArray, ne, sql } from "drizzle-orm";
+import { jeUnikatniKolize } from "./bff-sdilene";
 import type {
   ApiExpedice,
   ApiUcastnik,
@@ -20,6 +21,7 @@ import type {
   StavVypravy,
   UserId,
 } from "../../src/shared/api-types";
+import { stavPodleObsazenosti } from "../../src/shared/obsazenost-vypravy";
 import type { ExpeditionRow } from "../../drizzle/schema/expeditions";
 import type { Participant } from "../../drizzle/schema/participants";
 import { expeditions } from "../../drizzle/schema/expeditions";
@@ -70,11 +72,15 @@ export function toApiExpedice(radek: ExpeditionRow): ApiExpedice | null {
     sraz: radek.sraz,
     popis: radek.popis,
     trasaOdkaz: typeof radek.trasaOdkaz === "string" ? radek.trasaOdkaz : "",
+    organizatorId: radek.organizatorId,
     kapacita: {
       prihlaseno: radek.kapacitaPrihlaseno,
       celkem: radek.kapacitaCelkem,
     },
-    stav: radek.stav,
+    stav:
+      radek.stav === "proběhlá"
+        ? radek.stav
+        : stavPodleObsazenosti(radek.kapacitaCelkem, radek.kapacitaPrihlaseno),
   };
 }
 
@@ -144,6 +150,90 @@ export function toApiUcastnik(
   };
 }
 
+/**
+ * Docházka uzavření kryje aktuální přihlášky právě jednou.
+ * Jinak by vynechaný řádek zůstal ve stavu „přihlášen“ i po uzavření.
+ */
+export function dochazkaKryjePrihlasky(
+  prihlasky: readonly string[],
+  dochazka: readonly string[],
+): boolean {
+  if (dochazka.length !== prihlasky.length) return false;
+  const zname = new Set(prihlasky);
+  const dodane = new Set(dochazka);
+  if (zname.size !== prihlasky.length || dodane.size !== dochazka.length) return false;
+  return [...dodane].every((id) => zname.has(id));
+}
+
+/** Počty přihlášek pro seznam výprav, jeden GROUP BY místo dotazu na řádek. */
+export async function nactiPoctyUcastniku(
+  db: Db,
+  expeditionIds: readonly string[],
+): Promise<Map<string, number>> {
+  const mapa = new Map<string, number>();
+  if (expeditionIds.length === 0) return mapa;
+  const radky = await db
+    .select({
+      expeditionId: participants.expeditionId,
+      pocet: count(),
+    })
+    .from(participants)
+    .where(inArray(participants.expeditionId, [...expeditionIds]))
+    .groupBy(participants.expeditionId);
+  for (const radek of radky) mapa.set(radek.expeditionId, radek.pocet);
+  return mapa;
+}
+
+/**
+ * Jedno SQL: zamkne řádek výpravy, spočítá místa a vloží přihlášku.
+ * Dvě souběžná přihlášení na poslední místo tak neprojdou obě.
+ * `plno` = výprava je plná nebo mezitím zmizela. `kolize` = UNIQUE 23505.
+ */
+export async function prihlasPokudJeMisto(
+  db: Db,
+  expeditionId: string,
+  userId: string,
+): Promise<
+  | { stav: "prihlasen"; id: string; createdAt: Date }
+  | { stav: "plno" }
+  | { stav: "kolize" }
+> {
+  try {
+    const vysledek = await db.execute(sql`
+      WITH zamceno AS (
+        SELECT id, kapacita_celkem
+        FROM expeditions
+        WHERE id = ${expeditionId}
+        FOR UPDATE
+      ),
+      obsazeno AS (
+        SELECT count(*)::int AS pocet
+        FROM participants
+        WHERE expedition_id = ${expeditionId}
+      )
+      INSERT INTO participants (expedition_id, user_id, clen_id, status)
+      SELECT ${expeditionId}, ${userId}::uuid, NULL, 'prihlasen'
+      FROM zamceno
+      CROSS JOIN obsazeno
+      WHERE zamceno.kapacita_celkem = 0
+         OR obsazeno.pocet < zamceno.kapacita_celkem
+      RETURNING id::text AS id, created_at
+    `);
+    const radek: unknown = vysledek.rows[0];
+    if (typeof radek !== "object" || radek === null) return { stav: "plno" };
+    const id: unknown = (radek as { id?: unknown }).id;
+    const cas: unknown = (radek as { created_at?: unknown }).created_at;
+    const createdAt = cas instanceof Date ? cas : new Date(String(cas));
+    if (typeof id !== "string" || Number.isNaN(createdAt.getTime())) {
+      return { stav: "plno" };
+    }
+    return { stav: "prihlasen", id, createdAt };
+  } catch (chyba: unknown) {
+    if (jeUnikatniKolize(chyba)) return { stav: "kolize" };
+    throw chyba;
+  }
+}
+
 /** Počet přihlášek výpravy (všechny statusy — obsazenost kapacity). */
 export async function spocitejUcastniky(
   db: Db,
@@ -166,11 +256,39 @@ export async function synchronizujPocet(
   expeditionId: string,
 ): Promise<number> {
   const pocet = await spocitejUcastniky(db, expeditionId);
+  const nalezene = await db
+    .select({
+      stav: expeditions.stav,
+      kapacitaCelkem: expeditions.kapacitaCelkem,
+    })
+    .from(expeditions)
+    .where(eq(expeditions.id, expeditionId))
+    .limit(1);
+  const radek = nalezene[0];
+  const stav =
+    radek !== undefined && radek.stav !== "proběhlá"
+      ? stavPodleObsazenosti(radek.kapacitaCelkem, pocet)
+      : undefined;
   await db
     .update(expeditions)
-    .set({ kapacitaPrihlaseno: pocet })
+    .set(
+      stav === undefined
+        ? { kapacitaPrihlaseno: pocet }
+        : { kapacitaPrihlaseno: pocet, stav },
+    )
     .where(eq(expeditions.id, expeditionId));
   return pocet;
+}
+
+/** Rewrite open trips so stored `stav` matches the 1–3 free-seat rule. */
+export async function srovnejStavyObsazenosti(db: Db): Promise<void> {
+  const radky = await db
+    .select({ id: expeditions.id })
+    .from(expeditions)
+    .where(ne(expeditions.stav, "proběhlá"));
+  for (const radek of radky) {
+    await synchronizujPocet(db, radek.id);
+  }
 }
 
 /** One photo row used to pick a card cover. Oldest `createdAt` first when unflagged. */

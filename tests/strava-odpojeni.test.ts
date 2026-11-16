@@ -185,7 +185,7 @@ describe("mock fixture 6+ a stránkovaný fetch", () => {
 
 describe("route guardy odpojení (staticky nad index.ts)", () => {
   function cti(): string {
-    return readFileSync("server/src/index.ts", "utf8");
+    return readFileSync("server/src/strava-routes.ts", "utf8");
   }
 
   it("DELETE strava-parovani stojí za vyzadujSpravceVyprav (403)", () => {

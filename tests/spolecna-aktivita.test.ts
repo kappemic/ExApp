@@ -21,7 +21,7 @@ function cti(soubor: string): string {
 
 describe("odkaz flow je odebrán (žádná routa strava-odkaz)", () => {
   it("server nemá routu POST :id/strava-odkaz (404 přes fallback)", () => {
-    expect(cti("server/src/index.ts")).not.toContain("strava-odkaz");
+    expect(cti("server/src/strava-routes.ts")).not.toContain("strava-odkaz");
   });
 
   it("kontrakt nemá §15e (žádný stravaOdkazPath ani UlozStravaOdkaz)", () => {

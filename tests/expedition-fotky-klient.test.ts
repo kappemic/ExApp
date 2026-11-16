@@ -90,6 +90,29 @@ describe("nactiFotky — klient bez HTTP (mock fetch)", () => {
     }
   });
 
+  it("odpověď bez šířky a výšky se pořád normalizuje", async () => {
+    mockFetch(odpovedJson({ fotky: [dobraFotka()] }, 200));
+    const vysledek = await nactiFotky("abc");
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data.fotky[0]?.sirka).toBeUndefined();
+      expect(vysledek.data.fotky[0]?.vyska).toBeUndefined();
+      expect(vysledek.data.fotky[0]?.jeNahled).toBe(false);
+    }
+  });
+
+  it("odpověď se šířkou a výškou čísla zachová", async () => {
+    mockFetch(
+      odpovedJson({ fotky: [{ ...dobraFotka(), sirka: 1600, vyska: 900 }] }, 200),
+    );
+    const vysledek = await nactiFotky("abc");
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data.fotky[0]?.sirka).toBe(1600);
+      expect(vysledek.data.fotky[0]?.vyska).toBe(900);
+    }
+  });
+
   it("offline vrátí českou hlášku (bez připojení)", async () => {
     mockFetchOffline();
     const vysledek = await nactiFotky("abc");

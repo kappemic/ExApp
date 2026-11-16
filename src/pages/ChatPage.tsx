@@ -1,18 +1,27 @@
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useSearchParams } from "react-router-dom";
+import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import ConversationList, {
   prevedNaPolozky,
   seradKonverzace,
   type PolozkaSeznamu,
+  type ZalozkaChatu,
 } from "../components/chat/ConversationList";
 import KonverzaceDetail from "../components/chat/KonverzaceDetail";
+import SkupinaForm from "../components/chat/SkupinaForm";
 import { useAuth } from "../hooks/useAuth";
+import { useKonverzacePrehled } from "../hooks/useKonverzacePrehled";
 import { klicSoukromehoChatu, partnerSoukromeho } from "../shared/soukromy-klic";
 import type { UserListItem } from "../shared/api-types";
 import { nactiCleny } from "../lib/admin-clenove";
-import { getKonverzace } from "../lib/diskuze-api";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
-import { formatCasKratce } from "../lib/format-cas";
+import { getSkupiny, smazSkupinu, ulozSkupinu } from "../lib/diskuze-api";
+import {
+  idZeKliceSkupiny,
+  klicSkupiny,
+  type ApiChatSkupina,
+  type PravoSkupiny,
+} from "../lib/skupiny-pristup";
 import type { ApiKonverzace, ApiZprava } from "../shared/api-types";
 
 /** Jedna položka živé nástěnky — zpráva + kontext výpravy pro proklik. */
@@ -22,8 +31,6 @@ export interface PolozkaNastenky {
   nazevVypravy: string;
 }
 
-type StavSeznamu = "nacitani" | "hotovo" | "chyba";
-/** Partner for a draft private thread that is not in the list yet. */
 type VybranyPartner = {
   id: string;
   jmeno: string;
@@ -69,56 +76,18 @@ export function tvarVypravy(pocet: number): string {
   return "výprav";
 }
 
-/**
- * Krátký český formát času položky nástěnky.
- * Re-export z `src/lib/format-cas.ts` pro zpětnou kompatibilitu
- * test-importů; jediná implementace žije ve `formatCasKratce`.
- */
-export function formatCasNastenky(iso: string): string {
-  return formatCasKratce(iso);
-}
-
 /* ------------------------------------------------------------------ */
 /* Step 3 — pure pomocníci seznamu (export pro testy, bez fetch).       */
 /* ------------------------------------------------------------------ */
 
-const KONVERZACE_CACHE_KLIC = "exapp:konverzace-v1" as const;
+/** Snapshot key shared with the conversation poller (`exapp:konverzace-v1`). */
+export const KONVERZACE_CACHE_KLIC = "exapp:konverzace-v1" as const;
 
 /** Česká pluralizace konverzací: 1 konverzace / 2–4 konverzace / 0 a 5+ konverzací. */
 export function tvarKonverzace(pocet: number): string {
   if (pocet === 1) return "konverzace";
   if (pocet >= 2 && pocet <= 4) return "konverzace";
   return "konverzací";
-}
-
-function jeApiKonverzacePole(hodnota: unknown): hodnota is ApiKonverzace[] {
-  return Array.isArray(hodnota);
-}
-
-/** Best-effort snapshot pro offline (pravdou zůstává server). */
-function ulozKonverzaceDoCache(konverzace: ApiKonverzace[]): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(KONVERZACE_CACHE_KLIC, JSON.stringify(konverzace.slice(0, 30)));
-  } catch {
-    // Cache je nepovinná.
-  }
-}
-
-function ctiKonverzaceZCache(): ApiKonverzace[] {
-  try {
-    if (typeof localStorage === "undefined") return [];
-    const raw: string | null = localStorage.getItem(KONVERZACE_CACHE_KLIC);
-    if (raw === null || raw.trim().length === 0) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!jeApiKonverzacePole(parsed)) return [];
-    return parsed.filter(
-      (k): k is ApiKonverzace =>
-        typeof k === "object" && k !== null && typeof (k as ApiKonverzace).key === "string",
-    );
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -140,6 +109,7 @@ export function vytvorWorstCaseKonverzace(): ApiKonverzace[] {
     authorName: "Jan Novák",
     channel: "general",
     text: "Ahoj",
+    prilohy: [],
     createdAt: "2026-10-14T10:00:00.000Z",
     ...cast,
   });
@@ -237,61 +207,86 @@ export function vytvorWorstCaseNazvy(): Map<string, string> {
  *   360px bez horizontálního scrollu, viditelný focus, reduced-motion.
  */
 export default function ChatPage(): JSX.Element {
-  const { user, muzeSpravovatVypravy } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const {
+    konverzace,
+    stav,
+    chyba,
+    obnov,
+    vynulujNeprectene,
+    skryjKonverzaci,
+    vratKonverzaci,
+    nastavNahled,
+  } = useKonverzacePrehled();
   const [params, setParams] = useSearchParams();
-  const [stav, setStav] = useState<StavSeznamu>("nacitani");
-  const [konverzace, setKonverzace] = useState<ApiKonverzace[]>(() =>
-    ctiKonverzaceZCache(),
-  );
   const [nazvyVyprav, setNazvyVyprav] = useState<Map<string, string>>(new Map());
-  const [chyba, setChyba] = useState<string | null>(null);
+  const [organizatoriVyprav, setOrganizatoriVyprav] = useState<
+    Map<string, string | null>
+  >(new Map());
   const [clenove, setClenove] = useState<UserListItem[]>([]);
   const [vybranyPartner, setVybranyPartner] = useState<VybranyPartner | null>(null);
+  const [zalozka, setZalozka] = useState<ZalozkaChatu>("skupiny");
+  const [muzeSpravovatSkupiny, setMuzeSpravovatSkupiny] = useState<boolean>(false);
+  const [katalogSkupin, setKatalogSkupin] = useState<ApiChatSkupina[]>([]);
+  const [formular, setFormular] = useState<
+    | null
+    | { id: string | null; nazev: string; prava: PravoSkupiny[] }
+  >(null);
+  const [ukladaSkupinu, setUkladaSkupinu] = useState<boolean>(false);
+  const [chybaSkupiny, setChybaSkupiny] = useState<string | null>(null);
+  const [keSmazaniSkupiny, setKeSmazaniSkupiny] = useState<{
+    id: string;
+    key: string;
+    nazev: string;
+  } | null>(null);
+  const [mazeSkupinu, setMazeSkupinu] = useState<boolean>(false);
+  const [chybaMazaniSkupiny, setChybaMazaniSkupiny] = useState<string | null>(null);
+  const navratPoSmazaniSkupinyRef = useRef<HTMLElement | null>(null);
 
   const currentUserId: string | null = user?.id ?? null;
   const muzePsatDulezite: boolean =
     (user?.isAdmin ?? false) ||
+    user?.isSuperadmin === true ||
     user?.funkce === "vedeni" ||
     user?.funkce === "rada";
 
   const vybranyKey: string | null = params.get("konverzace");
 
-  const nacti = async (): Promise<void> => {
-    setStav("nacitani");
-    setChyba(null);
-    /* Názvy výprav: synchronní snapshot hned, živý BFF jako upgrade. */
+  const nactiNazvy = async (): Promise<void> => {
     const mapa = new Map<string, string>();
-    for (const v of getExpeditionsSync().data) mapa.set(v.id, v.nazev);
+    const organizatori = new Map<string, string | null>();
+    const zapis = (id: string, nazev: string, organizatorId: string | null | undefined): void => {
+      mapa.set(id, nazev);
+      organizatori.set(id, organizatorId ?? null);
+    };
+    for (const v of getExpeditionsSync().data) zapis(v.id, v.nazev, v.organizatorId);
     try {
       const cerstve = await getExpeditions();
       if (cerstve.source === "db" && cerstve.data.length > 0) {
         mapa.clear();
-        for (const v of cerstve.data) mapa.set(v.id, v.nazev);
+        organizatori.clear();
+        for (const v of cerstve.data) zapis(v.id, v.nazev, v.organizatorId);
       }
     } catch {
       /* Offline — zůstanou snapshot/mocky. */
     }
     setNazvyVyprav(mapa);
-    const vysledek = await getKonverzace();
-    if (!vysledek.ok) {
-      const cache: ApiKonverzace[] = ctiKonverzaceZCache();
-      if (cache.length > 0) {
-        setKonverzace(cache);
-        setStav("hotovo");
-        return;
-      }
-      setStav("chyba");
-      setChyba(vysledek.chyba);
-      return;
-    }
-    ulozKonverzaceDoCache(vysledek.data.konverzace);
-    setKonverzace(vysledek.data.konverzace);
-    setStav("hotovo");
+    setOrganizatoriVyprav(organizatori);
   };
 
   useEffect(() => {
-    void nacti();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void nactiNazvy();
+  }, []);
+
+  const nactiSkupiny = async (): Promise<void> => {
+    const vysledek = await getSkupiny();
+    if (!vysledek.ok) return;
+    setMuzeSpravovatSkupiny(vysledek.data.muzeSpravovat);
+    setKatalogSkupin(vysledek.data.skupiny);
+  };
+
+  useEffect(() => {
+    void nactiSkupiny();
   }, []);
 
   /* Members load beside the conversation list — a slow directory must not block threads. */
@@ -353,6 +348,71 @@ export default function ChatPage(): JSX.Element {
     });
   }
 
+  async function ulozFormularSkupiny(nazev: string, prava: PravoSkupiny[]): Promise<void> {
+    if (formular === null) return;
+    setUkladaSkupinu(true);
+    setChybaSkupiny(null);
+    const vysledek = await ulozSkupinu(formular.id, nazev, prava);
+    setUkladaSkupinu(false);
+    if (!vysledek.ok) {
+      setChybaSkupiny(vysledek.chyba);
+      return;
+    }
+    setFormular(null);
+    await nactiSkupiny();
+    await obnov();
+  }
+
+  function otevriUpravuSkupiny(key: string): void {
+    const id = idZeKliceSkupiny(key);
+    if (id === null) return;
+    if (formular?.id === id) {
+      setFormular(null);
+      setChybaSkupiny(null);
+      return;
+    }
+    const skupina = katalogSkupin.find((polozka) => polozka.id === id);
+    if (skupina === undefined) return;
+    setChybaSkupiny(null);
+    setFormular({ id, nazev: skupina.nazev, prava: skupina.prava });
+    setZalozka("skupiny");
+  }
+
+  function otevriSmazaniSkupiny(spoustec: HTMLElement): void {
+    if (vybrana === null || vybrana.channel !== "skupina") return;
+    const id = idZeKliceSkupiny(vybrana.key);
+    if (id === null) return;
+    navratPoSmazaniSkupinyRef.current = spoustec;
+    setChybaMazaniSkupiny(null);
+    setKeSmazaniSkupiny({ id, key: vybrana.key, nazev: vybranyNazev });
+  }
+
+  async function potvrdSmazaniSkupiny(): Promise<void> {
+    if (keSmazaniSkupiny === null || mazeSkupinu) return;
+    const cil = keSmazaniSkupiny;
+    const katalogPred = katalogSkupin;
+    const bylOtevreny: boolean = vybranyKey === cil.key;
+    setMazeSkupinu(true);
+    setChybaMazaniSkupiny(null);
+    skryjKonverzaci(cil.key);
+    setKatalogSkupin((prev) => prev.filter((skupina) => skupina.id !== cil.id));
+    if (bylOtevreny) zpetNaSeznam();
+    setKeSmazaniSkupiny(null);
+    setFormular(null);
+    const vysledek = await smazSkupinu(cil.id);
+    setMazeSkupinu(false);
+    if (!vysledek.ok) {
+      vratKonverzaci(cil.key);
+      setKatalogSkupin(katalogPred);
+      setKeSmazaniSkupiny(cil);
+      setChybaMazaniSkupiny(vysledek.chyba);
+      if (bylOtevreny) vyberKonverzaci(cil.key);
+      return;
+    }
+    void nactiSkupiny();
+    void obnov();
+  }
+
   function zpetNaSeznam(): void {
     setParams((prev) => {
       const dalsi = new URLSearchParams(prev);
@@ -361,11 +421,24 @@ export default function ChatPage(): JSX.Element {
     });
   }
 
-  function naPrecteno(key: string): void {
-    setKonverzace((prev) =>
-      prev.map((k) => (k.key === key ? { ...k, unreadCount: 0 } : k)),
-    );
-  }
+  useEffect(() => {
+    if (vybranyKey === null) return;
+    if (vybranyKey.startsWith("expedice:")) {
+      setZalozka("vypravy");
+      return;
+    }
+    if (vybranyKey.startsWith("soukrome:")) {
+      setZalozka("clenove");
+      return;
+    }
+    if (
+      vybranyKey === "dulezite" ||
+      vybranyKey === "general" ||
+      vybranyKey.startsWith("skupina:")
+    ) {
+      setZalozka("skupiny");
+    }
+  }, [vybranyKey]);
 
   const vybranyNazev: string =
     vybrana === null
@@ -376,6 +449,8 @@ export default function ChatPage(): JSX.Element {
         ? "Důležité"
         : vybrana.channel === "general"
           ? "General"
+          : vybrana.channel === "skupina"
+            ? (vybrana.nazev ?? "Skupina")
           : (vybrana.expeditionId !== null &&
               nazvyVyprav.get(vybrana.expeditionId)) ||
             vybrana.expeditionId ||
@@ -392,21 +467,15 @@ export default function ChatPage(): JSX.Element {
     <main
       className={
         vlaknoOtevrene
-          ? "mx-auto flex h-[calc(100dvh-4rem-3.5rem-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-4rem-3.5rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full max-w-6xl min-w-0 flex-col overflow-hidden px-2 pb-2 pt-2 lg:block lg:h-auto lg:max-h-none lg:overflow-visible lg:px-6 lg:pb-16 lg:pt-12"
-          : "mx-auto w-full max-w-6xl min-w-0 px-4 pb-16 pt-8 sm:px-6 sm:pt-12"
+          ? "mx-auto flex h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 flex-col overflow-hidden px-2 pb-2 pt-2 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:px-8 lg:pb-2 lg:pt-4 xl:px-12"
+          : "mx-auto w-full min-w-0 px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12"
       }
     >
       <header className={`border-b-2 border-inkoust pb-5${vlaknoOtevrene ? " hidden lg:block" : ""}`}>
-        <p className="text-sm font-medium text-mech">Školní expediční klub</p>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="min-w-0 break-words text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Nástěnka
+            Chaty
           </h1>
-          <span className="inline-flex shrink-0 -rotate-3 items-center whitespace-nowrap rounded border-2 border-inkoust bg-smrk px-2.5 py-1 text-xs font-extrabold uppercase tracking-[0.14em] text-papir shadow-razitko tabular-nums">
-            {stav === "hotovo"
-              ? `${polozky.length} ${tvarKonverzace(polozky.length)}`
-              : "Živě"}
-          </span>
           {pocetNeprectenych > 0 && (
             <span
               role="status"
@@ -417,20 +486,17 @@ export default function ChatPage(): JSX.Element {
             </span>
           )}
         </div>
-        <p className="mt-2 max-w-2xl min-w-0 break-words text-base text-inkoust/75">
-          Domluva na jednom místě — Důležité a General připnuté nahoře, pod
-          nimi vlákna výprav. Klikni na řádek a čti i piš v threadu. Soukromé
-          zprávy jsou v seznamu pod Členové.
-        </p>
       </header>
 
       <div
-        className={`min-w-0 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pt-6${
-          vlaknoOtevrene ? " flex min-h-0 flex-1 flex-col pt-2" : " pt-6"
-        }`}
+        className={
+          vlaknoOtevrene
+            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]"
+            : "min-w-0 pt-6 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pt-6 xl:grid-cols-[24rem_minmax(0,1fr)]"
+        }
       >
         {/* Mobil: seznam NEBO detail. Desktop: vždy vedle sebe. */}
-        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block" : "block"}`}>
+        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block lg:min-h-0 lg:overflow-y-auto" : "block"}`}>
           <h2 className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60">
             Konverzace
           </h2>
@@ -440,16 +506,61 @@ export default function ChatPage(): JSX.Element {
             onVybrat={vyberKonverzaci}
             stav={stav}
             chyba={chyba}
-            onZkusitZnovu={() => void nacti()}
+            onZkusitZnovu={() => void obnov()}
             clenove={clenove}
             jaId={currentUserId}
             onZacitSClenem={zacitSClenem}
+            zalozka={zalozka}
+            onZalozka={setZalozka}
+            muzeSpravovatSkupiny={muzeSpravovatSkupiny}
+            onNovaSkupina={() => {
+              setChybaSkupiny(null);
+              setFormular({ id: null, nazev: "", prava: [] });
+              setZalozka("skupiny");
+            }}
+            novaSkupina={
+              formular !== null && formular.id === null ? (
+                <SkupinaForm
+                  key="nova"
+                  nazev={formular.nazev}
+                  prava={formular.prava}
+                  ukladaSe={ukladaSkupinu}
+                  chyba={chybaSkupiny}
+                  onZrusit={() => {
+                    setFormular(null);
+                    setChybaSkupiny(null);
+                  }}
+                  onUlozit={(nazev, prava) => {
+                    void ulozFormularSkupiny(nazev, prava);
+                  }}
+                />
+              ) : null
+            }
+            onUpravitSkupinu={isAdmin ? otevriUpravuSkupiny : undefined}
+            upravaSkupiny={
+              formular !== null && formular.id !== null
+                ? {
+                    key: klicSkupiny(formular.id),
+                    nazev: formular.nazev,
+                    prava: formular.prava,
+                    ukladaSe: ukladaSkupinu,
+                    chyba: chybaSkupiny,
+                    onZrusit: () => {
+                      setFormular(null);
+                      setChybaSkupiny(null);
+                    },
+                    onUlozit: (nazev, prava) => {
+                      void ulozFormularSkupiny(nazev, prava);
+                    },
+                  }
+                : null
+            }
           />
         </div>
 
         <div
           className={`min-w-0 ${
-            vybranyKey === null ? "hidden lg:block" : "flex min-h-0 flex-1 flex-col"
+            vybranyKey === null ? "hidden lg:block" : "flex min-h-0 flex-1 flex-col overflow-hidden"
           }`}
         >
           {vybrana === null ? (
@@ -472,21 +583,50 @@ export default function ChatPage(): JSX.Element {
                 key={vybrana.key}
                 konverzace={vybrana}
                 nazev={vybranyNazev}
+                organizatorId={
+                  vybrana.channel === "expedice" && vybrana.expeditionId !== null
+                    ? (organizatoriVyprav.get(vybrana.expeditionId) ?? null)
+                    : null
+                }
                 currentUserId={currentUserId}
                 muzePsatDulezite={muzePsatDulezite}
-                muzeMazatCizi={muzeSpravovatVypravy}
                 onZpet={zpetNaSeznam}
-                onPrecteno={naPrecteno}
+                onPrecteno={vynulujNeprectene}
                 onPoOdeslani={() => {
-                  void getKonverzace().then((vysledek) => {
-                    if (vysledek.ok) setKonverzace(vysledek.data.konverzace);
-                  });
+                  void obnov();
                 }}
+                onNahled={(zprava) => nastavNahled(vybrana.key, zprava)}
+                onSmazatSkupinu={
+                  muzeSpravovatSkupiny && vybrana.channel === "skupina"
+                    ? otevriSmazaniSkupiny
+                    : undefined
+                }
               />
             </div>
           )}
         </div>
       </div>
+      {keSmazaniSkupiny !== null && (
+        <ConfirmDialog
+          otevreno
+          nadpis={`Smazat skupinu „${keSmazaniSkupiny.nazev}"?`}
+          popis="Zprávy v této skupině budou trvale smazané. Akci nejde vrátit — pokračuj jen pokud jsi si jistý."
+          potvrditPopisek="Ano, smazat skupinu"
+          navratElement={navratPoSmazaniSkupinyRef.current}
+          zrusitPopisek="Ponechat"
+          probiha={mazeSkupinu}
+          probihaPopisek="Mažu…"
+          chyba={chybaMazaniSkupiny}
+          onPotvrdit={() => {
+            void potvrdSmazaniSkupiny();
+          }}
+          onZrusit={() => {
+            if (mazeSkupinu) return;
+            setKeSmazaniSkupiny(null);
+            setChybaMazaniSkupiny(null);
+          }}
+        />
+      )}
     </main>
   );
 }

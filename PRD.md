@@ -13,11 +13,16 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
    - Přihlašuje se na výpravy a vidí, kdo další je přihlášen.
    - Sleduje své osobní statistiky (ujeté/usšlé km, převýšení, heatmapa tras, historie výprav).
    - Sleduje klubový žebříček (leaderboard).
-2. **Admin / Vedoucí:**
-   - Spravuje výpravy (vytváření, úprava, mazání, historie).
+   - Nahrává fotky k proběhlým výpravám.
+2. **Admin:**
+   - Spravuje výpravy (vytváření, úprava, mazání, historie), registrační kódy, schůzky a fotky.
    - Generuje časově omezené registrační kódy (platné 10 minut).
-   - Uzavírá proběhlé výpravy (docházka, nahrání fotek, propojení se Strava aktivitou).
+   - Uzavírá proběhlé výpravy (docházka, propojení se Strava aktivitou), maže fotky a volí náhled výpravy.
    - Plánuje opakované schůzky a odesílá důležitá oznámení na Discord.
+   - Neupravuje cizí profily a neuděluje admina.
+3. **Hlavní admin:**
+   - Dělá totéž co Admin a navíc smí upravovat cizí profily.
+   - Může povýšit jiného člena na admina i na hlavního admina.
 
 ---
 
@@ -29,9 +34,10 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
   - Admin může vygenerovat unikátní registrační kód s **exspirací 10 minut**.
   - Po úspěšné registraci se uživatelská data automaticky uloží do databáze.
 - **Admin mód:**
-  - Role jsou rozděleny na `Uživatel`, `Aktivní člen`a `Admin`.
+  - Role jsou rozděleny na `Uživatel`, `Aktivní člen`, `Admin` a `Hlavní admin`.
   - Aktivní člen má možnost vytvářet výpravy a upravovat je.
-  - Admin má přístup k rozšiřujícím ovládacím prvkům napříč celou aplikací.
+  - Admin spravuje výpravy, registrační kódy, schůzky a fotky. Cizí profily neupravuje a admina neuděluje.
+  - Hlavní admin smí upravovat cizí profily a povýšit jiného člena na admina i na hlavního admina.
 
 ### 2.2 Správa výprav & Přihlašování
 - **Vytvoření výpravy:**
@@ -44,7 +50,7 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
 - **Uzavření & Vyhodnocení výpravy (Po akci):**
   - Admin vybere reálné účastníky, kteří na výpravě byli.
   - I po uzavření (stav „proběhlá“) může admin dodatečně přidat či odebrat účastníka (POST / DELETE ucastnici/:id, bez kontroly kapacity).
-  - Admin nahraje fotografie z akce.
+  - Fotografie z akce může nahrát každý přihlášený člen. Mazat je a volit náhled výpravy může jen admin.
   - Propojení se Stravou: Výprava se spáruje s poslední aktivitou ze Stravy (pokud ještě není přiřazena), čímž se automaticky doplní vzdálenost (km), převýšení a trasa.
 
 ### 2.3 Statistiky & Integrace se Strava API
@@ -76,20 +82,20 @@ Cílem projektu je vytvořit **Progresivní Webovou Aplikaci (PWA)** určenou pr
 ## 3. Technická architektura (Technical Architecture)
 
 ```
-[ PWA Frontend (React/Next.js/Vue) ]
+[ PWA Frontend (React + Vite) ]
           │
           ├── OAuth 2.0 ──────► [ Strava API ]
           │
           ├── Webhook / API ──► [ Discord API ]
           │
-          └── Rest API / ORM ─► [ Backend & Neon.com (PostgreSQL) ]
-                                 └── [ File Storage (Cloudinary/S3) pro fotky ]
+          └── REST API ───────► [ Express BFF + Drizzle ORM & Neon.com (PostgreSQL) ]
+                                 └── [ Cloudflare R2 pro fotky ]
 ```
 
 ### 3.1 Tech Stack
 - **Frontend:** Progressive Web App (PWA) – možnost instalace na mobilní zařízení i desktop, responsive design.
-- **Backend & Databáze:** Neon.com (Serverless PostgreSQL) pro ukládání uživatelů, výprav, kódů a statistik.
-- **Media Storage:** Úložiště pro fotky z výprav (např. Cloudinary, Supabase Storage nebo AWS S3).
+- **Backend & Databáze:** Express BFF a Neon.com (Serverless PostgreSQL) pro ukládání uživatelů, výprav, kódů a statistik.
+- **Media Storage:** Cloudflare R2 pro fotky z výprav.
 - **Integrace třetích stran:**
   - **Strava API:** Synchronizace aktivit (km, převýšení, trasy).
   - **Discord Webhook API:** Automatické zasílání notifikací.

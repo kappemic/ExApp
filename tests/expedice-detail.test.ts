@@ -72,11 +72,12 @@ describe("stavova brana Usle (Krok 17)", () => {
       "src/components/expeditions/ExpeditionTrasaPrehled.tsx",
     );
     expect(prehled).toContain("Ušlé na výpravě");
-    expect(prehled).toContain("pocetUcastniku");
+    expect(prehled).toContain("Převýšení");
+    expect(prehled).not.toContain("Šlo");
     // Krok 20: km chybějí → stavová hláška (ne konkrétní „nezapsány").
     expect(prehled).toContain("kilometry");
     // Stav docházky čtený z kontraktu (status).
-    expect(prehled).toContain("Navštívil jsem");
+    expect(prehled).toContain("Trasa");
   });
 
   it("search v kronice je s diakritikou (NFD normalizace)", () => {
@@ -126,7 +127,7 @@ describe("Usle vidí i cizi (Krok 20): km jsou expedition-level", () => {
   });
 
   it("server ve verejnem detailu doplni km/prevyseni/polyline", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/vypravy-routes.ts");
     const pozice = obsah.indexOf("nactiExpediciSDetailem");
     expect(pozice).toBeGreaterThan(0);
     const okol = obsah.slice(pozice, pozice + 4000);
@@ -136,7 +137,7 @@ describe("Usle vidí i cizi (Krok 20): km jsou expedition-level", () => {
   });
 
   it("verejny GET detailu nenavadi session", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/vypravy-routes.ts");
     const pozice = obsah.indexOf('app.get("/api/expeditions/:id"');
     expect(pozice).toBeGreaterThan(0);
     const route = obsah.slice(pozice, pozice + 700);

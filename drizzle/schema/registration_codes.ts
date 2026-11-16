@@ -3,9 +3,9 @@
  *
  * Pravidlo expirace (PRD 2.1): kód platí 10 minut od vytvoření.
  * - `expires_at = created_at + interval '10 minutes'` (nastavuje API při INSERT).
- * - Platný kód: `used_at IS NULL AND expires_at > now()`.
+ * - Platný kód: `expires_at > now()` (sdílený, opakovaně použitelný).
  * - CHECK `expires_at > created_at` brání záporné/nulové platnosti.
- * - Kód je jednorázový: po úspěšné registraci API nastaví `used_at` + `used_by`.
+ * - Po expiraci API řádek z tabulky smaže. `used_at` / `used_by` jsou legacy.
  */
 import {
   pgTable,

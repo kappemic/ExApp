@@ -18,7 +18,17 @@ import { registrationCodes } from "../../drizzle/schema/registration_codes";
 import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
 import { soukromeZpravy } from "../../drizzle/schema/soukrome_zpravy";
+import {
+  chatSkupinaPrava,
+  chatSkupiny,
+  skupinaZpravy,
+} from "../../drizzle/schema/chat_skupiny";
 import { zpravy } from "../../drizzle/schema/zpravy";
+import { zpravaPrilohy } from "../../drizzle/schema/zprava_prilohy";
+import { expediceCestaSnimky } from "../../drizzle/schema/expedice_cesta_snimky";
+import { zpevnikPisne } from "../../drizzle/schema/zpevnik_pisne";
+import { ctiEnv } from "./prostredi";
+
 
 const schema = {
   users,
@@ -28,7 +38,13 @@ const schema = {
   participants,
   stravaTokens,
   zpravy,
+  zpravaPrilohy,
+  expediceCestaSnimky,
+  zpevnikPisne,
   soukromeZpravy,
+  chatSkupiny,
+  chatSkupinaPrava,
+  skupinaZpravy,
   diskuzePrecteni,
   konverzacePrecteni,
 };
@@ -38,7 +54,7 @@ export type Db = NeonHttpDatabase<typeof schema>;
 let db: Db | null = null;
 
 function vytvorDb(): Db {
-  const url = process.env["DATABASE_URL"];
+  const url = ctiEnv("DATABASE_URL");
   if (url === undefined || url.trim().length === 0) {
     throw new Error(
       "Chybí DATABASE_URL. Nastav ji v .env.local (server-only, nikdy s prefixem VITE_).",

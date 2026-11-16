@@ -8,15 +8,16 @@ Tento dokument slouží jako hlavní kontextová příručka pro AI vývojové a
 
 Při generování kódů a navrhování architektury se striktně drž následujícího stacku:
 
-* **Frontend Framework:** Next.js (App Router) nebo React + Vite s PWA konfigurací.
+* **Frontend Framework:** React 19 + Vite s PWA konfigurací.
+* **Backend:** Express 5 BFF (`server/src`).
 * **Styling:** Tailwind CSS (Mobile-first, moderní čistý vzhled).
 * **Databáze:** Neon.com (Serverless PostgreSQL).
-* **ORM:** Prisma nebo Drizzle ORM (s typově bezpečným TypeScriptem).
-* **Autentizace:** NextAuth.js / Auth.js nebo Custom JWT autentizace s podporou rolí (`USER`, `ADMIN`).
+* **ORM:** Drizzle ORM (s typově bezpečným TypeScriptem).
+* **Autentizace:** Vlastní JWT autentizace s podporou rolí (`USER`, `ADMIN`, `SUPERADMIN`).
 * **Integrace:**
   * **Strava API:** OAuth 2.0 + REST API pro čtení aktivit.
   * **Discord:** Webhook API pro automatická oznámení.
-  * **File Storage:** Cloudinary nebo Supabase Storage pro ukládání fotografií.
+  * **File Storage:** Cloudflare R2 pro ukládání fotografií.
 
 ---
 
@@ -34,7 +35,7 @@ Při generování kódů a navrhování architektury se striktně drž následuj
 
 ### Coordinator (planner)
 
-Hlavní agent nejdřív spustí **planner** subagenta i u menších úkolů (vynechat jen čistě mechanické opravy bez produktového rozhodnutí). Planner před plánem spustí `npx skills find` dle skillu find-skills, doporučí nejlepší skill (včetně skills.sh odkazu) a vrátí krokový plán; coordinator kroky automaticky vykoná v pořadí (viz `.cursor/rules/planner-auto-execute.mdc`).
+Hlavní agent nejdřív spustí **planner** subagenta i u menších úkolů (vynechat jen čistě mechanické opravy bez produktového rozhodnutí). Planner před plánem spustí `npx skills find` dle skillu find-skills, doporučí nejlepší skill (včetně skills.sh odkazu) a vrátí krokový plán; coordinator kroky automaticky vykoná v pořadí (viz `.cursor/rules/planner-auto-execute.mdc`). Claude Code se řídí pravidlem v `CLAUDE.md`.
 
 ---
 
@@ -43,8 +44,8 @@ Hlavní agent nejdřív spustí **planner** subagenta i u menších úkolů (vyn
 Při vývoji postupuj striktně v následujícím pořadí:
 
 ### Fáze 1: Základní infrastruktura, DB & Autentizace
-1. **Inicializace projektu:** Nastavení Next.js/Reactu, Tailwind CSS a PWA manifestu.
-2. **Databázové schéma:** Vytvoření Prisma / Drizzle schématu na Neon.com (`User`, `RegistrationCode`, `Expedition`, `Meeting`, `Photo`, `Participant`).
+1. **Inicializace projektu:** Nastavení Reactu + Vite, Tailwind CSS a PWA manifestu.
+2. **Databázové schéma:** Vytvoření Drizzle schématu na Neon.com (`User`, `RegistrationCode`, `Expedition`, `Meeting`, `Photo`, `Participant`).
 3. **Autentizační systém:**
    * Generování 10minutových registračních kódů v Admin panelu.
    * Registrační formulář vyžadující platný kód.

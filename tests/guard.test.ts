@@ -59,6 +59,13 @@ describe("smiNaEndpoint — matice bez serveru", () => {
     expect(smiNaEndpoint("ADMIN", ME_PATH)).toBe(true);
     expect(smiNaEndpoint("ADMIN", REGISTER_PATH)).toBe(true);
   });
+
+  it("SUPERADMIN projde admin hranici stejne jako ADMIN", () => {
+    expect(smiNaEndpoint("SUPERADMIN", ADMIN_CODES_PATH)).toBe(true);
+    expect(smiNaEndpoint("SUPERADMIN", CLENOVE_PATH)).toBe(true);
+    expect(smiNaEndpoint("SUPERADMIN", ME_PATH)).toBe(true);
+    expect(smiNaEndpoint("SUPERADMIN", REGISTER_PATH)).toBe(true);
+  });
 });
 
 describe("HTTP_STATUS_PRO_KOD — zamek mapovani", () => {

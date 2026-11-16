@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
+import { type JSX, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import LogoKlubu from "../LogoKlubu";
 import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "../chat/NeprectenaTecka";
-import {
-  popisekNeprectenych,
-  spocitejNeprectene,
-  useUnreadExpeditions,
-} from "../../hooks/useUnreadExpeditions";
+import { popisekNeprectenych } from "../../hooks/useUnreadExpeditions";
+import { useKonverzacePrehled } from "../../hooks/useKonverzacePrehled";
 import { useAuth } from "../../hooks/useAuth";
-import { getExpeditions, getExpeditionsSync } from "../../lib/expeditions-api";
 
 type IkonaProps = {
   className?: string;
@@ -68,6 +65,16 @@ function IkonaFotky(props: IkonaProps): JSX.Element {
   );
 }
 
+function IkonaZpevnik(props: IkonaProps): JSX.Element {
+  return (
+    <ZakladIkony {...props}>
+      <path d="M9 18V6.5l9-2V16" />
+      <circle cx="7" cy="18" r="2.2" />
+      <circle cx="16" cy="16" r="2.2" />
+    </ZakladIkony>
+  );
+}
+
 function IkonaChat(props: IkonaProps): JSX.Element {
   return (
     <ZakladIkony {...props}>
@@ -118,6 +125,7 @@ const DESKTOP_POLOZKY: PolozkaNavigace[] = [
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
   { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
+  { to: "/zpevnik", popisek: "Zpěvník", Ikona: IkonaZpevnik },
   { to: "/chat", popisek: "Chat", Ikona: IkonaChat },
   { to: "/profil", popisek: "Profil", Ikona: IkonaProfil },
 ];
@@ -138,7 +146,7 @@ const MOBIL_POLOZKY: PolozkaNavigace[] = [
 ];
 
 const ADMIN_POLOZKA: PolozkaNavigace = {
-  to: "/admin/clenove",
+  to: "/cleny",
   popisek: "Členové",
   Ikona: IkonaClenove,
 };
@@ -150,36 +158,10 @@ const KODY_POLOZKA: PolozkaNavigace = {
 };
 
 /**
- * Badge nepřečtené diskuze pro navigaci (Krok 2 — jediný zdroj pravdy
- * je `useUnreadExpeditions`, polling 30 s + event `exapp:discussion-read`).
- *
- * Id seznam: synchronní snapshot hned (`getExpeditionsSync`, okamžitý
- * render bez čekání) + tichý upgrade na živá data z BFF (`getExpeditions`,
- * vzor ChatPage) — bez refetche se badge drží snapshotu.
- * Součet: `spocitejNeprectene(mapa)` — tečka svítí jen když > 0,
- * zhasne eventem bez refreshi (hook sám).
+ * Badge nepřečtených zpráv v navigaci.
+ * Jediný zdroj je přehled konverzací (polling 30 s + event po přečtení),
+ * takže kolečko u Chatu svítí i bez otevření /chat — skupiny, výpravy i soukromé.
  */
-function useIdsVypravProBadge(): string[] {
-  const [ids, setIds] = useState<string[]>(() =>
-    getExpeditionsSync().data.map((vyprava) => vyprava.id),
-  );
-  useEffect(() => {
-    let zive = true;
-    void (async (): Promise<void> => {
-      try {
-        const cerstve = await getExpeditions();
-        if (!zive || cerstve.source !== "db") return;
-        setIds(cerstve.data.map((vyprava) => vyprava.id));
-      } catch {
-        /* Offline — zůstává snapshot, badge drží poslední pravdu. */
-      }
-    })();
-    return () => {
-      zive = false;
-    };
-  }, []);
-  return useMemo(() => ids, [ids]);
-}
 
 /** Dynamický label: „Chat“ vs „Chat, 3 nepřečtené zprávy“. */
 function popisekChat(pocet: number): string {
@@ -208,31 +190,36 @@ function ChatTecka({ popisek }: { popisek: string }): JSX.Element {
  * Kódy jen pro admina. Členové jsou v navigaci pro každého přihlášeného.
  */
 function useVidetAdmin(): boolean {
-  const { isAdmin } = useAuth();
-  return isAdmin;
+  const { isAdmin, isSuperadmin } = useAuth();
+  // Codes stay visible for a head admin the same way as for a regular admin.
+  return isAdmin || isSuperadmin;
 }
 
 /** Bez session vidí odhlášený nic — varianta A: Navbar se vůbec nerenderuje (viz default Navbar). */
 /** Filtr podle session odstraněn: odhlášený Navbar nikdy neuvidí, přihlášený vidí vše. */
 
 function tridyDesktopOdkazu(aktivni: boolean): string {
+  // nahled-press: stisk scale(0.97)/160ms — odkazy v TopBar mají gap-1,
+  // sdílenou hranu sousedů nemají, proto se smršťují celé (DESIGN §7).
   const zaklad =
-    "flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "nahled-press flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
   if (aktivni) {
-    return `${zaklad} font-bold text-smrk`;
+    return `${zaklad} font-semibold text-smrk`;
   }
-  return `${zaklad} font-medium text-mech hover:bg-smrk/[0.08] hover:text-inkoust`;
+  return `${zaklad} font-medium text-mech hover:bg-mlha hover:text-inkoust`;
 }
 
 function tridyMobilOdkazu(aktivni: boolean): string {
+  // nahled-press jako u TopBar — pole mají gap-1, hranu nesdílejí.
   const zaklad =
-    "flex min-h-[48px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "nahled-press flex min-h-[48px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[11px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
   if (aktivni) {
-    return `${zaklad} font-bold text-smrk`;
+    return `${zaklad} font-semibold text-smrk`;
   }
-  return `${zaklad} font-medium text-mech hover:bg-smrk/[0.08] hover:text-inkoust`;
+  return `${zaklad} font-medium text-mech hover:text-inkoust`;
 }
 
+/** Desktop: tenká olivová linka pod aktivní položkou. */
 function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
   return (
     <span
@@ -241,6 +228,26 @@ function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
         aktivni ? "bg-smrk" : "bg-transparent"
       }`}
     />
+  );
+}
+
+/** Mobil: ikona aktivní položky leží v olivové mlze (C2). */
+function IkonaVPilulce({
+  aktivni,
+  children,
+}: {
+  aktivni: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex h-8 w-14 items-center justify-center rounded-full transition-colors motion-reduce:transition-none ${
+        aktivni ? "bg-mlha" : "bg-transparent"
+      }`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -258,7 +265,7 @@ export function TopBar({
   const maNeprectene: boolean = pocetNeprectenych > 0;
 
   return (
-    <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex">
+    <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex lg:justify-self-center">
       {polozky.map(({ to, popisek, end, Ikona }) => {
         const jeChat: boolean = to === "/chat";
         const label: string = jeChat ? popisekChat(pocetNeprectenych) : popisek;
@@ -306,7 +313,7 @@ export function MobileBar(): JSX.Element {
     >
       <ul
         style={{ gridTemplateColumns: `repeat(${polozky.length}, minmax(0, 1fr))` }}
-        className="mx-auto grid w-full max-w-6xl gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-1"
+        className="mx-auto grid w-full gap-1 px-2 pb-[env(safe-area-inset-bottom,0px)] pt-1"
       >
         {polozky.map(({ to, popisek, end, Ikona }) => (
           <li key={to} className="min-w-0">
@@ -317,9 +324,10 @@ export function MobileBar(): JSX.Element {
             >
               {({ isActive }) => (
                 <>
-                  <Ikona />
+                  <IkonaVPilulce aktivni={isActive}>
+                    <Ikona />
+                  </IkonaVPilulce>
                   <span>{popisek}</span>
-                  <Indikátor aktivni={isActive} />
                 </>
               )}
             </NavLink>
@@ -351,7 +359,7 @@ function AuthCluster(): JSX.Element | null {
       type="button"
       onClick={odhlasit}
       title="Odhlásit se"
-      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2.5 py-2 text-xs font-bold text-mech transition-colors hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
+      className="bez-prejeti nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2.5 py-2 text-xs font-bold text-mech transition-[transform,background-color,color] duration-200 ease-out hover:-translate-y-px hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
       Odhlásit
     </button>
@@ -367,34 +375,44 @@ export function AppHeader({
   const prihlasen = user !== null;
   const maNeprectene: boolean = pocetNeprectenych > 0;
   return (
-    <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur">
+      <div className="mx-auto flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-8 xl:px-12">
         <Link
           to="/vypravy"
-          className="flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+          className="nahled-press flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           aria-label="ExApp – výpravy"
         >
-          <span
-            aria-hidden="true"
-            className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-inkoust bg-smrk text-lg font-extrabold text-papir shadow-denik"
-          >
-            E
-          </span>
-          <span className="text-sm font-extrabold tracking-tight text-inkoust">
+          <LogoKlubu velikost="sm" />
+          <span className="font-display text-lg font-bold tracking-tight text-smrk">
             ExApp
           </span>
         </Link>
 
         <TopBar pocetNeprectenych={pocetNeprectenych} />
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 lg:justify-self-end">
           <AuthCluster />
+          {prihlasen && (
+            <NavLink
+              to="/zpevnik"
+              aria-label="Zpěvník"
+              className={({ isActive }: { isActive: boolean }) =>
+                `nahled-press relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
+                  isActive
+                    ? "font-bold text-smrk"
+                    : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
+                }`
+              }
+            >
+              <IkonaZpevnik />
+            </NavLink>
+          )}
           {prihlasen && (
             <NavLink
               to="/chat"
               aria-label={popisekChat(pocetNeprectenych)}
               className={({ isActive }: { isActive: boolean }) =>
-                `relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
+                `nahled-press relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
                   isActive
                     ? "font-bold text-smrk"
                     : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
@@ -412,7 +430,7 @@ export function AppHeader({
               to="/profil"
               aria-label="Profil"
               className={({ isActive }: { isActive: boolean }) =>
-                `flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:hidden [touch-action:manipulation] ${
+                `nahled-press flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:hidden [touch-action:manipulation] ${
                   isActive ? "ring-2 ring-smrk ring-offset-2 ring-offset-papir" : ""
                 }`
               }
@@ -431,20 +449,13 @@ export function AppHeader({
 
 export default function Navbar(): JSX.Element | null {
   const { user, isLoading } = useAuth();
-  // Varianta A: odhlášený nevidí vůbec nic — ani logo, ani TopBar/MobileBar.
-  // Během načítání session (isLoading) taky nic nerenderujeme, ať neproblikne navigace.
-  // Badge se počítá až pro přihlášené (hook pod podmínkou — anonym má unread false).
-  const idsProBadge: string[] = useIdsVypravProBadge();
-  const mapa: Map<string, boolean> = useUnreadExpeditions(idsProBadge, {
-    povoleno: !isLoading && user !== null,
-  });
-  const pocet: number = spocitejNeprectene(mapa);
+  const { pocetNeprectenych } = useKonverzacePrehled();
   if (isLoading || user === null) {
     return null;
   }
   return (
     <>
-      <AppHeader pocetNeprectenych={pocet} />
+      <AppHeader pocetNeprectenych={pocetNeprectenych} />
       <MobileBar />
     </>
   );

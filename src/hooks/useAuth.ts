@@ -1,3 +1,5 @@
+import { apiBase } from "../lib/api-base";
+import { OBECNA_CHYBA, ctiJsonTelo } from "../lib/api-odpoved";
 import {
   createContext,
   createElement,
@@ -16,7 +18,12 @@ import type {
   Role,
 } from "../config/roles";
 import { mapujRoliNaProfil, smiNaVypravy } from "../config/roles";
-import type { ApiErrorBody, ApiUser, AuthRole } from "../shared/api-types";
+import {
+  jeAuthAdmin,
+  type ApiErrorBody,
+  type ApiUser,
+  type AuthRole,
+} from "../shared/api-types";
 import {
   ADMIN_CODES_PATH,
   LOGIN_PATH,
@@ -27,6 +34,7 @@ import {
   jeApiChyba,
   normalizujKod,
 } from "../shared/api-types";
+import { normalizujTelefon } from "../shared/telefon";
 
 /**
  * useAuth — auth vrstva nad tenkým BFF (kontrakt dle src/shared/api-types.ts).
@@ -94,6 +102,16 @@ export interface AuthVysledek<TPole extends string> {
   chybyPoli: Partial<Record<TPole, string>>;
 }
 
+/** Demo-only digest so localStorage never keeps the password itself. */
+async function hashDemoHesla(heslo: string): Promise<string> {
+  const data = new TextEncoder().encode(heslo);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(digest), (bajt) =>
+    bajt.toString(16).padStart(2, "0"),
+  ).join("");
+  return `sha256:${hex}`;
+}
+
 interface DemoUserRecord {
   id: string;
   jmeno: string;
@@ -105,8 +123,7 @@ interface DemoUserRecord {
   skola?: string;
   /** Třída — nepovinná (trim; prázdná → ""). */
   trida?: string;
-  // WARNING: heslo v plaintextu — pouze demo bez backendu.
-  // TODO: po příchodu backendu neukládat heslo vůbec (server bude hashovat, např. argon2/bcrypt).
+  // Demo-only digest. The real server stores bcrypt and this value never leaves the browser store as plaintext.
   heslo: string;
   role: Role;
   authRole: AuthRole;
@@ -114,6 +131,7 @@ interface DemoUserRecord {
   clenstvi?: Clenstvi;
   funkce?: Funkce;
   isAdmin?: boolean;
+  isSuperadmin?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -285,20 +303,33 @@ function migrujDemoZaznam(zaznam: DemoUserRecord): DemoUserRecord {
       : jeUlozenaFunkce(zaznam.funkce)
         ? zaznam.funkce
         : profil.funkce;
+  const superadminPriznak: boolean =
+    typeof zaznam.isSuperadmin === "boolean"
+      ? zaznam.isSuperadmin
+      : zaznam.authRole === "SUPERADMIN";
+  // Superadmin is always an admin (DB CHECK: is_superadmin implies is_admin).
   const adminPriznak: boolean =
-    typeof zaznam.isAdmin === "boolean"
+    superadminPriznak ||
+    (typeof zaznam.isAdmin === "boolean"
       ? zaznam.isAdmin
-      : zaznam.authRole === "ADMIN"
+      : jeAuthAdmin(zaznam.authRole)
         ? true
-        : profil.isAdmin;
+        : profil.isAdmin);
   if (
     zaznam.clenstvi === clenstvi &&
     zaznam.funkce === funkce &&
-    zaznam.isAdmin === adminPriznak
+    zaznam.isAdmin === adminPriznak &&
+    zaznam.isSuperadmin === superadminPriznak
   ) {
     return zaznam;
   }
-  return { ...zaznam, clenstvi, funkce, isAdmin: adminPriznak };
+  return {
+    ...zaznam,
+    clenstvi,
+    funkce,
+    isAdmin: adminPriznak,
+    isSuperadmin: superadminPriznak,
+  };
 }
 
 function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
@@ -314,6 +345,17 @@ function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
   }
   // Trio s fallbackem ze starého `role` (migrované záznamy ho už nesou).
   const profil: ClenskyProfil = mapujRoliNaProfil(zaznam.role);
+  const isSuperadmin: boolean =
+    typeof zaznam.isSuperadmin === "boolean"
+      ? zaznam.isSuperadmin
+      : zaznam.authRole === "SUPERADMIN";
+  const isAdmin: boolean =
+    isSuperadmin ||
+    (typeof zaznam.isAdmin === "boolean"
+      ? zaznam.isAdmin
+      : jeAuthAdmin(zaznam.authRole)
+        ? true
+        : profil.isAdmin);
   return {
     id: zaznam.id as ApiUser["id"],
     email: zaznam.email,
@@ -332,12 +374,8 @@ function verejnyProfil(zaznam: DemoUserRecord): ApiUser {
         : jeUlozenaFunkce(zaznam.funkce)
           ? zaznam.funkce
           : profil.funkce,
-    isAdmin:
-      typeof zaznam.isAdmin === "boolean"
-        ? zaznam.isAdmin
-        : zaznam.authRole === "ADMIN"
-          ? true
-          : profil.isAdmin,
+    isAdmin,
+    isSuperadmin,
     stravaId: null,
     createdAt: zaznam.createdAt,
     updatedAt: zaznam.updatedAt,
@@ -376,15 +414,14 @@ function validujHeslo(heslo: string): string | null {
   return null;
 }
 
-/** Telefon je nepovinný: prázdný = OK, jinak 6–32 znaků z +/číslic/mazer a běžných oddělovačů. */
+/** Optional phone: empty is fine, otherwise a valid number stored as E.164. */
 function validujTelefon(hodnota?: string | null): string | null {
   const cisty = (hodnota ?? "").trim();
   if (cisty.length === 0) return null;
   if (cisty.length > VALIDACE.telefonMaxDelka)
     return VALIDACNI_ZPRAVY.telefonDlouhy;
-  if (cisty.length < 6) return VALIDACNI_ZPRAVY.telefonNeplatny;
-  if (!/^[+0-9][+0-9 /().-]*$/.test(cisty))
-    return VALIDACNI_ZPRAVY.telefonNeplatny;
+  const vysledek = normalizujTelefon(cisty);
+  if (!vysledek.ok) return VALIDACNI_ZPRAVY.telefonNeplatny;
   return null;
 }
 
@@ -437,11 +474,7 @@ function validujTvarKodu(kod: string): string | null {
 /* ------------------------------------------------------------------ */
 
 /** Základ BFF z veřejného `VITE_API_BASE_URL`. Prázdný = offline/demo režim. */
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
+
 
 interface BackendOdpoved {
   status: number;
@@ -473,12 +506,7 @@ async function volejBackend(
             },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
-    let telo: unknown = null;
-    try {
-      telo = await odpoved.json();
-    } catch {
-      telo = null;
-    }
+    const telo = await ctiJsonTelo(odpoved);
     return { status: odpoved.status, telo };
   } catch {
     return null;
@@ -494,7 +522,11 @@ function jeApiUser(hodnota: unknown): hodnota is ApiUser {
     typeof kandidat["email"] === "string" &&
     typeof kandidat["jmeno"] === "string" &&
     typeof kandidat["role"] === "string" &&
-    (kandidat["authRole"] === "USER" || kandidat["authRole"] === "ADMIN")
+    (kandidat["authRole"] === "USER" ||
+      kandidat["authRole"] === "ADMIN" ||
+      kandidat["authRole"] === "SUPERADMIN") &&
+    (kandidat["isSuperadmin"] === undefined ||
+      typeof kandidat["isSuperadmin"] === "boolean")
   );
 }
 
@@ -516,20 +548,28 @@ function ctiUsera(telo: unknown): ApiUser | null {
 
 /** Chybějící trio v `ApiUser` dopočítá ze starého `role` (bez přepisu). */
 function doplnTrio(uzivatel: ApiUser): ApiUser {
+  const isSuperadmin: boolean =
+    uzivatel.isSuperadmin === true || uzivatel.authRole === "SUPERADMIN";
+  const profil: ClenskyProfil = mapujRoliNaProfil(uzivatel.role);
+  // SUPERADMIN must pass every isAdmin gate (expeditions, codes, photos).
+  const isAdmin: boolean =
+    isSuperadmin ||
+    (uzivatel.isAdmin ??
+      (jeAuthAdmin(uzivatel.authRole) ? true : profil.isAdmin));
   if (
     uzivatel.clenstvi !== undefined &&
     uzivatel.funkce !== undefined &&
-    uzivatel.isAdmin !== undefined
+    uzivatel.isAdmin === isAdmin &&
+    uzivatel.isSuperadmin === isSuperadmin
   ) {
     return uzivatel;
   }
-  const profil: ClenskyProfil = mapujRoliNaProfil(uzivatel.role);
   return {
     ...uzivatel,
     clenstvi: uzivatel.clenstvi ?? profil.clenstvi,
     funkce: uzivatel.funkce ?? profil.funkce,
-    isAdmin:
-      uzivatel.isAdmin ?? (uzivatel.authRole === "ADMIN" ? true : profil.isAdmin),
+    isAdmin,
+    isSuperadmin,
   };
 }
 
@@ -553,8 +593,6 @@ function ctiKod(telo: unknown, poznamka: string | null): DemoKod | null {
     poznamka,
   };
 }
-
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
 
 /** První česká hláška pro dané pole z `details` (VALIDATION_ERROR). */
 function prvniHlaska(details: Record<string, string[]>, pole: string): string | null {
@@ -641,7 +679,7 @@ function vytvorLokalniKod(
   authRole: AuthRole | null,
   maAdmina: boolean,
 ): DemoKod {
-  if (maAdmina && authRole !== "ADMIN") {
+  if (maAdmina && !jeAuthAdmin(authRole)) {
     throw new Error("Generovat kódy může jen admin.");
   }
   const vsechny = purgeExpirovanychKodu();
@@ -671,6 +709,8 @@ interface AuthKontext {
   isLoading: boolean;
   prihlasen: boolean;
   isAdmin: boolean;
+  /** Hlavní admin. Vždy implikuje `isAdmin`. */
+  isSuperadmin: boolean;
   /**
    * Správa výprav (dual-guard v UI): jen `aktivni_clen`
    * (`smiNaVypravy`), samotný admin příznak nestačí.
@@ -693,7 +733,7 @@ interface AuthKontext {
 const AuthContext = createContext<AuthKontext | null>(null);
 
 function maSystemAdmina(uzivatele: DemoUserRecord[]): boolean {
-  return uzivatele.some((u) => u.authRole === "ADMIN");
+  return uzivatele.some((u) => jeAuthAdmin(u.authRole));
 }
 
 /** Sdílený provider — jediný zdroj session pro celou aplikaci. */
@@ -843,7 +883,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         };
       }
       // KOD_EXPIROVANY (410) — česky, vhodné k přímému zobrazení.
+      // Stejně jako server: expirovaný kód z úložiště hned zmizí.
       if (Date.parse(kod.expiresAt) <= Date.now()) {
+        setKody(purgeExpirovanychKodu());
         return {
           uspech: false,
           chyba: "Kód vypršel (platí 10 minut). Požádej vedoucí o nový.",
@@ -864,13 +906,13 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         discordNick: normalizujNepovinny(vstup.discordNick),
         skola: (vstup.skola ?? "").trim(),
         trida: (vstup.trida ?? "").trim(),
-        // WARNING: plaintext heslo — pouze demo (localStorage). Backend bude hashovat.
-        heslo: vstup.heslo,
+        heslo: await hashDemoHesla(vstup.heslo),
         role: jePrvniAdmin ? "admin" : "clen",
-        authRole: jePrvniAdmin ? "ADMIN" : "USER",
+        authRole: jePrvniAdmin ? "SUPERADMIN" : "USER",
         clenstvi: jePrvniAdmin ? "aktivni_clen" : "clen",
         funkce: null,
         isAdmin: jePrvniAdmin,
+        isSuperadmin: jePrvniAdmin,
         createdAt: ted,
         updatedAt: ted,
       };
@@ -927,13 +969,21 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const zaznam = parseUzivatele().find(
         (u) => u.email.toLowerCase() === email,
       );
-      // WARNING: porovnání plaintext hesel — pouze demo. Backend porovná hash na serveru.
-      if (zaznam === undefined || zaznam.heslo !== vstup.heslo) {
+      const hash = await hashDemoHesla(vstup.heslo);
+      const sedi =
+        zaznam !== undefined && (zaznam.heslo === hash || zaznam.heslo === vstup.heslo);
+      if (zaznam === undefined || !sedi) {
         return {
           uspech: false,
           chyba: "Špatný e-mail nebo heslo.",
           chybyPoli: {},
         };
+      }
+      if (zaznam.heslo !== hash) {
+        const dalsi = parseUzivatele().map((ucet) =>
+          ucet.id === zaznam.id ? { ...ucet, heslo: hash } : ucet,
+        );
+        bezpecnePis(USERS_KEY, JSON.stringify(dalsi));
       }
       bezpecnePis(SESSION_KEY, zaznam.id);
       setUser(verejnyProfil(zaznam));
@@ -960,8 +1010,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         poznamka.trim().length === 0
           ? null
           : poznamka.trim().slice(0, VALIDACE.poznamkaMaxDelka);
-      // Backend-first: server je zdrojem pravdy (roli ověří na serveru).
-      // Bootstrap prvního kódu bez session řeší server stejně jako demo.
+      // Backend-first: the server checks the admin role.
+      // Without an API the local demo can still mint a code.
+      // The real server never mints a code until an admin exists.
       const odpoved = await volejBackend(
         ADMIN_CODES_PATH,
         "POST",
@@ -1005,9 +1056,14 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   );
 
   const hodnota = useMemo<AuthKontext>(() => {
-    // `isAdmin` nově z ortogonálního příznaku, fallback staré `authRole`.
+    // Superadmin passes every admin gate even if `isAdmin` is missing or false.
+    const superadminPriznak: boolean =
+      user !== null &&
+      (user.isSuperadmin === true || user.authRole === "SUPERADMIN");
     const adminPriznak: boolean =
-      user?.isAdmin ?? (user?.authRole === "ADMIN" ? true : false);
+      superadminPriznak ||
+      (user?.isAdmin ??
+        (user !== null && jeAuthAdmin(user.authRole) ? true : false));
     // Profil s fallbackem ze starého `role` (trio je v kontraktu optional).
     const profil: ClenskyProfil | null =
       user === null
@@ -1023,6 +1079,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       isLoading,
       prihlasen: user !== null,
       isAdmin: adminPriznak,
+      isSuperadmin: superadminPriznak,
       muzeSpravovatVypravy:
         profil === null ? false : smiNaVypravy(profil),
       jeBootstrap,

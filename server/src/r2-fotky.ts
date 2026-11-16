@@ -4,6 +4,15 @@
  */
 
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import type { Response as ExpressResponse } from "express";
+import {
+  bajtyAvataru,
+  bajtyNahledu,
+  bajtyPlneFotky,
+  bajtyZpevniku,
+  posliObrazek,
+  WEBP_CONTENT_TYPE,
+} from "./obrazek-nahled";
 import { FOTKA_POPIS_MAX_DELKA } from "./validace";
 
 export const FOTKA_MAX_BAJTU = 8 * 1024 * 1024;
@@ -102,23 +111,73 @@ export function klicAlbaFotky(
   return `alba/${albumId}/${id}.${pripona}`;
 }
 
-/** How many `soubor` parts one album upload accepts. */
-export const ALBUM_FOTEK_NAJEDNOU = 12;
-/** Whole multipart body cap for that batch (per-file cap stays 8 MB). */
-export const ALBUM_NAHRANI_MAX_BAJTU = ALBUM_FOTEK_NAJEDNOU * FOTKA_MAX_BAJTU + 256 * 1024;
+/** Screenshots per direction (outbound / return) on one expedition. */
+export const CESTA_SNIMKU_NA_SMER = 8;
+/** Whole multipart body cap for one direction (per-file cap stays 8 MB). */
+export const CESTA_NAHRANI_MAX_BAJTU = CESTA_SNIMKU_NA_SMER * FOTKA_MAX_BAJTU + 256 * 1024;
+
+export type SmerCestySnimku = "tam" | "zpet";
+
+/** `vypravy/<id>/cesta-tam|cesta-zpet/<uuid>.<ext>`. Null when the id is unsafe. */
+export function klicCestaSnimku(
+  expeditionId: string,
+  smer: SmerCestySnimku,
+  pripona: PriponaFotky,
+  id: string = randomUUID(),
+): string | null {
+  if (smer !== "tam" && smer !== "zpet") return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$/.test(expeditionId)) return null;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  return `vypravy/${expeditionId}/cesta-${smer}/${id}.${pripona}`;
+}
+
+/**
+ * How many `soubor` parts one album upload accepts.
+ * A weekend of photos fits. The page still sends one file per request.
+ */
+export const ALBUM_FOTEK_NAJEDNOU = 500;
+/**
+ * Whole multipart body kept in memory. Not 500 × 8 MB: that would pin
+ * gigabytes per request. One full-size photo is 8 MB; a batch of smaller
+ * files can share this cap. Larger picks go one file per request.
+ */
+export const ALBUM_NAHRANI_MAX_BAJTU = 32 * FOTKA_MAX_BAJTU + 256 * 1024;
 
 export function verejnaUrlFotky(publicBaseUrl: string, klic: string): string {
   return `${publicBaseUrl.replace(/\/+$/, "")}/${klic}`;
 }
 
-/** Key for an object we stored, or null for a legacy pasted URL. */
+const PRIPONA_NAHLEDU = ".nahled.webp";
+
+/**
+ * Sibling thumbnail for a stored full object: `…/<uuid>.nahled.webp`.
+ * Null when the key is not `…/<uuid>.<ext>`, or when it already is a thumbnail.
+ * Legacy `.jpg` / `.png` keys still derive a sibling; a missing object is not an error.
+ */
+export function klicNahledu(klic: string): string | null {
+  if (klic.includes("..")) return null;
+  if (klic.toLowerCase().endsWith(PRIPONA_NAHLEDU)) return null;
+  const lomitko = klic.lastIndexOf("/");
+  if (lomitko < 0) return null;
+  const soubor = klic.slice(lomitko + 1);
+  const tecka = soubor.lastIndexOf(".");
+  if (tecka <= 0) return null;
+  const id = soubor.slice(0, tecka);
+  const pripona = soubor.slice(tecka + 1);
+  if (!UUID_RE.test(id)) return null;
+  if (!/^[A-Za-z0-9]+$/.test(pripona)) return null;
+  return `${klic.slice(0, lomitko)}/${id}${PRIPONA_NAHLEDU}`;
+}
+
+/** Key for an object we stored, or null for a legacy pasted URL or a thumbnail sibling. */
 export function klicZVerejneUrl(verejnaUrl: string, publicBaseUrl: string): string | null {
   const zaklad = publicBaseUrl.replace(/\/+$/, "");
   const prefix = `${zaklad}/`;
   if (!verejnaUrl.startsWith(prefix)) return null;
   const klic = verejnaUrl.slice(prefix.length);
+  if (klic.toLowerCase().endsWith(PRIPONA_NAHLEDU)) return null;
   if (
-    !/^(?:vypravy\/[A-Za-z0-9][A-Za-z0-9_-]{0,80}|alba\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(
+    !/^(?:vypravy\/[A-Za-z0-9][A-Za-z0-9_-]{0,80}(?:\/cesta-(?:tam|zpet))?|alba\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|zpevnik\/navrhy)\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(
       klic,
     )
   ) {
@@ -151,6 +210,7 @@ export function klicAvataruZVerejneUrl(
   const klic = verejnaUrl.slice(prefix.length);
   const ocekavany = `avatary/${userId}/`;
   if (!klic.startsWith(ocekavany)) return null;
+  if (klic.toLowerCase().endsWith(PRIPONA_NAHLEDU)) return null;
   if (!/^avatary\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(klic)) return null;
   if (klic.includes("..")) return null;
   return klic;
@@ -184,6 +244,7 @@ function hodnotaDisposition(hlavicka: string, klic: string): string {
 
 interface PoleMultipart {
   popis: string;
+  smer: string;
   soubory: Buffer[];
 }
 
@@ -201,6 +262,7 @@ function nactiPoleMultipart(
   if (hranice === null) return { ok: false, duvod: "chybi" };
   const znacka = Buffer.from(`--${hranice}`);
   let popis = "";
+  let smer = "";
   const soubory: Buffer[] = [];
   let pozice = telo.indexOf(znacka);
   if (pozice < 0) return { ok: false, duvod: "chybi" };
@@ -221,12 +283,36 @@ function nactiPoleMultipart(
       const data = cast.subarray(oddelovac + 4);
       const jmeno = hodnotaDisposition(hlavicka, "name");
       if (jmeno === "popis") popis = data.toString("utf8");
+      if (jmeno === "smer") smer = data.toString("utf8");
       if (jmeno === "soubor") soubory.push(Buffer.from(data));
     }
     pozice = dalsi;
   }
   if (soubory.length === 0) return { ok: false, duvod: "chybi" };
-  return { ok: true, pole: { popis, soubory } };
+  return { ok: true, pole: { popis, smer, soubory } };
+}
+
+export type ChybaCestySnimku = ChybaSouboruAlba | "smer";
+
+/**
+ * Direction field `smer` (`tam` | `zpet`) plus up to 8 `soubor` images.
+ */
+export function rozdelMultipartCesta(
+  telo: Buffer,
+  contentType: string,
+): { ok: true; smer: SmerCestySnimku; fotky: NahranaFotka[] } | { ok: false; duvod: ChybaCestySnimku } {
+  const nactene = nactiPoleMultipart(telo, contentType, CESTA_NAHRANI_MAX_BAJTU);
+  if (!nactene.ok) return nactene;
+  const smer = nactene.pole.smer.trim();
+  if (smer !== "tam" && smer !== "zpet") return { ok: false, duvod: "smer" };
+  if (nactene.pole.soubory.length > CESTA_SNIMKU_NA_SMER) return { ok: false, duvod: "pocet" };
+  const fotky: NahranaFotka[] = [];
+  for (const soubor of nactene.pole.soubory) {
+    const duvod = chybaJednohoSouboru(soubor, "");
+    if (duvod !== null) return { ok: false, duvod };
+    fotky.push({ popis: "", bajty: soubor });
+  }
+  return { ok: true, smer, fotky };
 }
 
 function chybaJednohoSouboru(soubor: Buffer, popis: string): ChybaSouboru | null {
@@ -291,6 +377,21 @@ function kodujCastCesty(cast: string): string {
   );
 }
 
+/**
+ * Immutable UUID keys. Signed on every PUT (photos, avatars, songbook, chat).
+ * Omitting it from SignedHeaders makes R2 reject the request.
+ */
+const R2_PUT_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+class R2StavChyba extends Error {
+  readonly status: number;
+  constructor(metoda: string, status: number) {
+    super(`R2 ${metoda} failed`);
+    this.name = "R2StavChyba";
+    this.status = status;
+  }
+}
+
 /** Content-Type for a stored object key (`jpg` / `png` / `webp`). */
 export function contentTypeZKlice(klic: string): string {
   const maly = klic.toLowerCase();
@@ -320,6 +421,7 @@ async function r2Fetch(
   hlavicky.set("host", host);
   hlavicky.set("x-amz-content-sha256", hashTela);
   hlavicky.set("x-amz-date", amzDate);
+  if (metoda === "PUT") hlavicky.set("cache-control", R2_PUT_CACHE_CONTROL);
   if (contentType !== null && metoda === "PUT") hlavicky.set("content-type", contentType);
   const serazene = [...hlavicky.keys()].sort();
   const kanonickeHlavicky = serazene
@@ -342,13 +444,14 @@ async function r2Fetch(
       "x-amz-content-sha256": hashTela,
       "x-amz-date": amzDate,
       Authorization: autorizace,
+      ...(metoda === "PUT" ? { "Cache-Control": R2_PUT_CACHE_CONTROL } : {}),
       ...(contentType !== null && metoda === "PUT" ? { "Content-Type": contentType } : {}),
     },
     body: metoda === "PUT" ? new Uint8Array(telo) : undefined,
   });
   if (!odpoved.ok) {
     await odpoved.arrayBuffer().catch(() => undefined);
-    throw new Error(`R2 ${metoda} failed`);
+    throw new R2StavChyba(metoda, odpoved.status);
   }
   return odpoved;
 }
@@ -375,6 +478,74 @@ export async function nactiObjektR2(
   return { bajty, contentType: contentTypeZKlice(klic) };
 }
 
+/** Null only on 404. Any other R2 or network failure still throws. */
+async function nactiObjektR2PokudJe(
+  nastaveni: R2Nastaveni,
+  klic: string,
+): Promise<{ bajty: Buffer; contentType: string } | null> {
+  try {
+    return await nactiObjektR2(nastaveni, klic);
+  } catch (chyba: unknown) {
+    if (chyba instanceof R2StavChyba && chyba.status === 404) return null;
+    throw chyba;
+  }
+}
+
+export interface ObrazekKOdeslani {
+  bajty: Buffer;
+  contentType: string;
+  /**
+   * True when the stored sibling was missing and the caller should re-encode
+   * in memory. A hit is already WebP and must not be shrunk again.
+   */
+  prekodovatNahled: boolean;
+}
+
+/**
+ * `nahled` GETs `klicNahledu` first and returns those bytes without reading
+ * the full object. A 404 (legacy JPEG/PNG, GIF, HEIC, avatar) falls through
+ * to the full object. The result is never written back to R2.
+ * Without `nahled`, only the stored object is read.
+ * `contentTypePlny` overrides the type guessed from the key (chat GIF/HEIC).
+ */
+export async function nactiObrazekKOdeslani(
+  nastaveni: R2Nastaveni,
+  klic: string,
+  nahled: boolean,
+  contentTypePlny: string | null = null,
+): Promise<ObrazekKOdeslani> {
+  if (nahled) {
+    const klicN = klicNahledu(klic);
+    if (klicN !== null) {
+      const ulozeny = await nactiObjektR2PokudJe(nastaveni, klicN);
+      if (ulozeny !== null) {
+        return {
+          bajty: ulozeny.bajty,
+          contentType: WEBP_CONTENT_TYPE,
+          prekodovatNahled: false,
+        };
+      }
+    }
+  }
+  const plny = await nactiObjektR2(nastaveni, klic);
+  return {
+    bajty: plny.bajty,
+    contentType: contentTypePlny ?? plny.contentType,
+    prekodovatNahled: nahled,
+  };
+}
+
+/** Photo/avatar proxy. Re-encode stays in `posliObrazek` and is not stored. */
+export async function posliObrazekZKlice(
+  res: ExpressResponse,
+  nastaveni: R2Nastaveni,
+  klic: string,
+  nahled: boolean,
+): Promise<void> {
+  const objekt = await nactiObrazekKOdeslani(nastaveni, klic, nahled);
+  await posliObrazek(res, objekt.bajty, objekt.contentType, objekt.prekodovatNahled);
+}
+
 export async function ulozFotkuDoR2(
   nastaveni: R2Nastaveni,
   klic: string,
@@ -387,4 +558,90 @@ export async function ulozFotkuDoR2(
 
 export async function smazObjektR2(nastaveni: R2Nastaveni, klic: string): Promise<void> {
   await r2Pozadavek(nastaveni, "DELETE", klic, Buffer.alloc(0), null);
+}
+
+export type DruhUlozeniObrazku = "plna" | "avatar" | "zpevnik";
+
+export interface CastObrazkuR2 {
+  klic: string;
+  bajty: Buffer;
+  contentType: string;
+}
+
+/** Full object plus an optional sibling thumbnail. The public URL is the full key only. */
+export interface PripravenyObrazek extends CastObrazkuR2 {
+  nahled: CastObrazkuR2 | null;
+}
+
+/**
+ * Re-encodes JPEG/PNG/WebP before the PUT.
+ * GIF, HEIC and anything the derivative helper refuses keep the original bytes and extension.
+ * `plna` also builds `…/<uuid>.nahled.webp`. Avatar and songbook stay a single object.
+ * `sestavKlic` is called once, with the extension that will actually be stored.
+ */
+export async function pripravObrazekKUlozeni(
+  bajty: Buffer,
+  contentType: string,
+  puvodniPripona: string,
+  druh: DruhUlozeniObrazku,
+  sestavKlic: (pripona: string) => string | null,
+): Promise<PripravenyObrazek | null> {
+  const derivace =
+    druh === "avatar"
+      ? await bajtyAvataru(bajty, contentType)
+      : druh === "zpevnik"
+        ? await bajtyZpevniku(bajty, contentType)
+        : await bajtyPlneFotky(bajty, contentType);
+  const pripona = derivace === null ? puvodniPripona : "webp";
+  const klic = sestavKlic(pripona);
+  if (klic === null) return null;
+  const telo = derivace === null ? bajty : derivace.bajty;
+  const typ = derivace === null ? contentType : derivace.contentType;
+  let nahled: CastObrazkuR2 | null = null;
+  if (druh === "plna" && derivace !== null) {
+    const zmensene = await bajtyNahledu(bajty, contentType);
+    const klicN = klicNahledu(klic);
+    if (zmensene !== null && klicN !== null) {
+      nahled = { klic: klicN, bajty: zmensene.bajty, contentType: zmensene.contentType };
+    }
+  }
+  return { klic, bajty: telo, contentType: typ, nahled };
+}
+
+/**
+ * PUT the full object, then the sibling thumbnail.
+ * A failed thumbnail PUT deletes the full object so the pair is not left half-written.
+ */
+export async function ulozPripravenyObrazek(
+  nastaveni: R2Nastaveni,
+  obrazek: PripravenyObrazek,
+): Promise<string> {
+  const url = await ulozFotkuDoR2(nastaveni, obrazek.klic, obrazek.bajty, obrazek.contentType);
+  if (obrazek.nahled === null) return url;
+  try {
+    await ulozFotkuDoR2(
+      nastaveni,
+      obrazek.nahled.klic,
+      obrazek.nahled.bajty,
+      obrazek.nahled.contentType,
+    );
+  } catch (chyba) {
+    await smazObjektR2(nastaveni, obrazek.klic).catch(() => undefined);
+    throw chyba;
+  }
+  return url;
+}
+
+/** Deletes the sibling thumbnail (a miss does not fail), then the full object. */
+export async function smazObrazekR2(nastaveni: R2Nastaveni, klic: string): Promise<void> {
+  const nahled = klicNahledu(klic);
+  if (nahled !== null) await smazObjektR2(nastaveni, nahled).catch(() => undefined);
+  await smazObjektR2(nastaveni, klic);
+}
+
+/** Best-effort delete of the full object and its sibling. Neither failure throws. */
+export async function smazObrazekR2Tise(nastaveni: R2Nastaveni, klic: string): Promise<void> {
+  const nahled = klicNahledu(klic);
+  if (nahled !== null) await smazObjektR2(nastaveni, nahled).catch(() => undefined);
+  await smazObjektR2(nastaveni, klic).catch(() => undefined);
 }

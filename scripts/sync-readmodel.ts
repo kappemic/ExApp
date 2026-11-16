@@ -16,7 +16,7 @@
  * Členové (`clenove`) jsou ZÁMĚRNĚ live-only: čtou se živě z BFF
  * `GET /api/clenove` (jen ADMIN), nikdy se nesnapshotují do Gitu —
  * obsahují osobní údaje (e-mail, telefon) a do veřejného build-time
- * snapshotu nepatří. UI prototyp mezitím používá `src/data/mockClenove.ts`.
+ * snapshotu nepatří.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";

@@ -112,7 +112,7 @@ describe("highlight a mazání jen pro admina", () => {
   });
 
   it("POST náhledu i DELETE fotky hlídá vyzadujAdmina, nahrání zůstává přihlášeným", () => {
-    const server = cti("server/src/index.ts");
+    const server = cti("server/src/fotky-routes.ts");
     const nahrani = usek(
       server,
       "/* POST /api/expeditions/:id/fotky —",
@@ -131,7 +131,7 @@ describe("highlight a mazání jen pro admina", () => {
     const nahled = usek(
       server,
       "/* POST /api/expeditions/:id/fotky/:fotkaId/nahled",
-      "GET /api/meta/skoly-tridy",
+      "fotky: radky.map(toApiFotka),",
     );
     expect(nahled).toContain("vyzadujAdmina");
     expect(nahled).not.toContain("vyzadujPrihlaseni");

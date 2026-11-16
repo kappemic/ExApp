@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { urlSouboruFotky } from "../../lib/expedition-fotky";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 
 export interface VypravaNahledProps {
   expeditionId: string;
@@ -38,7 +39,7 @@ export default function VypravaNahled({
         }}
       />
       {ukazFoto ? (
-        <img
+        <PostupnaFotka
           src={urlSouboruFotky(expeditionId, fotkaId)}
           alt="Náhled výpravy"
           loading="lazy"

@@ -30,6 +30,8 @@ const HTTP_STATUS: Record<ApiErrorCode, number> = {
   STRAVA_NENI_NASTAVENA: 503,
   FOTKY_NEJSOU_NASTAVENE: 503,
   MOC_POZADAVKU: 429,
+  PISEN_UZ_JE: 409,
+  PUSH_NENI_NASTAVENY: 503,
   VNITRNI_CHYBA: 500,
 };
 
@@ -54,4 +56,10 @@ export function posliChybu(
   details?: Record<string, string[]>,
 ): void {
   res.status(httpStatusProKod(code)).json(chyboveTelo(code, message, details));
+}
+
+export function vnitrniChyba(res: Response): void {
+  if (!res.headersSent) {
+    posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+  }
 }

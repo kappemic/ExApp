@@ -1,3 +1,4 @@
+import { ctiEnv } from "./prostredi";
 /**
  * server/src/discord.ts — Discord webhook (jen server).
  *
@@ -74,7 +75,7 @@ export function jePlatnyDiscordWebhookUrl(hodnota: string): boolean {
 
 /** Serverové env (ořezané); chybí-li, vrací prázdný řetězec. */
 export function ctiDiscordWebhookUrl(): string {
-  return (process.env["DISCORD_WEBHOOK_URL"] ?? "").trim();
+  return (ctiEnv("DISCORD_WEBHOOK_URL") ?? "").trim();
 }
 
 function orizni(text: string, max: number): string {

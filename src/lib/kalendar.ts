@@ -5,7 +5,7 @@
  * - `mesicMrizka(rok, mesic)` — plná mřížka Po–Ne jako YMD (včetně dnů
  *   z vedlejších měsíců pro doplnění do celých týdnů).
  * - `mesicMrizkaSKontextem(rok, mesic)` — stejná mřížka + příznak
- *   `mimoMesic` pro šedé neklikatelné dny.
+ *   `mimoMesic` pro tlumené dny vedlejšího měsíce (pořád se dají otevřít).
  * - `dnyVypravy(expedice)` — dny pokryté výpravou (datum..datumDo, cap 62).
  * - `vyskytySchuzky(schuzka, rok, mesic)` — rozpad opakování na výskyty
  *   v daném měsíci (`jednorazova` = 0–1 den, `tydenni` = stejný weekday
@@ -32,6 +32,8 @@ export interface KalendarniUdalost {
   datum: string;
   /** Druhotná informace do výpisu dne (sraz / místnost). */
   detail: string | null;
+  /** HH:MM for a meeting. Absent on trips. */
+  cas?: string | null;
 }
 
 const YMD_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -55,7 +57,7 @@ export function weekdayPondeliPrvni(denYmd: string): number {
   return (den.getDay() + 6) % 7;
 }
 
-/** Buňka měsíční mřížky s kontextem (šedý neklikatelní den mimo měsíc). */
+/** Buňka měsíční mřížky s kontextem (tlumený den vedlejšího měsíce). */
 export interface BunkaMesice {
   ymd: string;
   mimoMesic: boolean;
@@ -399,7 +401,7 @@ export interface UdalostiVstup {
   schuzky: ReadonlyArray<
     Pick<
       ApiSchuzka,
-      "id" | "nazev" | "datum" | "mistnost" | "opakovani" | "vynecheneVyskyty"
+      "id" | "nazev" | "datum" | "cas" | "mistnost" | "opakovani" | "vynecheneVyskyty"
     >
   >;
 }
@@ -464,6 +466,7 @@ export function udalostiProMesic(
           nazev: schuzka.nazev,
           datum: den,
           detail: schuzka.mistnost,
+          cas: schuzka.cas ?? null,
         });
       }
     }

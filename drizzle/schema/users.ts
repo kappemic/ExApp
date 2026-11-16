@@ -62,6 +62,11 @@ export const users = pgTable("users", {
   funkce: text("funkce"),
   /** Ortogonální admin příznak. */
   isAdmin: boolean("is_admin").notNull().default(false),
+  /**
+   * SUPERADMIN bit (migration 0019). Same pattern as isAdmin.
+   * CHECK: is_superadmin implies is_admin. users.role is unchanged.
+   */
+  isSuperadmin: boolean("is_superadmin").notNull().default(false),
   /** Škola (trim na hranici; "" = nevyplněno). */
   skola: text("skola").notNull().default(""),
   /** Třída (trim na hranici; "" = nevyplněno). */
@@ -77,6 +82,8 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   /** Krátké představení (Step 3, migrace 0015). "" = nevyplněno. */
   bio: text("bio").notNull().default(""),
+  /** Oblíbená barva (osobní údaje). "" = nevyplněno. */
+  oblibenaBarva: text("oblibena_barva").notNull().default(""),
   /** Narozeniny (Step 3, migrace 0015, DATE YYYY-MM-DD). NULL = nevyplněno. */
   narozeniny: date("narozeniny"),
   createdAt: timestamp("created_at", { withTimezone: true })

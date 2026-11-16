@@ -33,6 +33,16 @@ export { soukromeZpravy } from "./soukrome_zpravy";
 export type { SoukromaZprava } from "./soukrome_zpravy";
 export { zpravy, KANALY_ZPRAVY, jeKanalZpravy } from "./zpravy";
 export type { Zprava, NovaZprava, KanalZpravy } from "./zpravy";
+export {
+  zpravaPrilohy,
+  DRUHY_ZPRAVA_PRILOHY,
+  jeDruhZpravaPrilohy,
+} from "./zprava_prilohy";
+export type {
+  ZpravaPriloha,
+  NovaZpravaPriloha,
+  DruhZpravaPrilohy,
+} from "./zprava_prilohy";
 export { diskuzePrecteni } from "./diskuze_precteni";
 export type { DiskuzePrecteni, NoveDiskuzePrecteni } from "./diskuze_precteni";
 export {
@@ -46,5 +56,15 @@ export type {
   NovaKonverzacePrecteni,
   GlobalniKonverzaceKlic,
 } from "./konverzace_precteni";
+export { chatSkupiny, chatSkupinaPrava, skupinaZpravy } from "./chat_skupiny";
+export { expediceCestaSnimky } from "./expedice_cesta_snimky";
+export type {
+  ExpediceCestaSnimek,
+  NovaExpediceCestaSnimek,
+  SmerCesty,
+} from "./expedice_cesta_snimky";
 export { alba, albaFotky } from "./alba";
+export { zpevnikPisne } from "./zpevnik_pisne";
+export { pushOdbery } from "./push_odbery";
+export type { ZpevnikPisen, NovaZpevnikPisen, StavZpevniku } from "./zpevnik_pisne";
 export type { Album, NewAlbum, AlbaFotka, NewAlbaFotka } from "./alba";

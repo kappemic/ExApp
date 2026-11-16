@@ -1,123 +1,104 @@
-# Deník — návod ke stylu výprav
+# Výpravy — návod ke stylu
 
-Tento soubor popisuje vzhled stránky `/vypravy`. Stará adresa `/vypravy/nahled` jen přesměruje sem a zachová query. Starší marketingový Nocturne (razítko, hero, newsletter, tmavá patička) se nepoužívá.
+Platí pro `/vypravy` a pro dialogy, které ta stránka otevře. Zdroj pravdy je kód: tokeny v `src/index.css`, plochy v `src/components/vypravy-nahled/nocturne.css`. Když se tenhle text a obrazovka rozejdou, platí obrazovka.
 
-## 1. Kam styl patří
+`tokens.md` a HTML makety ve stejné složce jsou archiv staršího deníku. Nové úpravy se jimi neřídí.
 
-Platí na `/vypravy` a u dialogů, které ta stránka otevře s příznakem `denik` (třídy `nahled-modal` a `nahled-ovladani`). Styly jsou v `src/components/vypravy-nahled/nocturne.css`. `tokens.md` a HTML makety v této složce jsou archiv, ne zdroj pravdy.
+## 1. Věta
 
-Nástěnka, profil, žebříčky a fotky tenhle list nemají. Sdílený modal, galerie a denní dialog bez `denik` zůstávají kulaté.
+Bílý list, olivová značka, okrová jen na rozhodnutí. Písmo Onest na text, Bricolage Grotesque na nadpisy. Tvary jsou zaoblené. Prázdné stavy mají podklad `mlha`. Ostatní plochy jsou bílé.
 
-## 2. Věta, kterou styl drží
+## 2. Barvy
 
-Papírový deník: sépiový inkoust, béžový list, rámeček jako u staré fotky. Barva jde od béžové skoro do žluta. Žádná druhá sytá barva, žádný stín, žádný kulatý roh kromě avatarů.
+Tokeny jsou v `@theme` v `src/index.css`. Na `bg-okr` je vždy `text-inkoust`.
 
-## 3. Barvy
+| Token | Hex | K čemu |
+| --- | --- | --- |
+| `papir` | `#ffffff` | pozadí, karty, dialog |
+| `inkoust` | `#26301a` | text, focus |
+| `smrk` | `#556b2f` | značka, vybraný den, odkaz |
+| `jantar` | `#8f5f0a` | drobný okrový text, štítek schůzky |
+| `mech` | `#5e6b4e` | druhý řádek, čas, popisek |
+| `linka` | `#e7e9df` | vlasová linka, dělení sloupců |
+| `mlha` | `#eef1e4` | prázdný stav, pruh po výpravě, hover řádku |
+| `pole` | `#8c937b` | okraj polí a karet |
+| `okr` | `#d99b26` | hlavní akce: přihlášení, nová výprava, schůzka |
+| `okr-tmavy` | `#c4861a` | hover okrové plochy |
 
-Tokeny žijí na `.nocturne`, ne v globálním `index.css`.
+Čísla dnů mimo aktuální měsíc jsou `pole` na bílém pozadí. Pozadí buňky se kvůli tomu nemění.
 
-```
---background: 38 32% 91%
---foreground: 26 32% 12%
---card: 40 36% 94%
---secondary: 36 22% 85%
---muted-foreground: 30 12% 38%
---border / --input: 30 16% 70%
---hairline: 30 14% 62%
---ink: 26 30% 9%
---ink-foreground: 38 30% 88%
---film-ruz: 36 24% 87%
---film-mech: 46 32% 86%
---film-nebe: 42 26% 83%
-```
+## 3. Písmo
 
-Uvnitř náhledu se produkční barvy přemapují na stejnou sépii, aby kalendář a tlačítka nezezelenaly: `--color-smrk` i `--color-jantar` jsou inkoust, `--color-papir` je karta.
+- Text: Onest (`--font-sans`).
+- Nadpisy `h1`–`h3`: Bricolage Grotesque (`--font-display`), `letter-spacing: -0.02em`.
+- Vstupy mají `16px`, ať iOS nepřibližuje.
+- Časy a počty mají `tabular-nums`.
+- Dotykový cíl běžného tlačítka je 44 px. Výjimka je značka u zprávy (tři tečky): malá, bez rámečku, `32px`.
 
-Lázně sekcí (třídy `nahled-odstin-ruz`, `nahled-odstin-mech`, `nahled-odstin-nebe`):
+## 4. Skladba `/vypravy`
 
-| Sekce | Lázeň |
-| --- | --- |
-| Neuzavřené | `--film-ruz` |
-| Probíhá | `--film-mech` |
-| Nadcházející | papír, bez lázně |
-| Historie a kalendář | `--film-nebe` |
+1. Nadpis „Výpravy“. Kdo smí výpravy zakládat, vidí „Nová výprava“ okrově.
+2. Hledání a přepínač Seznam / Kalendář. Hledání má `aria-label="Hledat podle jména"`. Křížek má popisek „Zrušit hledání“.
+3. Bez hledání: vlevo nejbližší výprava, vpravo od `lg` sloupec „Brzy“. Pod tím sekce Další výpravy, Čeká na uzavření a Proběhlo. Sekce nemají věty o počtu ani o tom, že termín skončil.
+4. Hledání bez výsledku nahradí seznam větou „Pro … tu není žádná výprava.“ Seznam bere živá data. Výprava, kterou server nevrátí, na stránce nezůstane.
 
-Rám stránky (`NahledRamec`) je `10px` inkoustu. Uvnitř je linka `1px` (`--hairline`) a viněta `.nahled-snimek`: `box-shadow: inset 0 0 90px hsl(32 28% 18% / 0.07)`. Šířka listu je `max-w-[90rem]`.
+### Nejbližší výprava
 
-## 4. Písmo
+Snímek je vlevo, text vpravo. Od `lg` je text svisle na střed snímku. Odpočet („Za 5 dní“) má stejnou váhu jako datum. Silný je jen název. Kapacita je „1 z 12“ nebo „1 přihlášeno“. „Zbývá N míst“ se nepíše. Plno se řekne „plno“.
 
-Jedno písmo: Archivo.
+Snímek nadcházející výpravy je fotka z jiné, už proběhlé výpravy. Nesmí to být její náhled (`jeNahled`, jinak první fotka). Každá nadcházející výprava dostane jinou, dokud v zásobě jsou. Po skončení se vypůjčená fotka přestane ukazovat. Když fotka není, zůstane krajina z `KrajinaVypravy`: hřeben podle id, barva podle období, bez cesty a bez stromů.
 
-- `.font-expanded` — `font-stretch: 122%`, nadpisy karet a názvy
-- `.font-condensed` — `font-stretch: 74%`, data, přepínač, drobné popisky
-- `h1` je světlý, velký, `text-balance`
-- Žádné druhé písmo, žádné anglické razítko značky
+### Řádek
 
-## 5. Skladba stránky
+Bílý, malý poloměr, vlevo snímek, vpravo název, sraz a kapacita. Stejná fotka jako u náhledu té výpravy. Neuzavřená po termínu má za kapacitou „neuzavřeno“.
 
-1. Nadpis „Výpravy“. Kdo smí výpravy zakládat, vidí vedle něj „Nová výprava“.
-2. Jeden řádek: hledání vlevo, přepínač Seznam / Kalendář vpravo, svisle vycentrovaný na pole.
-3. Hlášení výsledku hledání je **pod** řádkem, aby přepínač nesjel dolů.
-4. Sekce mají svislý štítek a číslo. Výška sekce drží obsah. `min-height` na prázdno se nepoužívá.
-5. Uzavřené výpravy jsou karty. Ostatní jsou řádky s datem.
+### Brzy
 
-### Hledání
+Nejbližší výpravy a schůzky. Schůzka s časem `HH:MM` zmizí, jakmile ten čas v daný den uplyne. Bez času zůstane celý den. Na obrazovce je čas s tečkou, `16.20`.
 
-Viditelný štítek „JMÉNO“ tam není. Pole má `aria-label="Hledat podle jména"`, `name="nazev"`, `autoComplete="off"`. Placeholder končí výpustkou. Při psaní se zvýrazní **spodní linka** celého pole (`:focus-within`), ne plovoucí rámeček. Obrys na samotném inputu je vypnutý schválně, náhrada je ta linka. Křížek na smazání má 44 px a popisek „Zrušit hledání“.
+### Kalendář
 
-### Přepínač
+Měsíc sdílí buňku `DenKalendare`. Výprava je pás v barvě její palety, krátké jméno jen na začátku pásu. Schůzka je okrová tečka, v buňce bez jména. Dny mimo měsíc mají tišší číslo, stejné bílé pozadí. V denním dialogu je u schůzky čas vedle třídy (`16.20 · 216`). „Jednorázová“ a „Týdenní“ se v tom řádku nepíšou. Tužka a koš jsou vlevo na řádku se štítkem, název je pod nimi přes celou šířku.
 
-`NahledPrepinac` je `role="group"`. Vedle hledání má `roztahnout={false}`. Aktivní díl je inkoust (`--ink`), ne zelená.
+### Formuláře
 
-### Řádky
+Datum je `dd.mm.rrrr`, čas `hh.mm`. Vyskakovací kalendář, sloupce hodin a seznam jsou plné bílé, `z-index` nad dialogem. Okraj pole je `pole`. Focus textového pole je olivový okraj, ne druhý obrys.
 
-Mřížka `4.25rem` + zbytek, minimální výška 72 px. Vlevo den a zkratka měsíce. Fotka v řádku není. Kapacita: u uzavřené „archiv“, u neuzavřené po termínu „neuzavřeno“, u budoucí „zbývá N míst“. Neuzavřené vidí jen člen, který smí výpravy spravovat.
+## 5. Dialog výpravy
 
-### Karty archivu
+List je bílý, nahoře snímek. Nadcházející výprava má od `lg` dva sloupce: vlevo popis a lidé, vpravo diskuze. Proběhlá výprava je jeden sloupec. Nahoře lidé, pod nimi na celou šířku listu vedle sebe kilometry a fotky. Ušlá trasa leží na světlé mapě a drží skutečný tvar. Diskuze je pod tím, bez velkého nadpisu. Výška jde podle zpráv a zastaví se na stropu. Prázdné vlákno nezabírá prázdný panel.
 
-Čtverec, `1px` rámeček barvy inkoustu, bez stínu, bez zaoblení. Fotka 4:3 nahoře. Mřížka nejvýš dva sloupce (`md:grid-cols-2`). Celá karta je jedno tlačítko. Prázdný stav a stránkování zůstávají.
+- Přihlásit se a Odhlásit se jsou okrové a sedí hned pod srazem.
+- Lidé jsou vlastní blok „Kdo jede“ nebo „Kdo byl“. Vidí ho každý. Na telefonu jsou avatary nad jmény, ať věta zabere celou šířku. Od `sm` je to jeden řádek: překryté avatary, počet a všechna jména. Druhý seznam se nerozjíždí.
+- Pruh „Výprava proběhla“ a tlačítko Upravit výpravu patří správě. Seznam lidí v něm není.
+- Stavový štítek na snímku (`neuzavřeno`, `volno`, `proběhlá`) se nekreslí.
+- Uzavření se ptá jen na potvrzení. Přihlášení se zapíšou jako účastníci. Docházka se dál upravuje ve formuláři výpravy.
+- Správa na konci listu je vpravo, bez nadpisu „Správa výpravy“.
 
-## 6. Dialog
+### Diskuze u výpravy
 
-`ExpeditionModal` s `denik` dostane kořen `nocturne nahled-modal`. Uvnitř je vše čtvercové a bez stínu. Avatary mají výjimku `.avatar-kruh { border-radius: 9999px }`.
+Vlastní karta, oddělená od zbytku listu. Cizí vzkaz má plochu, vlastní má okrový nádech. Poslat není okrové, okrová patří přihlášení. Při psaní se pole nezvýrazňuje rámečkem. Tři tečky u zprávy jsou malé, bez tlačítkového rámu, a menu se otevře až z nich. Sedí vpravo nahoře vedle textu, takže ho nepřekrývají a z řádku nepřetékají. Navazující zprávy téhož člověka ve stejný den nemají jméno ani datum. Čas se u nich ukáže až po najetí, stejně jako tři tečky. Nový den začne znovu jménem a datem.
 
-- Prázdný tácek fotky (linkovaný papír 4:3) se v deníku nevykreslí. V produkci zůstává.
-- Odeslání vzkazu je slovo **Poslat**, bez šipky, na prvním řádku rostoucího pole. Výška pole se neanimuje.
-- Zavření ukazatelem (křížek, pozadí, Zavřít, Zrušit u nové výpravy a schůzky) přehraje vstup pozpátku 220 ms a teprve potom odmountuje. Úspěšné odeslání formuláře okno sundá hned, aby hned mohlo najet další.
-- Escape zavře hned.
-- Odkaz do diskuze v deníku skáče `behavior: "auto"`, aby nesoutěžil s nájezdem okna.
-- Galerie fotek v deníku má stejný nájezd a odjezd. Escape ji zavře hned. Přechod mezi snímky klávesnicí se neanimuje.
+## 6. Pohyb
 
-## 7. Pohyb
-
-Křivka: `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`.
+Křivka je `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`.
 
 | Věc | Čas | Vlastnosti |
 | --- | --- | --- |
 | Stisk tlačítka | 160 ms | `transform: scale(0.97)` |
-| Barva, linka, pozadí | 160 ms | jen vyjmenované vlastnosti |
-| Okno, závoj, galerie | 220 ms | průhlednost a `translateY(8px)`, závoj jen `background-color` |
-| Najíždění listu | 220 ms | jednou při vstupu na stránku, ne při každém přepnutí Seznam / Kalendář |
-| Najetí na fotku karty | 220 ms | `scale(1.03)`, jen při hoveru myší |
-| Nová výprava, Nová schůzka | 180 ms | inkoust přejede `clip-path` zleva, text zesvětlá; jen jemná myš |
+| Okno a závoj | 220 ms | průhlednost a krátký posun |
+| Řádek seznamu, buňka kalendáře, pole výběru | žádný scale | sdílejí hranu nebo mřížku |
 
-Pravidla:
+- Animuj `transform` a `opacity`. `transition: all` se nepoužívá.
+- Hover jen při `@media (hover: hover) and (pointer: fine)`.
+- Při `prefers-reduced-motion` zmizí posun i scale.
+- Escape zavře hned. Zavření ukazatelem přehraje vstup pozpátku a teprve potom odmountuje.
 
-- Animuj jen `transform` a `opacity`. Závoj je výjimka: mění `background-color`, ne průhlednost obalu, jinak by zprůhlednělo i okno.
-- `transition: all` se nepoužívá.
-- Hover jen v `@media (hover: hover) and (pointer: fine)`.
-- Při `prefers-reduced-motion` zmizí posun i scale. Barva smí skočit. Okno a galerie se zavřou hned.
-- Klávesové akce (Escape, šipky mezi fotkami, přepnutí, které uživatel dělá pořád) se neanimují.
-- Řádek seznamu a segment přepínače se nesmršťují celé. Řádek při stisku změní podklad na `--card`. U segmentu se zmenší jen vnitřní text, aby nepraskla společná linka.
-- Buňka kalendáře se nesmršťuje, jinak se rozestoupí pás výprav.
-- Posuvník stránky je tenký a zviditelní se jen při rolování (`html.nahled-stranka`).
+## 7. Jak přidat nový kus
 
-## 8. Jak přidat nový kus
-
-1. Nový povrch obal třídou `nocturne`, nebo ho nech uvnitř `NahledRamec`.
-2. Barvu ber z tokenů výše. Nový odstín smí být jen další krok béžové do žluta.
-3. Rámy `1px`, rohy `0`, stín žádný. Kruh nech jen avataru.
-4. Tlačítko dostane stisk `scale(0.97)` za 160 ms, pokud nesdílí hranu s sousedem. Sdílenou hranu neškáluj.
-5. Vstup a odchod okna řeš přechodem, ne keyframes. Únik klávesou je okamžitý.
-6. Produkční komponentu rozšiř příznakem. Bez příznaku nesmí přibýt třída `nocturne`, `nahled-modal` ani `nahled-ovladani`.
-7. Ověř `/vypravy` v prohlížeči. Ostatní stránky nemají deníkový rám.
+1. Barvu ber z tokenů v `src/index.css`. Nový odstín nepatří do palety, dokud není v tom souboru.
+2. Okrová je rozhodnutí (přihlášení, založení, schůzka). Druhá akce ve stejném dialogu okrová není.
+3. `mlha` je prázdno a klidný pruh, ne každé tlačítko.
+4. Okraj formuláře je `pole`. `linka` je na to moc světlá.
+5. Vyskakovací panel mimo strom aplikace potřebuje vlastní plné pozadí. Třída `nocturne` je průhledná schválně.
+6. Ověř změnu na `/vypravy` v prohlížeči, na telefonní i široké šířce, když se mění skladba.

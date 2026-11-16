@@ -13,7 +13,8 @@ import { albaFotky, type AlbaFotka } from "../../drizzle/schema/alba";
 import { photos, type Photo } from "../../drizzle/schema/photos";
 import type { ApiAlbumFotka } from "../../src/shared/api-types";
 import type { Db } from "./db";
-import { klicZVerejneUrl, smazObjektR2, type R2Nastaveni } from "./r2-fotky";
+import { rozmeryDoOdpovedi } from "./obrazek-nahled";
+import { klicZVerejneUrl, smazObrazekR2, type R2Nastaveni } from "./r2-fotky";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -43,6 +44,7 @@ export function fotkaVypravyApi(radek: Photo): ApiAlbumFotka {
     expeditionId: radek.expeditionId,
     albumId: null,
     smazanoAt: radek.smazanoAt?.toISOString() ?? null,
+    ...rozmeryDoOdpovedi(radek.sirka, radek.vyska),
   };
 }
 
@@ -55,6 +57,7 @@ export function fotkaVlastniApi(radek: AlbaFotka): ApiAlbumFotka {
     expeditionId: null,
     albumId: radek.albumId,
     smazanoAt: radek.smazanoAt?.toISOString() ?? null,
+    ...rozmeryDoOdpovedi(radek.sirka, radek.vyska),
   };
 }
 
@@ -154,7 +157,7 @@ export async function trvaleSmazFotku(
   const klic =
     nastaveniR2 === null ? null : klicZVerejneUrl(url, nastaveniR2.publicBaseUrl);
   if (klic !== null && nastaveniR2 !== null) {
-    await smazObjektR2(nastaveniR2, klic);
+    await smazObrazekR2(nastaveniR2, klic);
   }
   if (nalezena.druh === "vyprava") {
     const smazane = await db

@@ -1,19 +1,17 @@
 import type { JSX } from "react";
+import VyberVrstva from "./VyberVrstva";
 
-/** Full-tile smrk (green) overlay when selected for download; border/ring on the parent tile. */
+/** Full-tile smrk overlay when selected for download. The inset ring sits on this layer so it stays above the wash. */
 export default function StahovaniVyberVrstva({
   vybrana,
 }: {
   vybrana: boolean;
 }): JSX.Element {
   return (
-    <span
-      aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 transition-opacity duration-[160ms] ease-out motion-reduce:transition-none ${
-        vybrana
-          ? "bg-smrk/45 opacity-100"
-          : "bg-smrk/0 opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:bg-smrk/15 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100"
-      }`}
+    <VyberVrstva
+      vybrana={vybrana}
+      vybranaTrida="bg-smrk/45 opacity-100 ring-2 ring-inset ring-smrk"
+      prazdnaTrida="bg-smrk/0 opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:bg-smrk/15 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100"
     />
   );
 }

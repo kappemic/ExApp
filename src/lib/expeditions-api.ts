@@ -1,3 +1,5 @@
+import { apiBase } from "./api-base";
+import { jeRecord } from "./api-odpoved";
 /**
  * Tenká read vrstva pro výpravy (Krok 4 – klient s BFF fallbackem).
  *
@@ -63,10 +65,6 @@ export type ExpeditionsUiStav = "loading" | "ready" | "prazdno" | "nedostupny";
 const PLATNE_STAVY: readonly string[] = ["volno", "skoro plno", "proběhlá"];
 const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
 
-function jeRecord(hodnota: unknown): hodnota is Record<string, unknown> {
-  return typeof hodnota === "object" && hodnota !== null && !Array.isArray(hodnota);
-}
-
 function jeExpedice(hodnota: unknown): hodnota is Expedition {
   if (!jeRecord(hodnota)) return false;
   if (typeof hodnota["id"] !== "string" || hodnota["id"].length === 0) return false;
@@ -86,6 +84,13 @@ function jeExpedice(hodnota: unknown): hodnota is Expedition {
   if (
     hodnota["trasaOdkaz"] !== undefined &&
     typeof hodnota["trasaOdkaz"] !== "string"
+  )
+    return false;
+  const organizatorId = hodnota["organizatorId"];
+  if (
+    organizatorId !== undefined &&
+    organizatorId !== null &&
+    typeof organizatorId !== "string"
   )
     return false;
   if (typeof hodnota["stav"] !== "string" || !PLATNE_STAVY.includes(hodnota["stav"])) return false;
@@ -135,11 +140,7 @@ function parseSnapshot(neznamySnapshot: unknown): ParsedSnapshot | null {
  * Základ BFF z veřejného `VITE_API_BASE_URL` (nikdy secret).
  * Prázdný řetězec = statický režim bez backendu → rovnou sync fallback.
  */
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
+
 
 function jeCeleKladne(
   hodnota: unknown,

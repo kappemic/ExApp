@@ -10,8 +10,13 @@ describe("FotkyStavPanel", () => {
     const panel = cti("src/components/fotky/FotkyStavPanel.tsx");
     expect(panel).toContain("data-fotky-stav-panel");
     expect(panel).toContain("fixed");
-    expect(panel).toContain("safe-area-inset-left");
-    expect(panel).toContain("safe-area-inset-bottom");
+    expect(panel).toContain("z-50");
+    expect(panel).toContain("createPortal");
+    const css = cti("src/index.css");
+    expect(css).toContain(".fotky-stav-panel");
+    expect(css).toContain("safe-area-inset-left");
+    expect(css).toContain("safe-area-inset-bottom");
+    expect(css).toContain("5.25rem");
     expect(panel).toContain("bg-papir");
     expect(panel).toContain("shadow-denik");
     expect(panel).toContain("bg-jantar");

@@ -3,7 +3,7 @@
  * their id is `expeditions.id` and their files stay in `photos`.
  * `users.id` is uuid. Migration: drizzle/migrations/0013_alba.sql.
  */
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
 export const alba = pgTable("alba", {
@@ -28,6 +28,9 @@ export const albaFotky = pgTable("alba_fotky", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /** NULL = visible; NOT NULL = in admin trash (Koš). */
   smazanoAt: timestamp("smazano_at", { withTimezone: true }),
+  /** Pixel size of the stored file after orientation is baked in. Null on older rows. */
+  sirka: integer("sirka"),
+  vyska: integer("vyska"),
 });
 
 export type Album = typeof alba.$inferSelect;

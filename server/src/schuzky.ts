@@ -38,10 +38,13 @@ export function toApiSchuzka(
   if (typeof radek.opakovani !== "string" || !jeOpakovani(radek.opakovani)) {
     return null;
   }
+  const cas = radek.cas ?? null;
+  if (cas !== null && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(cas)) return null;
   const schuzka: ApiSchuzka = {
     id: radek.id,
     nazev: radek.nazev,
     datum: radek.datum,
+    cas,
     mistnost: radek.mistnost ?? null,
     popis: radek.popis,
     opakovani: radek.opakovani,

@@ -5,7 +5,7 @@ interface Volba<T extends string> {
   popisek: string;
 }
 
-/** Segmented control shared by the view switch and the calendar mode. */
+/** Segmentový přepínač (C2): olivová mlha jako dráha, aktivní volba bílá. */
 export default function NahledPrepinac<T extends string>({
   ariaLabel,
   volby,
@@ -24,28 +24,27 @@ export default function NahledPrepinac<T extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`flex border border-[hsl(var(--foreground))] ${
-        roztahnout ? "w-full md:inline-flex md:w-auto" : "w-auto shrink-0"
+      className={`inline-flex max-w-full rounded-xl bg-mlha ${
+        roztahnout ? "w-full sm:w-auto sm:shrink-0" : "w-auto shrink-0"
       }`}
     >
-      {volby.map((volba, index) => {
+      {volby.map((volba) => {
         const jeAktivni = volba.id === aktivni;
-        const maPravyOkraj = index < volby.length - 1;
         return (
           <button
             key={volba.id}
             type="button"
             aria-pressed={jeAktivni}
             onClick={() => onZmena(volba.id)}
-            className={`nahled-segment min-h-[44px] flex-1 rounded-none px-4 font-condensed text-sm md:flex-none ${
-              maPravyOkraj ? "border-r border-[hsl(var(--foreground))]" : ""
+            className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded-xl px-4 text-sm select-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none ${
+              roztahnout ? "flex-1 sm:flex-none" : ""
             } ${
               jeAktivni
-                ? "na-inkoustu bg-[hsl(var(--ink))] text-[hsl(var(--ink-foreground))]"
-                : "nahled-invert bg-transparent text-[hsl(var(--foreground))]"
+                ? "bg-smrk font-semibold text-papir"
+                : "font-medium text-mech hover:text-inkoust"
             }`}
           >
-            <span className="nahled-segment-text">{volba.popisek}</span>
+            {volba.popisek}
           </button>
         );
       })}

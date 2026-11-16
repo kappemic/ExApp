@@ -28,6 +28,8 @@ idempotentní — opakovaný běh účty jen aktualizuje.
 | `test-aktivni@example.cz` | `aktivni-clen` | `aktivni_clen` | — | ne | `TEST_SEED_HESLO_AKTIVNI` |
 | `test-clen@example.cz` | `clen` | `clen` | — | ne | `TEST_SEED_HESLO_CLEN` |
 
+`test-vedouci@example.cz` je **hlavní admin** (`is_superadmin: true`, zároveň zůstává `is_admin`). Může udělovat admina i hlavního admina a upravovat cizí profily. Ostatní seed účty se v tom neliší od dřívějška.
+
 Přihlášení: web `/login`, nebo `POST /api/login { email, heslo }`.
 `test-aktivni@` má navíc účast na první proběhlé výpravě (`participants.status =
 ucastnil_se`), aby měl v statistikách/heatmapě data.
@@ -47,29 +49,28 @@ Zdroj pravdy pro práva: `src/config/roles.ts` (`smiNaVypravy` = členství
 | **Odstranit výpravu** | ano | ano | ne |
 | **Správa schůzek** (vytvořit/upravit/smazat) | ano | ano | ne |
 | **Strava párování + Odpojit + ruční km** (v Upravit, proběhlá) | ano | ano | ne |
-| Nahrát fotku (URL) | ano | ne | ne |
+| Nahrát fotku k proběhlé výpravě | ano | ano | ano |
 | Smazat fotku | ano | ne | ne |
-| **Admin členové** (`/admin/clenove`) | ano | ne | ne |
+| **Členové** (`/cleny`) | ano | ne | ne |
 | Vlastní statistiky / heatmapa | ano | ano | ano |
 
 Poznámky:
 - `smiNaVypravy` nečte `isAdmin` — jen aktivní členství (`aktivni_clen`).
   Vedoucí splňuje obě podmínky zároveň (aktivní členství + `isAdmin`).
 - Správa výprav i schůzek je za dual-guardem `vyzadujSpravceVyprav`
-  (= členství `aktivni_clen`), takže **aktivní člen vidí Upravit, Uzavřít,
-  Strava párování i ruční zápis km** stejně jako vedoucí.
-- Fotky (nahrání i smazání) i sekce Admin členové jsou za `vyzadujAdmina`
-  — tam stačí aktivní členství ONO, potřebuje se `is_admin`.
+  (= `is_admin` NEBO členství `aktivni_clen`), takže **aktivní člen vidí
+  Upravit, Uzavřít, Strava párování i ruční zápis km** stejně jako vedoucí.
+- Nahrání fotky je za `vyzadujPrihlaseni`, stačí tedy běžný člen.
+- Smazání fotky i sekce Členové jsou za `vyzadujAdmina`, aktivní členství
+  nestačí, je potřeba `is_admin`.
 - Ruční zápis km i párování ze Stravy jdou jen u výpravy ve stavu `proběhlá`
   (jinak 409 `VYPRAVA_UZAVRENA`).
 - Sekce „Ušlé na výpravě" v detailu je jen u `proběhlá`.
 
 ## Prověření
 
-```powershell
-$h = New-Object System.Net.Http.HttpClient
-# přihlášení a přečtení /api/me — ověř role/celnegstvio/isAdmin
-```
+Přihlas se přes `POST /api/login` a v odpovědi `GET /api/me` zkontroluj
+`role`, `clenstvi`, `funkce` a `isAdmin`.
 
 Důkazy posledního běhu (všechny 3 účty `HTTP 200`):
 

@@ -16,13 +16,13 @@ import {
 } from "../../lib/alba-api";
 import { nazevSouboruAlba, nazevSouboruVypravy } from "../../lib/stahni-fotku";
 import FotkyLightboxNav from "./FotkyLightboxNav";
+import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "./LightboxProhlizeni";
+import PostupnaFotka from "./PostupnaFotka";
 import StahniFotkuTlacitko from "./StahniFotkuTlacitko";
-import { fotkyHoverBgJantar, fotkyHoverBgLinka, fotkyHoverBgSmrk, fotkyTlacitkoZaklad } from "./fotky-ui";
+import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "./fotky-ui";
 
 const FOCUSOVATELNE =
   'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
-
-const TLACITKO_KRUH = `${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} rounded-full border-2 border-inkoust bg-papir text-inkoust`;
 
 interface FotkaDialogProps {
   album: Pick<ApiAlbum, "id" | "druh" | "expeditionId" | "nazev">;
@@ -39,6 +39,8 @@ interface FotkaDialogProps {
   onSmazatNatrvaloAktualni?: () => void;
   /** When a confirm dialog is open above the lightbox, ignore Escape/backdrop close. */
   drzOtevrene?: boolean;
+  /** Journal chrome: tokens, square corners, 220 ms enter/exit. Escape still closes at once. */
+  denik?: boolean;
 }
 
 /**
@@ -58,6 +60,7 @@ export default function FotkaDialog({
   onObnovitAktualni,
   onSmazatNatrvaloAktualni,
   drzOtevrene = false,
+  denik = false,
 }: FotkaDialogProps): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
   const zavritRef = useRef<HTMLButtonElement>(null);
@@ -68,11 +71,38 @@ export default function FotkaDialog({
   const drzOtevreneRef = useRef(drzOtevrene);
   const [rozbita, setRozbita] = useState<boolean>(false);
   const fotka = fotky[index];
+  const srcProhlizeni = fotka === undefined ? "" : srcFotkyAlba(album, fotka);
+  const prohlizeni = useFotkaProhlizeni(srcProhlizeni, fotka?.createdAt ?? null);
   onZavritRef.current = onZavrit;
   onIndexRef.current = onIndex;
   indexRef.current = index;
   delkaRef.current = fotky.length;
   drzOtevreneRef.current = drzOtevrene;
+  /*
+   * Deník: zavření ukazatelem přehraje vstup pozpátku 220 ms (`nahled-zavira`)
+   * a teprve potom odmountuje. Escape zavře hned. Bez `deníku` se zavře hned.
+   */
+  const ZAVRENI_MS = 220;
+  const zaviraRef = useRef<boolean>(false);
+  const zavriCasovacRef = useRef<number | null>(null);
+  const [zavira, setZavira] = useState<boolean>(false);
+  const zavriRef = useRef<(hned?: boolean) => void>(() => {});
+  zavriRef.current = (hned = false): void => {
+    if (zaviraRef.current) return;
+    const snizitPohyb =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!denik || hned || snizitPohyb) {
+      onZavritRef.current();
+      return;
+    }
+    zaviraRef.current = true;
+    setZavira(true);
+    zavriCasovacRef.current = window.setTimeout(() => {
+      zavriCasovacRef.current = null;
+      onZavritRef.current();
+    }, ZAVRENI_MS);
+  };
 
   useEffect(() => {
     setRozbita(false);
@@ -93,7 +123,7 @@ export default function FotkaDialog({
         if (drzOtevreneRef.current) return;
         udalost.preventDefault();
         udalost.stopPropagation();
-        onZavritRef.current();
+        zavriRef.current(true);
         return;
       }
       if (udalost.key === "ArrowLeft" && indexRef.current > 0) {
@@ -137,7 +167,7 @@ export default function FotkaDialog({
 
   if (fotka === undefined || typeof document === "undefined") return null;
 
-  const src = srcFotkyAlba(album, fotka);
+  const src = srcProhlizeni;
   const streamAlbum = album.druh === "kos" ? albumProFotku(fotka) : album;
   const urlStahnuti = urlSouboruAlba(streamAlbum, fotka.id);
   const nazevStahnuti =
@@ -146,7 +176,7 @@ export default function FotkaDialog({
       : nazevSouboruAlba(streamAlbum.id, fotka.id);
   const maPredchozi = index > 0;
   const maDalsi = index < fotky.length - 1;
-  const tlacitkoAkce = `${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} rounded-full border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust disabled:opacity-60`;
+  const tlacitkoAkce = `${fotkyTlacitkoZaklad} bez-prejeti nahled-press border-0 bg-transparent px-2 text-sm font-bold text-papir shadow-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] disabled:opacity-40`;
 
   function zastav(udalost: MouseEvent): void {
     udalost.stopPropagation();
@@ -154,7 +184,7 @@ export default function FotkaDialog({
 
   function naPozadi(udalost: MouseEvent<HTMLDivElement>): void {
     if (drzOtevrene) return;
-    if (udalost.target === udalost.currentTarget) onZavrit();
+    if (udalost.target === udalost.currentTarget) zavriRef.current();
   }
 
   return createPortal(
@@ -163,36 +193,32 @@ export default function FotkaDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Fotka z alba ${album.nazev}`}
-      className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-inkoust/85"
+      className={`nocturne lightbox-pozadi fixed inset-0 z-[100] flex flex-col overscroll-contain${
+        denik ? ` nahled-modal nahled-ovladani${zavira ? " nahled-zavira" : ""}` : ""
+      }`}
       onMouseDown={naPozadi}
     >
       <div
-        className="flex items-center justify-between gap-3 border-b-2 border-inkoust bg-papir px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-inkoust"
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-1 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-[max(0.5rem,env(safe-area-inset-top))] text-inkoust sm:gap-2 sm:px-[max(0.75rem,env(safe-area-inset-left))] sm:pr-[max(0.75rem,env(safe-area-inset-right))]"
         onMouseDown={zastav}
       >
-        <p className="text-sm font-bold tabular-nums">
+        <p className={`${fotkyLightboxPocet} shrink-0`}>
           {index + 1} / {fotky.length}
         </p>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="pointer-events-auto flex min-w-0 flex-col items-end gap-1">
+          <div className={fotkyLightboxRadek}>
+          <LightboxNastroje stav={prohlizeni} />
           <StahniFotkuTlacitko url={urlStahnuti} nazevSouboru={nazevStahnuti} />
-          {isAdmin && jeKos && onObnovitAktualni !== undefined ? (
-            <button
-              type="button"
-              onClick={onObnovitAktualni}
-              disabled={mazeSe}
-              className={`${tlacitkoAkce} ${fotkyHoverBgSmrk}`}
-            >
-              Obnovit
-            </button>
-          ) : null}
           {isAdmin && jeKos && onSmazatNatrvaloAktualni !== undefined ? (
             <button
               type="button"
               onClick={onSmazatNatrvaloAktualni}
               disabled={mazeSe}
-              className={`${tlacitkoAkce} ${fotkyHoverBgJantar}`}
+              aria-label="Smazat natrvalo"
+              title="Smazat natrvalo"
+              className={fotkyLightboxIkona}
             >
-              Smazat natrvalo
+              <IkonaKos />
             </button>
           ) : null}
           {isAdmin && !jeKos && onSmazatAktualni !== undefined ? (
@@ -200,26 +226,41 @@ export default function FotkaDialog({
               type="button"
               onClick={onSmazatAktualni}
               disabled={mazeSe}
-              className={`${tlacitkoAkce} ${fotkyHoverBgJantar}`}
+              aria-label="Smazat"
+              title="Smazat"
+              className={fotkyLightboxIkona}
             >
-              Smazat
+              <IkonaKos />
             </button>
           ) : null}
           <button
             ref={zavritRef}
             type="button"
-            onClick={onZavrit}
+            onClick={() => zavriRef.current()}
             disabled={drzOtevrene}
             aria-label="Zavřít fotku"
             title={drzOtevrene ? "Nejdřív dokonči potvrzení" : undefined}
-            className={`${TLACITKO_KRUH} px-3 text-sm font-bold disabled:opacity-60`}
+            className={`${fotkyLightboxIkona} text-xl font-extrabold leading-none`}
           >
-            Zavřít
+            <span aria-hidden="true">×</span>
           </button>
+          </div>
+          {isAdmin && jeKos && onObnovitAktualni !== undefined ? (
+            <button
+              type="button"
+              onClick={onObnovitAktualni}
+              disabled={mazeSe}
+              className={tlacitkoAkce}
+            >
+              Obnovit
+            </button>
+          ) : null}
         </div>
+        <LightboxInfo stav={prohlizeni} />
       </div>
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center pb-[env(safe-area-inset-bottom)]"
+        data-lightbox-jeviste
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-16"
         onMouseDown={naPozadi}
       >
         {rozbita || src.length === 0 ? (
@@ -231,11 +272,18 @@ export default function FotkaDialog({
             Fotku se nepodařilo načíst.
           </p>
         ) : (
-          <img
+          <PostupnaFotka
+            prednost
+            zamlzeni
             src={src}
             alt={`Fotka ${index + 1} z ${fotky.length}, album ${album.nazev}`}
-            className="max-h-full max-w-full object-contain"
+            className={`max-h-full max-w-full object-contain ${prohlizeni.zoom ? "touch-none cursor-grab active:cursor-grabbing" : ""}`}
+            style={prohlizeni.stylObrazku}
             onMouseDown={zastav}
+            onPointerDown={prohlizeni.naPointerDown}
+            onPointerMove={prohlizeni.naPointerMove}
+            onPointerUp={prohlizeni.naPointerUp}
+            onPointerCancel={prohlizeni.naPointerUp}
             onError={() => {
               setRozbita(true);
             }}
@@ -255,5 +303,27 @@ export default function FotkaDialog({
       </div>
     </div>,
     document.body,
+  );
+}
+
+function IkonaKos(): JSX.Element {
+  return (
+    <svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path
+        d="M4.5 7h15M9 7V5.2A1.2 1.2 0 0 1 10.2 4h3.6A1.2 1.2 0 0 1 15 5.2V7M7 7l.8 12.2A1.2 1.2 0 0 0 9 20.2h6a1.2 1.2 0 0 0 1.2-1L17 7"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import {
   fotkyHoverBgSmrk,
-  fotkyHoverBgSmrkPlne,
+  fotkyHoverBgOkrPlne,
   fotkyTlacitkoZaklad,
 } from "./fotky-ui";
 
@@ -32,38 +32,78 @@ export default function FotkyStahovaciHlavicka({
 }: FotkyStahovaciHlavickaProps): JSX.Element | null {
   if (!maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} w-full rounded-full border-2 px-3 text-sm font-bold disabled:opacity-60 sm:w-auto`;
-  const akcni = `${zaklad} border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-smrk/35 ${fotkyHoverBgSmrk}`;
-  const akcniPlne = `${zaklad} border-inkoust bg-smrk text-papir shadow-denik ${fotkyHoverBgSmrkPlne}`;
-  const neutralni = `${zaklad} border-inkoust bg-papir text-inkoust shadow-denik`;
+  const zaklad = `${fotkyTlacitkoZaklad} rounded-lg border-2 px-3 text-sm font-bold disabled:opacity-60`;
+  const akcni = `${zaklad} w-full border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-smrk/35 sm:w-auto ${fotkyHoverBgSmrk}`;
+  const akcniPlne = `${zaklad} w-full border-okr bg-okr text-inkoust shadow-denik sm:w-auto ${fotkyHoverBgOkrPlne}`;
+  const neutralni = `${zaklad} w-full border-inkoust bg-papir text-inkoust shadow-denik sm:w-auto`;
 
   if (!stahovaciRezim) {
     return (
-      <button type="button" onClick={onZacniStahovani} className={akcni}>
-        Stáhnout
+      <button
+        type="button"
+        onClick={onZacniStahovani}
+        aria-label="Stáhnout"
+        title="Stáhnout"
+        className={`${fotkyTlacitkoZaklad} nahled-press h-11 w-11 rounded-lg border-2 border-okr bg-okr p-0 text-inkoust shadow-denik`}
+      >
+        <IkonaStazeni />
       </button>
     );
   }
 
   return (
     <div
-      className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:min-w-[11rem]"
+      className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end"
       data-fotky-stahovaci-akce
+      role="group"
+      aria-label="Stahování fotek"
     >
-      <button type="button" onClick={onZrusStahovani} disabled={stahujeSe} className={neutralni}>
+      <button
+        type="button"
+        onClick={onZrusStahovani}
+        disabled={stahujeSe}
+        className={`${neutralni} order-2 sm:order-1`}
+      >
         Zrušit
-      </button>
-      <button type="button" onClick={onStahnoutVse} disabled={stahujeSe} className={akcniPlne}>
-        {stahujeSe ? "Ukládám…" : "Stáhnout vše"}
       </button>
       <button
         type="button"
         onClick={onStahnoutVybrane}
         disabled={vybranyPocet === 0 || stahujeSe}
-        className={akcni}
+        className={`${akcniPlne} order-1 col-span-2 sm:order-3`}
       >
-        Stáhnout vybrané
+        {stahujeSe ? "Ukládám…" : "Stáhnout vybrané"}
+      </button>
+      <button
+        type="button"
+        onClick={onStahnoutVse}
+        disabled={stahujeSe}
+        className={`${akcni} order-3 sm:order-2`}
+      >
+        Stáhnout vše
       </button>
     </div>
+  );
+}
+
+function IkonaStazeni(): JSX.Element {
+  return (
+    <svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path
+        d="M12 4v10M8 10.5 12 14.5 16 10.5M5 19h14"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

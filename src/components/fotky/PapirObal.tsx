@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from "react";
+import PostupnaFotka from "./PostupnaFotka";
 
 const LINIE =
   "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)";
@@ -33,8 +34,8 @@ export default function PapirObal({
       style={{ backgroundImage: LINIE }}
     >
       {ukaz ? (
-        <img
-          src={src}
+        <PostupnaFotka
+          src={src ?? ""}
           alt={alt}
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover"

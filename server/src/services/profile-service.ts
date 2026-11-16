@@ -24,6 +24,7 @@ export interface ProfilDbPatch {
   trida?: string;
   avatarUrl?: string | null;
   bio?: string;
+  oblibenaBarva?: string;
   narozeniny?: string | null;
   updatedAt: Date;
 }
@@ -44,6 +45,7 @@ export function jeProfilBezZmen(vstup: CistyProfilUpdate): boolean {
     vstup.trida === undefined &&
     vstup.avatarUrl === undefined &&
     vstup.bio === undefined &&
+    vstup.oblibenaBarva === undefined &&
     vstup.narozeniny === undefined
   );
 }
@@ -64,6 +66,7 @@ export function sestavProfilDbPatch(vstup: CistyProfilUpdate): ProfilDbPatch {
   if (vstup.trida !== undefined) patch.trida = vstup.trida;
   if (vstup.avatarUrl !== undefined) patch.avatarUrl = vstup.avatarUrl;
   if (vstup.bio !== undefined) patch.bio = vstup.bio;
+  if (vstup.oblibenaBarva !== undefined) patch.oblibenaBarva = vstup.oblibenaBarva;
   if (vstup.narozeniny !== undefined) patch.narozeniny = vstup.narozeniny;
   return patch;
 }

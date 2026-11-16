@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type JSX } from "react";
+import { formatKmNaDesetinu } from "../../lib/format-cisla";
 import {
   ulozAktivituRucne,
   type RucniAktivitaVysledek,
@@ -27,10 +28,6 @@ export interface StravaParovaniProps {
 }
 
 type Faze = "nacitani" | "hotovo" | "chyba";
-
-function formatKm(km: number): string {
-  return `${String(km.toFixed(1)).replace(".", ",")} km`;
-}
 
 function formatDatum(datum: string): string {
   const cas = Date.parse(datum);
@@ -167,7 +164,7 @@ export default function StravaParovani({
       return;
     }
     setZprava(
-      `Spárováno: ${formatKm(aktivita.km)} · +${String(aktivita.prevyseniM)} m.`,
+      `Spárováno: ${formatKmNaDesetinu(aktivita.km)} · +${String(aktivita.prevyseniM)} m.`,
     );
     setSparovanoId(aktivita.id);
     setMistniKm(aktivita.km);
@@ -291,7 +288,7 @@ export default function StravaParovani({
       return;
     }
     setRucniZprava(
-      `Zapsáno bez Stravy: ${formatKm(vysledek.data.aktivita.km ?? 0)} · +${String(vysledek.data.aktivita.prevyseniM ?? 0)} m.`,
+      `Zapsáno bez Stravy: ${formatKmNaDesetinu(vysledek.data.aktivita.km ?? 0)} · +${String(vysledek.data.aktivita.prevyseniM ?? 0)} m.`,
     );
     setRucneSparovano(true);
     setMistniKm(vysledek.data.aktivita.km);
@@ -316,7 +313,7 @@ export default function StravaParovani({
       <button
         type="button"
         onClick={akce}
-        className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold"
+        className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold"
       >
         Zkusit znovu
       </button>
@@ -401,7 +398,7 @@ export default function StravaParovani({
           void potvrdit(aktivita);
         };
   const stavKmText: string =
-    mistniKm !== null ? ` (${formatKm(mistniKm)})` : "";
+    mistniKm !== null ? ` (${formatKmNaDesetinu(mistniKm)})` : "";
   const stavTrasyText: string =
     zdroj === "strava"
       ? `připojeno – Strava aktivita${stavKmText}`
@@ -423,7 +420,7 @@ export default function StravaParovani({
           <button
             type="button"
             onClick={() => void obnovit()}
-            className="min-h-[44px] min-w-[44px] rounded-full px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
+            className="min-h-[44px] min-w-[44px] rounded-xl px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
           >
             Obnovit
           </button>
@@ -447,7 +444,7 @@ export default function StravaParovani({
             disabled={odpojujeSe}
             title="Odpojit Strava aktivitu od výpravy"
             aria-label="Odpojit aktivitu od výpravy"
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
           >
             {odpojujeSe ? "Odpojuji…" : "Odpojit aktivitu"}
           </button>
@@ -467,7 +464,7 @@ export default function StravaParovani({
             disabled={odpojujeSe}
             title="Smazat ručně zapsané kilometry z výpravy"
             aria-label="Smazat ruční zápis z výpravy"
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
           >
             {odpojujeSe ? "Mažu…" : "Smazat ruční zápis"}
           </button>
@@ -548,7 +545,7 @@ export default function StravaParovani({
                   </span>
                 </div>
                 <p className="mt-1 text-sm tabular-nums text-inkoust/75">
-                  {formatKm(navrh.km)} · +{String(navrh.prevyseniM)} m ·{" "}
+                  {formatKmNaDesetinu(navrh.km)} · +{String(navrh.prevyseniM)} m ·{" "}
                   {formatDatum(navrh.datum)}
                 </p>
                 {!jePripojena && (
@@ -558,7 +555,7 @@ export default function StravaParovani({
                       onClick={() => void potvrdit(navrh)}
                       disabled={potvrzujeSe !== null}
                       title="Potvrdit spárování aktivity k výpravě"
-                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:opacity-60"
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:opacity-60"
                     >
                       {potvrzujeSe === navrh.id ? "Páruji…" : "Potvrdit"}
                     </button>
@@ -567,7 +564,7 @@ export default function StravaParovani({
                       onClick={() => zamitnout(navrh.id)}
                       disabled={potvrzujeSe !== null}
                       title="Zamítnout navrženou aktivitu"
-                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                     >
                       Zamítnout
                     </button>
@@ -599,7 +596,7 @@ export default function StravaParovani({
 
     <section
       aria-label="Ruční zadání bez Stravy"
-      className="mt-4 rounded-2xl border-2 border-dashed border-inkoust/40 bg-papir/60 p-4"
+      className="mt-4 rounded-2xl bg-mlha/60 p-4 sm:p-5"
     >
       <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/60">
         Bez Stravy: zapsat kilometry ručně
@@ -637,7 +634,7 @@ export default function StravaParovani({
         onClick={() => void ulozitRucne()}
         disabled={ukladaSe}
         title="Uložit kilometry bez Stravy"
-        className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:opacity-60"
+        className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:opacity-60"
       >
         {ukladaSe ? "Ukládám…" : "Uložit bez Stravy"}
       </button>

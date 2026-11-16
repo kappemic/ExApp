@@ -7,6 +7,20 @@
  * Strict TypeScript, žádný `any`.
  */
 
+/** „10:00" — jen hodina, pro navazující zprávu téhož autora ve stejný den. */
+export function formatJenCas(iso: string): string {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat("cs-CZ", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(dt);
+  } catch {
+    return "";
+  }
+}
+
 /** „1. 10. 10:00" — krátký český formát času zprávy / položky nástěnky. */
 export function formatCasKratce(iso: string): string {
   const dt = new Date(iso);

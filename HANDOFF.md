@@ -1,5 +1,7 @@
 ﻿# HANDOFF — ExApp: Fáze 4 HOTOVA (žebříčky + statistiky + heatmapa; Strava OAuth skipnuta)
 
+> Historický záznam vln do 15. 10. 2026, ne aktuální stav projektu. Novější práci (např. zpěvník, chat skupiny) tu nehledej, aktuální stav je v kódu a v `git log`.
+
 Datum: 2026-10-11 | Pracovní adresář: `C:\dev\ExApp` | Branch: `main`
 Předchozí HEAD: `c4c509d` (vlna 3D role + škola/třída). Změny této vlny
 NEJSOU commitnuté (4 modifikované + 6 nových, viz §4) — k rozdělení do

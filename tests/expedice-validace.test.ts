@@ -4,6 +4,7 @@
  * pravidla i hlášky z kontraktu (VALIDACE + VALIDACNI_ZPRAVY).
  */
 import { describe, expect, it } from "vitest";
+import { dochazkaKryjePrihlasky } from "../server/src/vypravy";
 import {
   validujUpravuExpedice,
   validujUzavreni,
@@ -375,5 +376,17 @@ describe("validujUpravuExpedice — datumDo hranice (doplnění Kroku 3)", () =>
     const vysledek = validujUpravuExpedice({ datumDo: "" });
     expect(vysledek.uspech).toBe(true);
     expect(vysledek.data?.datumDo).toBe(null);
+  });
+});
+
+describe("dochazkaKryjePrihlasky", () => {
+  it("projde, když je každý přihlášený v docházce právě jednou", () => {
+    expect(dochazkaKryjePrihlasky(["a", "b"], ["b", "a"])).toBe(true);
+  });
+
+  it("neprojde, když někdo chybí nebo je tam dvakrát", () => {
+    expect(dochazkaKryjePrihlasky(["a", "b"], ["a"])).toBe(false);
+    expect(dochazkaKryjePrihlasky(["a", "b"], ["a", "a"])).toBe(false);
+    expect(dochazkaKryjePrihlasky(["a"], ["a", "a"])).toBe(false);
   });
 });

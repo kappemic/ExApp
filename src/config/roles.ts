@@ -218,3 +218,14 @@ export function chybaKombinace3D(profil: ClenskyProfil): string | null {
 export function smiNaVypravy(profil: ClenskyProfil): boolean {
   return profil.clenstvi === "aktivni_clen";
 }
+
+/**
+ * Member directory phone numbers. A plain member does not see them.
+ * Active members, rada, vedeni, admins and superadmins do.
+ */
+export function vidiTelefonyClenu(
+  profil: Pick<ClenskyProfil, "clenstvi" | "isAdmin"> & { isSuperadmin?: boolean },
+): boolean {
+  if (profil.isAdmin || profil.isSuperadmin === true) return true;
+  return profil.clenstvi === "aktivni_clen";
+}

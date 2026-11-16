@@ -1,13 +1,17 @@
 import { useEffect, useState, type FormEvent, type JSX } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import LogoKlubu from "../components/LogoKlubu";
+import VstupSNabidkou from "../components/VstupSNabidkou";
 import { useAuth, type PoleRegistrace } from "../hooks/useAuth";
 import { nactiSkolyTridy } from "../lib/skoly-tridy";
-import { VALIDACE, normalizujKod } from "../shared/api-types";
+import { VALIDACE, VALIDACNI_ZPRAVY, normalizujKod } from "../shared/api-types";
+import { VYCHOZI_KOD_ZEME, normalizujTelefon, type KodZeme } from "../shared/telefon";
+import TelefonPole from "../components/profil/TelefonPole";
 
 const VSTUP_TRIDY =
-  "min-h-[44px] w-full rounded-md border-2 border-linka bg-white px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+  "min-h-[44px] w-full rounded-xl border border-pole bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
 const VSTUP_CHYBA_TRIDY =
-  "min-h-[44px] w-full rounded-md border-2 border-red-800 bg-white px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 focus:border-red-800 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800";
+  "min-h-[44px] w-full rounded-xl border-2 border-red-800 bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 focus:border-red-800 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800";
 
 type ChybyPoli = Partial<Record<PoleRegistrace, string>>;
 
@@ -46,6 +50,7 @@ export default function RegisterPage(): JSX.Element {
   const [prijmeni, setPrijmeni] = useState("");
   const [email, setEmail] = useState("");
   const [telefon, setTelefon] = useState("");
+  const [kodZeme, setKodZeme] = useState<KodZeme>(VYCHOZI_KOD_ZEME);
   const [discordNick, setDiscordNick] = useState("");
   const [skola, setSkola] = useState("");
   const [trida, setTrida] = useState("");
@@ -78,11 +83,18 @@ export default function RegisterPage(): JSX.Element {
     if (odesilaSe) return;
     setOdesilaSe(true);
     setFormChyba(null);
+    const telefonVysledek = normalizujTelefon(telefon, kodZeme);
+    if (!telefonVysledek.ok) {
+      setChyby({ telefon: VALIDACNI_ZPRAVY.telefonNeplatny });
+      setFormChyba("Zkontroluj zvýrazněná pole.");
+      setOdesilaSe(false);
+      return;
+    }
     const vysledek = await register({
       jmeno,
       prijmeni: prijmeni.trim().length === 0 ? undefined : prijmeni,
       email,
-      telefon: telefon.trim().length === 0 ? null : telefon,
+      telefon: telefonVysledek.e164,
       discordNick: discordNick.trim().length === 0 ? null : discordNick,
       skola: skola.trim(),
       trida: trida.trim(),
@@ -100,8 +112,13 @@ export default function RegisterPage(): JSX.Element {
 
   return (
     <main className="mx-auto w-full max-w-md px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
-      <p className="text-sm font-medium text-mech">ExApp · registrace</p>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Registrace</h1>
+      <div className="flex items-center gap-4">
+        <LogoKlubu velikost="lg" />
+        <div className="min-w-0">
+          <p className="font-condensed text-sm font-medium text-mech">ExApp · registrace</p>
+          <h1 className="font-expanded mt-0.5 text-3xl font-extrabold tracking-tight">Registrace</h1>
+        </div>
+      </div>
       <p className="mt-2 text-base text-inkoust/75">
         K založení účtu potřebuješ pozvánkový kód od vedoucí. Jeden kód platí 10
         minut pro všechny, můžeš ho použít i s ostatními.
@@ -186,19 +203,18 @@ export default function RegisterPage(): JSX.Element {
         </Pole>
 
         <Pole id="registrace-telefon" label="Telefon" chyba={chyby.telefon}>
-          <input
+          <TelefonPole
             id="registrace-telefon"
             name="telefon"
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            value={telefon}
-            onChange={(e) => setTelefon(e.target.value)}
-            aria-invalid={chyby.telefon !== undefined}
-            aria-describedby={chyby.telefon !== undefined ? "registrace-telefon-chyba" : undefined}
-            placeholder="+420 777 123 456"
-            maxLength={VALIDACE.telefonMaxDelka}
-            className={chyby.telefon !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+            hodnota={telefon}
+            kodZeme={kodZeme}
+            onZmena={(dalsi, zeme) => {
+              setTelefon(dalsi);
+              setKodZeme(zeme);
+            }}
+            neplatny={chyby.telefon !== undefined}
+            popisChybyId={chyby.telefon !== undefined ? "registrace-telefon-chyba" : undefined}
+            vstupTrida={chyby.telefon !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
           />
         </Pole>
 
@@ -223,53 +239,33 @@ export default function RegisterPage(): JSX.Element {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Pole id="registrace-skola" label="Škola" chyba={chyby.skola}>
-            <>
-              <input
-                id="registrace-skola"
-                name="skola"
-                type="text"
-                autoComplete="organization"
-                enterKeyHint="next"
-                list="registrace-skoly-nabidka"
-                value={skola}
-                onChange={(e) => setSkola(e.target.value)}
-                aria-invalid={chyby.skola !== undefined}
-                aria-describedby={chyby.skola !== undefined ? "registrace-skola-chyba" : undefined}
-                placeholder="Např. ZŠ Lesní"
-                maxLength={VALIDACE.skolaMaxDelka}
-                className={chyby.skola !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
-              />
-              <datalist id="registrace-skoly-nabidka">
-                {skolySeznam.map((nabidka) => (
-                  <option key={nabidka} value={nabidka} />
-                ))}
-              </datalist>
-            </>
+            <VstupSNabidkou
+              id="registrace-skola"
+              name="skola"
+              value={skola}
+              onChange={setSkola}
+              nabidky={skolySeznam}
+              placeholder="Např. ZŠ Lesní"
+              maxLength={VALIDACE.skolaMaxDelka}
+              className={chyby.skola !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+              neplatny={chyby.skola !== undefined}
+              popisId={chyby.skola !== undefined ? "registrace-skola-chyba" : undefined}
+            />
           </Pole>
 
           <Pole id="registrace-trida" label="Třída" chyba={chyby.trida}>
-            <>
-              <input
-                id="registrace-trida"
-                name="trida"
-                type="text"
-                autoComplete="off"
-                enterKeyHint="next"
-                list="registrace-tridy-nabidka"
-                value={trida}
-                onChange={(e) => setTrida(e.target.value)}
-                aria-invalid={chyby.trida !== undefined}
-                aria-describedby={chyby.trida !== undefined ? "registrace-trida-chyba" : undefined}
-                placeholder="Např. 5.A"
-                maxLength={VALIDACE.tridaMaxDelka}
-                className={chyby.trida !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
-              />
-              <datalist id="registrace-tridy-nabidka">
-                {tridySeznam.map((nabidka) => (
-                  <option key={nabidka} value={nabidka} />
-                ))}
-              </datalist>
-            </>
+            <VstupSNabidkou
+              id="registrace-trida"
+              name="trida"
+              value={trida}
+              onChange={setTrida}
+              nabidky={tridySeznam}
+              placeholder="Např. 5.A"
+              maxLength={VALIDACE.tridaMaxDelka}
+              className={chyby.trida !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+              neplatny={chyby.trida !== undefined}
+              popisId={chyby.trida !== undefined ? "registrace-trida-chyba" : undefined}
+            />
           </Pole>
         </div>
 
@@ -294,7 +290,7 @@ export default function RegisterPage(): JSX.Element {
               aria-pressed={ukazatHeslo}
               aria-label={ukazatHeslo ? "Skrýt heslo" : "Zobrazit heslo"}
               onClick={() => setUkazatHeslo((v) => !v)}
-              className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-linka bg-papir px-3 text-sm font-bold transition-colors hover:border-inkoust motion-reduce:transition-none"
+              className="bez-prejeti nahled-press inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-linka bg-papir px-3 text-sm font-bold hover:-translate-y-px hover:border-inkoust hover:bg-smrk/[0.08] motion-reduce:hover:translate-y-0"
             >
               <span aria-hidden="true">{ukazatHeslo ? "⋯" : "👁"}</span>
             </button>
@@ -324,7 +320,7 @@ export default function RegisterPage(): JSX.Element {
         <button
           type="submit"
           disabled={odesilaSe}
-          className="mt-1 inline-flex min-h-[44px] w-full items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2.5 text-base font-bold text-papir transition-colors hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+          className="nahled-press mt-1 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 py-2.5 text-base font-bold text-inkoust transition-colors hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
         >
           {odesilaSe ? "Zakládám účet…" : "Zaregistrovat se"}
         </button>

@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { createPortal } from "react-dom";
 import {
   nadpisOperaceFotek,
   popisekStavuPolozky,
@@ -34,19 +35,15 @@ export default function FotkyStavPanel({
   const progressPct =
     polozky.length > 0 ? Math.round((hotovo / polozky.length) * 100) : 0;
 
-  return (
+  const panel = (
     <aside
       role="status"
       aria-live="polite"
       aria-busy={probiha}
       data-fotky-stav-panel
       data-rezim={rezim}
-      className="pointer-events-none fixed z-40 max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-lg border-2 border-inkoust bg-papir/95 shadow-denik backdrop-blur-sm"
-      style={{
-        left: "max(0.75rem, env(safe-area-inset-left, 0px))",
-        bottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))",
-        backgroundImage: LINIE,
-      }}
+      className="fotky-stav-panel pointer-events-none fixed z-50 max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-lg border-2 border-inkoust bg-papir/95 shadow-denik backdrop-blur-sm"
+      style={{ backgroundImage: LINIE }}
     >
       <div className="border-b border-inkoust/15 bg-papir/90 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
@@ -86,6 +83,9 @@ export default function FotkyStavPanel({
       </ul>
     </aside>
   );
+
+  if (typeof document === "undefined") return panel;
+  return createPortal(<div className="nocturne contents">{panel}</div>, document.body);
 }
 
 function popisekRadku(polozka: PolozkaStavuFotek, rezim: RezimOperaceFotek): string {

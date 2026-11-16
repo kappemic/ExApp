@@ -1,5 +1,8 @@
-import { useEffect, useState, type JSX } from "react";
-import { dekodujPolyline } from "../../lib/polyline";
+import { apiBase } from "../../lib/api-base";
+import { formatKmNaDesetinu } from "../../lib/format-cisla";
+import { useEffect, useRef, useState, type JSX } from "react";
+import { sestavPodkladTrasy } from "../../lib/podklad-trasy";
+import { dekodujPolyline, type Souradnice } from "../../lib/polyline";
 import { getMojeStatistiky } from "../../lib/statistiky-api";
 import {
   expediceDetailPath,
@@ -9,14 +12,8 @@ import type { ApiAktivita, ApiExpedice } from "../../shared/api-types";
 
 export interface ExpeditionTrasaPrehledProps {
   expeditionId: string;
-  /** Jen proběhlá má smysl hledat kilometry; jinde jen počet. */
+  /** Kilometry a převýšení patří jen k výpravě po termínu. */
   probehla: boolean;
-  /** Počet účastníků z kroniky (read-only, bez tlačítek). */
-  pocetUcastniku: number;
-}
-
-function formatKm(km: number): string {
-  return `${String(km.toFixed(1)).replace(".", ",")} km`;
 }
 
 /** Přehled jedné výpravy pro všechny — i kdo na ní nebyl (Krok 20). */
@@ -29,11 +26,7 @@ interface UsleData {
   mujStav: ApiAktivita["status"] | null;
 }
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
+
 
 /**
  * Čte veřejný detail výpravy (`GET /api/expeditions/:id`) + vlastní stav
@@ -76,7 +69,7 @@ async function nactiUsle(expeditionId: string): Promise<UsleData> {
     // tiché — přehled pak ukáže „nezapsáno", nikdy prázdnou obrazovku.
   }
 
-  // Jen pro odznak „Navštívil jsem / Přihlášen" — km už máme shora.
+  // Jen pro odznak „Trasa / Přihlášen" — km už máme shora.
   const moje = await getMojeStatistiky();
   if (moje.source === "db") {
     const zaznam = moje.data.aktivity.find(
@@ -87,33 +80,86 @@ async function nactiUsle(expeditionId: string): Promise<UsleData> {
   return vysledek;
 }
 
-/** Převede body polyline na SVG points ve viewBoxu 100x60 s okrajem. */
-function bodyNaSvgBody(polyline: string): string {
-  const body = dekodujPolyline(polyline).filter(
-    (b) => Number.isFinite(b.lat) && Number.isFinite(b.lng),
+/**
+ * Quiet map under the walked line. Tiles and the stroke share Web Mercator,
+ * so a north-south kilometre stays as long as an east-west one.
+ */
+function MapaTrasy({ body }: { body: readonly Souradnice[] }): JSX.Element {
+  const ramRef = useRef<HTMLDivElement>(null);
+  const [rozmer, setRozmer] = useState({ sirka: 0, vyska: 0 });
+
+  useEffect(() => {
+    const el = ramRef.current;
+    if (el === null) return;
+    const mer = (): void => {
+      const ramec = el.getBoundingClientRect();
+      setRozmer({ sirka: Math.round(ramec.width), vyska: Math.round(ramec.height) });
+    };
+    mer();
+    const pozorovac = new ResizeObserver(mer);
+    pozorovac.observe(el);
+    return () => pozorovac.disconnect();
+  }, []);
+
+  const podklad =
+    rozmer.sirka > 0 && rozmer.vyska > 0
+      ? sestavPodkladTrasy(body, rozmer.sirka, rozmer.vyska)
+      : null;
+
+  return (
+    <div
+      ref={ramRef}
+      role="img"
+      aria-label="Trasová čára ušlé trasy"
+      className="relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl border border-pole bg-mlha"
+    >
+      {podklad?.dlazdice.map((dlazdice) => (
+        <img
+          key={dlazdice.src}
+          src={dlazdice.src}
+          alt=""
+          width={256}
+          height={256}
+          draggable={false}
+          className="absolute max-w-none"
+          style={{ left: dlazdice.left, top: dlazdice.top }}
+        />
+      ))}
+      {podklad !== null && (
+        <svg
+          viewBox={`0 0 ${String(podklad.sirka)} ${String(podklad.vyska)}`}
+          className="absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          <polyline
+            points={podklad.body}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth="5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <polyline
+            points={podklad.body}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="text-smrk"
+          />
+        </svg>
+      )}
+      <a
+        href="https://www.openstreetmap.org/copyright"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute right-1 bottom-1 rounded bg-papir/85 px-1 text-[10px] leading-4 text-mech"
+      >
+        © OpenStreetMap
+      </a>
+    </div>
   );
-  if (body.length === 0) return "";
-  let minLat = body[0]?.lat ?? 0;
-  let maxLat = body[0]?.lat ?? 0;
-  let minLng = body[0]?.lng ?? 0;
-  let maxLng = body[0]?.lng ?? 0;
-  for (const b of body) {
-    if (b.lat < minLat) minLat = b.lat;
-    if (b.lat > maxLat) maxLat = b.lat;
-    if (b.lng < minLng) minLng = b.lng;
-    if (b.lng > maxLng) maxLng = b.lng;
-  }
-  const sirka = maxLng - minLng || 1e-9;
-  const vyska = maxLat - minLat || 1e-9;
-  const okraj = 6;
-  return body
-    .map((b) => {
-      const x = okraj + ((b.lng - minLng) / sirka) * (100 - okraj * 2);
-      // SVG y roste dolů → sever nahoru.
-      const y = okraj + (1 - (b.lat - minLat) / vyska) * (60 - okraj * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
 }
 
 /**
@@ -132,7 +178,6 @@ function bodyNaSvgBody(polyline: string): string {
 export default function ExpeditionTrasaPrehled({
   expeditionId,
   probehla,
-  pocetUcastniku,
 }: ExpeditionTrasaPrehledProps): JSX.Element | null {
   const [data, setData] = useState<UsleData>({
     km: null,
@@ -167,15 +212,15 @@ export default function ExpeditionTrasaPrehled({
   const km: number | null = data.km;
   const prevyseni: number | null = data.prevyseniM;
   const polyline: string | null = data.polyline;
-  const svgBody: string =
-    polyline !== null && polyline.length > 0 ? bodyNaSvgBody(polyline) : "";
+  const bodyTrasy: Souradnice[] =
+    polyline !== null && polyline.length > 0 ? dekodujPolyline(polyline) : [];
 
   return (
     <section
       aria-label="Ušlé na výpravě"
-      className="mt-5 rounded-2xl border border-inkoust/15 bg-papir/60 p-4"
+      className="mt-5 flex h-full flex-col rounded-2xl border border-pole bg-papir p-4"
     >
-      <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60">
+      <h3 className="font-display text-xl font-bold text-inkoust">
         Ušlé na výpravě
       </h3>
       {!hotovo && (
@@ -183,43 +228,35 @@ export default function ExpeditionTrasaPrehled({
           Načítám přehled…
         </p>
       )}
-      {hotovo && (
-        <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-xl bg-papir/70 px-2 py-2">
-            <dt className="text-[11px] font-bold uppercase tracking-wide text-inkoust/55">
+      {hotovo && (km !== null || prevyseni !== null) && (
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
+          <div className="rounded-xl bg-mlha px-2 py-3">
+            <dt className="text-sm font-semibold text-mech">
               Km
             </dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums">
-              {km !== null ? formatKm(km) : "–"}
+            <dd className="mt-0.5 text-lg font-bold tabular-nums">
+              {km !== null ? formatKmNaDesetinu(km) : "–"}
             </dd>
           </div>
-          <div className="rounded-xl bg-papir/70 px-2 py-2">
-            <dt className="text-[11px] font-bold uppercase tracking-wide text-inkoust/55">
+          <div className="rounded-xl bg-mlha px-2 py-3">
+            <dt className="text-sm font-semibold text-mech">
               Převýšení
             </dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums">
+            <dd className="mt-0.5 text-lg font-bold tabular-nums">
               {prevyseni !== null ? `+${String(prevyseni)} m` : "–"}
-            </dd>
-          </div>
-          <div className="rounded-xl bg-papir/70 px-2 py-2">
-            <dt className="text-[11px] font-bold uppercase tracking-wide text-inkoust/55">
-              Šlo
-            </dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums">
-              {pocetUcastniku}
             </dd>
           </div>
         </dl>
       )}
       {hotovo && km === null && (
-        <p role="status" className="mt-2 text-[13px] text-inkoust/70">
+        <p role="status" className="mt-3 text-base text-mech">
           Kilometry zatím nejsou zapsané.
         </p>
       )}
       {hotovo && data.mujStav !== null && (
-        <p role="status" className="mt-1 text-[11px] font-bold uppercase tracking-wide text-inkoust/55">
+        <p role="status" className="mt-3 text-base font-semibold text-inkoust">
           {data.mujStav === "ucastnil_se"
-            ? "Navštívil jsem"
+            ? "Trasa"
             : data.mujStav === "prihlasen"
               ? "Přihlášen"
               : data.mujStav === "omluven"
@@ -227,25 +264,7 @@ export default function ExpeditionTrasaPrehled({
                 : ""}
         </p>
       )}
-      {hotovo && svgBody.length > 0 && (
-        <svg
-          viewBox="0 0 100 60"
-          role="img"
-          aria-label="Trasová čára ušlé trasy"
-          className="mt-3 h-24 w-full rounded-xl border border-inkoust/15 bg-papir/70"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <polyline
-            points={svgBody}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            className="text-smrk"
-          />
-        </svg>
-      )}
+      {hotovo && bodyTrasy.length > 1 && <MapaTrasy body={bodyTrasy} />}
     </section>
   );
 }

@@ -245,7 +245,7 @@ describe("route guardy (USER, 401 bez session, jeden JOIN)", () => {
   }
 
   it("GET /api/statistiky/moje vyžaduje přihlášení (401 PUBLIC → NEPRIHLASEN)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/statistiky-routes.ts");
     expect(obsah).toContain("/api/statistiky/moje");
     const pozice = obsah.indexOf("/api/statistiky/moje");
     const okoli = obsah.slice(Math.max(0, pozice - 2000), pozice + 4000);
@@ -253,7 +253,7 @@ describe("route guardy (USER, 401 bez session, jeden JOIN)", () => {
   });
 
   it("agregace čte jen ucastnil_se (COUNT) + km/prevyseni (SUM)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/statistiky-routes.ts");
     const pozice = obsah.indexOf("/api/statistiky/moje");
     const okoli = obsah.slice(Math.max(0, pozice - 1000), pozice + 6000);
     expect(okoli).toContain("ucastnil_se");
@@ -261,7 +261,7 @@ describe("route guardy (USER, 401 bez session, jeden JOIN)", () => {
   });
 
   it("Krok 21: jen ucastnil_se — prihlasen se nikam nepočítá", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/statistiky-routes.ts");
     const pozice = obsah.indexOf("/api/statistiky/moje");
     expect(pozice).toBeGreaterThan(0);
     const okoli = obsah.slice(Math.max(0, pozice - 1000), pozice + 6000);
@@ -272,7 +272,7 @@ describe("route guardy (USER, 401 bez session, jeden JOIN)", () => {
   });
 
   it("jeden JOIN bez N+1 (žádný spocitejUcastniky v okruhu statistik)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/statistiky-routes.ts");
     const pozice = obsah.indexOf("/api/statistiky/moje");
     const okoli = obsah.slice(Math.max(0, pozice - 1000), pozice + 6000);
     expect(okoli).not.toContain("spocitejUcastniky");

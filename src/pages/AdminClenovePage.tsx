@@ -15,6 +15,7 @@ import {
   ulozProfilClena,
   type UlozitProfilVstup,
 } from "../lib/admin-clenove";
+import { KostraRadky } from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
 import type { UserListItem } from "../shared/api-types";
 
@@ -44,8 +45,10 @@ function jeAktivni(profil: ClenskyProfil): boolean {
 }
 
 /**
- * Shell /admin/clenove — 5 přepínatelných pohledů nad živými users.
- * Guard: přihlášení (RequireAuth). Úpravy a mazání jen když `isAdmin`.
+ * Shell /cleny — 5 přepínatelných pohledů nad živými users.
+ * Guard: přihlášení (RequireAuth). Stránku vidí i běžný admin.
+ * Úpravy a mazání cizích profilů jen hlavní admin (`isSuperadmin`).
+ * Jméno a barva vlastního profilu jdou přes PATCH /api/me, ne tudy.
  *
  * Zdroj: GET /api/users (jen ADMIN) — DB `clenove` je prázdná,
  * zdrojem je `users` (3D trio + mirror `role`, jedna hodnota).
@@ -62,7 +65,7 @@ function jeAktivni(profil: ClenskyProfil): boolean {
  * samotný admin je vidět jen ve „Všichni".
  */
 export default function AdminClenovePage(): JSX.Element {
-  const { isAdmin } = useAuth();
+  const { isSuperadmin } = useAuth();
   const [aktivniTab, setAktivniTab] = useState<ClenoveTabId>("vsichni");
   const [vybranyId, setVybranyId] = useState<string | null>(null);
   const [clenove, setClenove] = useState<UserListItem[]>([]);
@@ -148,7 +151,7 @@ export default function AdminClenovePage(): JSX.Element {
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
+    <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
       <header className="border-b-2 border-inkoust pb-5">
         <p className="text-sm font-medium text-mech">Klub</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -167,15 +170,7 @@ export default function AdminClenovePage(): JSX.Element {
 
       <div className="pt-6">
         {stav === "nacteni" && (
-          <div
-            role="status"
-            className="rounded-lg border-2 border-dashed border-mech/40 bg-white/60 px-5 py-10 text-center shadow-denik"
-          >
-            <p className="text-base font-bold">Načítám členy…</p>
-            <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-inkoust/70">
-              Chvilku vydrž, čtu živý seznam z databáze.
-            </p>
-          </div>
+          <KostraRadky pocet={6} popisek="Načítám členy" sAvatarem />
         )}
 
         {stav === "chyba" && (
@@ -190,7 +185,7 @@ export default function AdminClenovePage(): JSX.Element {
             <button
               type="button"
               onClick={() => void nacist()}
-              className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk"
+              className="nahled-press nahled-prejeti mt-4 inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust"
             >
               Zkusit znovu
             </button>
@@ -221,8 +216,8 @@ export default function AdminClenovePage(): JSX.Element {
       <ClenDetailModal
         clen={vybrany}
         onZavrit={() => setVybranyId(null)}
-        onUlozitProfil={isAdmin ? naUlozitProfil : undefined}
-        onOdstranit={isAdmin ? naOdstranit : undefined}
+        onUlozitProfil={isSuperadmin ? naUlozitProfil : undefined}
+        onOdstranit={isSuperadmin ? naOdstranit : undefined}
       />
     </main>
   );

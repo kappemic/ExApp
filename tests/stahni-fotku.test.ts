@@ -1,16 +1,19 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   idsFotekKeStazeni,
 } from "../src/lib/fotky-stahovani";
 import {
   lzeSdiletSoubory,
+  maStahnoutDoGalerie,
   nazevSouboruAlba,
   nazevSouboruVypravy,
   nazevZipAlba,
   priponaZTypuObsahu,
   rozhodniMetoduStahnuti,
   segmentDoNazvu,
+  stahniFotkyDoGalerie,
+  stahniFotkyDoSlozky,
   stahniFotkyPostupne,
   upravPriponuNazvu,
 } from "../src/lib/stahni-fotku";
@@ -43,6 +46,13 @@ describe("stahni-fotku helpers", () => {
     expect(rozhodniMetoduStahnuti(false)).toBe("download");
   });
 
+  it("sends a phone batch to the gallery and keeps a computer on the zip path", () => {
+    expect(maStahnoutDoGalerie(true, true, 3)).toBe(true);
+    expect(maStahnoutDoGalerie(true, false, 3)).toBe(false);
+    expect(maStahnoutDoGalerie(false, true, 3)).toBe(false);
+    expect(maStahnoutDoGalerie(true, true, 0)).toBe(false);
+  });
+
   it("detects share support via canShare(files)", () => {
     const bez = { canShare: undefined } as Navigator;
     expect(lzeSdiletSoubory(bez)).toBe(false);
@@ -56,6 +66,122 @@ describe("stahni-fotku helpers", () => {
 
   it("stahniFotkyPostupne returns empty success for no items", async () => {
     await expect(stahniFotkyPostupne([])).resolves.toEqual({ ok: true, pocet: 0 });
+  });
+});
+
+describe("stahniFotkyDoGalerie", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shares every fetched photo instead of packing a zip", async () => {
+    const sdilene: File[][] = [];
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 }),
+    );
+    const nav = {
+      onLine: true,
+      canShare: () => true,
+      share: async (data: ShareData) => {
+        sdilene.push([...(data.files ?? [])]);
+      },
+    } as Navigator;
+
+    const vysledek = await stahniFotkyDoGalerie(
+      [
+        { url: "/a", nazevSouboru: "a.jpg" },
+        { url: "/b", nazevSouboru: "b.jpg" },
+      ],
+      undefined,
+      nav,
+    );
+
+    expect(vysledek).toEqual({ ok: true, pocet: 2 });
+    expect(sdilene).toHaveLength(1);
+    expect(sdilene[0]?.map((soubor) => soubor.name)).toEqual(["a.jpg", "b.jpg"]);
+    expect(sdilene[0]?.every((soubor) => soubor.type === "image/jpeg")).toBe(true);
+  });
+
+  it("keeps the files when the share sheet needs a fresh tap", async () => {
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 }),
+    );
+    const nav = {
+      onLine: true,
+      canShare: () => true,
+      share: async () => {
+        throw new DOMException("gesture", "NotAllowedError");
+      },
+    } as Navigator;
+
+    const vysledek = await stahniFotkyDoGalerie(
+      [{ url: "/a", nazevSouboru: "a.jpg" }],
+      undefined,
+      nav,
+    );
+
+    expect(vysledek.ok).toBe(false);
+    if (vysledek.ok) return;
+    expect(vysledek.soubory).toHaveLength(1);
+  });
+});
+
+describe("stahniFotkyDoSlozky", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("creates each file before fetching and writes the bytes", async () => {
+    const poradi: string[] = [];
+    const zapisy: { nazev: string; text: string }[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      poradi.push(`fetch:${url}`);
+      return new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 });
+    });
+
+    const slozka = {
+      getFileHandle: async (nazev: string, volby: { create: true }) => {
+        poradi.push(`soubor:${nazev}:${String(volby.create)}`);
+        return {
+          createWritable: async () => {
+            poradi.push(`proud:${nazev}`);
+            return {
+              write: async (data: ArrayBuffer) => {
+                zapisy.push({ nazev, text: new TextDecoder().decode(data) });
+              },
+              close: async () => {
+                poradi.push(`zavreno:${nazev}`);
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const vysledek = await stahniFotkyDoSlozky(
+      [
+        { url: "/a", nazevSouboru: "a.jpg" },
+        { url: "/b", nazevSouboru: "b.jpg" },
+      ],
+      slozka,
+      undefined,
+      { onLine: true } as Navigator,
+    );
+
+    expect(vysledek).toEqual({ ok: true, pocet: 2 });
+    expect(poradi.slice(0, 4)).toEqual([
+      "soubor:a.jpg:true",
+      "proud:a.jpg",
+      "soubor:b.jpg:true",
+      "proud:b.jpg",
+    ]);
+    expect(poradi.indexOf("fetch:/a")).toBeGreaterThan(poradi.indexOf("proud:b.jpg"));
+    expect(zapisy).toEqual([
+      { nazev: "a.jpg", text: "img" },
+      { nazev: "b.jpg", text: "img" },
+    ]);
   });
 });
 
@@ -110,16 +236,16 @@ describe("Stáhnout jen v albech", () => {
     expect(lightbox).not.toContain("Stáhnout");
   });
 
-  it("stahovací hlavička je ve sloupci: Zrušit nahoře", () => {
+  it("stahovací hlavička je v řádku: Zrušit, pak vybrané, nakonec vše", () => {
     const hlavicka = cti("src/components/fotky/FotkyStahovaciHlavicka.tsx");
     expect(hlavicka).toContain("data-fotky-stahovaci-akce");
-    expect(hlavicka).toContain("flex-col");
+    expect(hlavicka).toContain("grid-cols-2");
     const akce = hlavicka.slice(hlavicka.indexOf("data-fotky-stahovaci-akce"));
     const zrusIdx = akce.indexOf("Zrušit");
-    const vseIdx = akce.indexOf("Stáhnout vše");
     const vybraneIdx = akce.indexOf("Stáhnout vybrané");
+    const vseIdx = akce.indexOf("Stáhnout vše");
     expect(zrusIdx).toBeGreaterThan(-1);
-    expect(vseIdx).toBeGreaterThan(zrusIdx);
-    expect(vybraneIdx).toBeGreaterThan(vseIdx);
+    expect(vybraneIdx).toBeGreaterThan(zrusIdx);
+    expect(vseIdx).toBeGreaterThan(vybraneIdx);
   });
 });

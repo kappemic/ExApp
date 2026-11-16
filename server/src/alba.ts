@@ -123,10 +123,25 @@ export function sestavSeznamAlb(
   fotkyVyprav: readonly AlbumFotkaZdroj[],
   fotkyVlastnich: readonly AlbumFotkaZdroj[],
 ): ApiAlbum[] {
-  const nahledyVyprav = sestavMapuNahledu(naKandidaty(fotkyVyprav));
-  const nahledyVlastni = sestavMapuNahledu(naKandidaty(fotkyVlastnich));
-  const poctyVyprav = spocitej(fotkyVyprav);
-  const poctyVlastni = spocitej(fotkyVlastnich);
+  return sestavSeznamAlbZeShrnuti(
+    vypravy,
+    vlastni,
+    spocitej(fotkyVyprav),
+    sestavMapuNahledu(naKandidaty(fotkyVyprav)),
+    spocitej(fotkyVlastnich),
+    sestavMapuNahledu(naKandidaty(fotkyVlastnich)),
+  );
+}
+
+/** Same list as `sestavSeznamAlb`, from counts and cover ids instead of every photo. */
+export function sestavSeznamAlbZeShrnuti(
+  vypravy: readonly VstupVypravyAlba[],
+  vlastni: readonly VstupVlastniAlba[],
+  poctyVyprav: ReadonlyMap<string, number>,
+  nahledyVyprav: ReadonlyMap<string, string>,
+  poctyVlastni: ReadonlyMap<string, number>,
+  nahledyVlastni: ReadonlyMap<string, string>,
+): ApiAlbum[] {
   const vypravySerazene = vypravy
     .filter((vyprava) => jeVypravaSViditelnymAlbem(vyprava.stav))
     .sort((a, b) => {

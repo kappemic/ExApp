@@ -11,6 +11,7 @@ import {
   jeProbihajici,
   jeProbehla,
   obsazenostProcenta,
+  stavPodleObsazenosti,
   volnaMista,
 } from "../../lib/expedition-utils";
 
@@ -79,6 +80,12 @@ export default function ExpeditionCard({
 }: ExpeditionCardProps): JSX.Element {
   const probehla = jeProbehla(expedice);
   const probiha = !probehla && jeProbihajici(expedice);
+  const stavOdznaku: ExpeditionStatus = probehla
+    ? expedice.stav
+    : stavPodleObsazenosti(
+        expedice.kapacita.celkem,
+        expedice.kapacita.prihlaseno,
+      );
   const fotkaId = useNahledFotkaId(expedice.id, expedice.nahledFotkaId);
   const bezOmezeni = jeBezOmezeni(expedice);
   const procenta = obsazenostProcenta(expedice);
@@ -107,7 +114,7 @@ export default function ExpeditionCard({
           <RazitkoData isoDatum={expedice.datum} />
         </div>
         <div className="absolute right-3 top-3 z-10">
-          <StavBadge stav={expedice.stav} probiha={probiha} />
+          <StavBadge stav={stavOdznaku} probiha={probiha} />
         </div>
       </div>
       <div className="flex flex-1 flex-col p-4">
@@ -191,11 +198,7 @@ export default function ExpeditionCard({
               </span>
               <div
                 aria-hidden="true"
-                className="h-full w-full rounded-full"
-                style={{
-                  backgroundImage:
-                    "repeating-linear-gradient(45deg, rgba(26,46,34,0.28) 0 6px, transparent 6px 12px)",
-                }}
+                className={`h-full w-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
               />
             </div>
           )}
@@ -211,7 +214,7 @@ export default function ExpeditionCard({
               type="button"
               onClick={() => onDetail(expedice)}
               aria-label={`Detail výpravy ${expedice.nazev}`}
-              className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-md border-2 border-inkoust bg-smrk px-4 py-1.5 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
+              className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-md border-2 border-okr bg-okr px-4 py-1.5 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy"
             >
               Detail
               <span aria-hidden="true">→</span>

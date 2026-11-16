@@ -22,13 +22,15 @@ import {
   vytvorOptimistickouZpravu,
 } from "../src/components/chat/DiskuzeBox";
 import {
-  formatCasZpravy,
   inicialyProJmeno,
 } from "../src/components/chat/ZpravaBublina";
 import type { ApiZprava } from "../src/lib/diskuze-api";
-import { formatCasKratce } from "../src/lib/format-cas";
 import {
+  formatCasKratce,
   formatCasNastenky,
+  formatCasZpravy,
+} from "../src/lib/format-cas";
+import {
   seradNastenkuSestupne,
   tvarVypravy,
   tvarZpravy,
@@ -51,6 +53,7 @@ function zprava(
     authorName: "Jan Novák",
     channel: "expedice",
     text: "Ahoj",
+    prilohy: [],
     createdAt: "2026-10-10T10:00:00.000Z",
     ...cast,
   };
@@ -275,7 +278,9 @@ describe("Jednotný formát času (format-cas.ts, repetition=0)", () => {
     expect(lib).toContain("formatCasKratce");
     expect(lib).toContain("Intl.DateTimeFormat");
     expect(bublina).toContain("lib/format-cas");
-    expect(chat).toContain("lib/format-cas");
+    expect(bublina).not.toContain("export function formatCasZpravy");
+    expect(chat).not.toContain("formatCasNastenky");
+    expect(chat).not.toContain("lib/format-cas");
     /* Re-exporty delegují — v komponentách už není druhý Intl blok. */
     expect(bublina).not.toContain("Intl.DateTimeFormat");
     expect(chat).not.toContain("Intl.DateTimeFormat");
@@ -328,12 +333,14 @@ describe("DiskuzeBox zdroj-kontrakt (a11y + deník + 44px + optimistic)", () => 
     expect(diskuze).toContain("potvrdOptimistickouZpravu");
   });
 
-  it("deníkové tokeny: border-inkoust, bg-papir, shadow-denik", () => {
-    expect(diskuze).toContain("border-inkoust");
+  it("výpravní zápis bez stínu karty, soukromý chat dál v bublině", () => {
+    expect(diskuze).toContain('podoba="zapis"');
     expect(diskuze).toContain("bg-papir");
-    expect(diskuze).toContain("shadow-denik");
+    expect(diskuze).toContain("border-pole");
+    expect(diskuze).not.toContain("shadow-denik");
     expect(bublina).toContain("border-inkoust");
     expect(bublina).toContain("shadow-denik");
+    expect(bublina).toContain('podoba = "bublina"');
   });
 
   it("break-ui hardening: min-w-0 + overflow-wrap anywhere + shrink-0 + title", () => {
@@ -345,9 +352,10 @@ describe("DiskuzeBox zdroj-kontrakt (a11y + deník + 44px + optimistic)", () => 
     expect(diskuze).toContain("touch-action:manipulation");
   });
 
-  it("smazat má aria-label s náhledem + čte autor/dual-guard (muzeMazat)", () => {
+  it("smazat má aria-label a okno 10 minut (autor) nebo admin", () => {
     expect(bublina).toContain("Smazat zprávu:");
-    expect(diskuze).toContain("muzeSpravovatVypravy");
+    expect(diskuze).toContain("smiSmazatZpravu");
+    expect(diskuze).toContain("isAdmin");
   });
 
   it("klient sahá jen na VITE_API_BASE_URL (žádný secret v bundlu)", () => {
@@ -360,7 +368,7 @@ describe("DiskuzeBox zdroj-kontrakt (a11y + deník + 44px + optimistic)", () => 
 });
 
 describe("ExpeditionModal slot + ChatPage proklik (zdroj-kontrakt)", () => {
-  it("modal montuje DiskuzeBox s idVypravy (za účastí, před trasou)", () => {
+  it("modal montuje DiskuzeBox s idVypravy (vpravo, trasa je vlevo)", () => {
     const modal: string = ctiZdroj(
       "src/components/expeditions/ExpeditionModal.tsx",
     );
@@ -370,17 +378,17 @@ describe("ExpeditionModal slot + ChatPage proklik (zdroj-kontrakt)", () => {
     const poziceTrasy: number = modal.indexOf("<ExpeditionTrasaPrehled");
     expect(poziceDiskuze).toBeGreaterThan(-1);
     if (poziceTrasy > -1) {
-      expect(poziceDiskuze).toBeLessThan(poziceTrasy);
+      expect(poziceTrasy).toBeLessThan(poziceDiskuze);
     }
   });
 
   it("ChatPage je seznam konverzací + detail (Step 3, pinned Důležité + General)", () => {
     const chat: string = ctiZdroj("src/pages/ChatPage.tsx");
     expect(chat).not.toContain("Brzy");
-    expect(chat).toContain("Nástěnka");
+    expect(chat).toContain("Chaty");
     expect(chat).toContain("ConversationList");
     expect(chat).toContain("KonverzaceDetail");
-    expect(chat).toContain("getKonverzace");
+    expect(chat).toContain("useKonverzacePrehled");
     expect(chat).toContain("konverzace");
     expect(chat).toContain("min-w-0");
     /* break-ui hardening žije v řádcích/bublinách, stránka ho skládá. */

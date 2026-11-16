@@ -1,3 +1,5 @@
+import { apiBase } from "./api-base";
+import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 /**
  * src/lib/admin-clenove.ts — klient správy členů nad živými users.
  *
@@ -18,7 +20,6 @@ import {
 } from "../config/roles";
 import {
   USERS_PATH,
-  jeApiChyba,
   userDetailPath,
   type ApiErrorCode,
   type UserListItem,
@@ -31,30 +32,6 @@ import {
 export type ClenoveVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string; kod?: ApiErrorCode };
-
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-/** Bezpečné čtení JSON — prázdné / ne-JSON tělo → null. */
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
-
-function chybaZTela(telo: unknown): ClenoveVysledek<never> {
-  if (jeApiChyba(telo)) {
-    return { ok: false, chyba: telo.error.message, kod: telo.error.code };
-  }
-  return { ok: false, chyba: OBECNA_CHYBA };
-}
 
 function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   if (typeof hodnota !== "object" || hodnota === null) return false;
@@ -94,6 +71,10 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   ) {
     return false;
   }
+  const oblibenaBarva: unknown = kandidat["oblibenaBarva"];
+  if (oblibenaBarva !== undefined && typeof oblibenaBarva !== "string") {
+    return false;
+  }
   // 3D trio je v kontraktu aditivně optional (fallback mirror ze starého role).
   const clenstvi: unknown = kandidat["clenstvi"];
   if (
@@ -114,6 +95,9 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   }
   const adminPriznak: unknown = kandidat["isAdmin"];
   if (adminPriznak !== undefined && typeof adminPriznak !== "boolean") {
+    return false;
+  }
+  if (typeof kandidat["isSuperadmin"] !== "boolean") {
     return false;
   }
   return true;
@@ -149,11 +133,11 @@ export async function nactiCleny(): Promise<ClenoveVysledek<UserListItem[]>> {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.status === 200 && jeUsersListResponse(telo)) {
       return { ok: true, data: telo.users };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Seznam členů je bez připojení nedostupný." };
   }
@@ -169,6 +153,8 @@ export interface UlozitProfilVstup {
   clenstvi?: Clenstvi;
   funkce?: Funkce;
   isAdmin?: boolean;
+  /** Hlavní admin. `true` v payloadu vynutí i `isAdmin: true`. */
+  isSuperadmin?: boolean;
   skola?: string;
   trida?: string;
 }
@@ -191,11 +177,11 @@ async function patchUzivatele(
       },
       body: JSON.stringify(telo),
     });
-    const odpovedTelo: unknown = await ctiTelo(odpoved);
+    const odpovedTelo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.status === 200 && jeUpravitUzivateleResponse(odpovedTelo)) {
       return { ok: true, data: odpovedTelo.user };
     }
-    return chybaZTela(odpovedTelo);
+    return chybaZApiTela(odpovedTelo);
   } catch {
     return { ok: false, chyba: "Bez připojení uložit nejde. Zkus to později." };
   }
@@ -203,8 +189,9 @@ async function patchUzivatele(
 
 /**
  * Uložení 3D profilu člena (jen ADMIN, PATCH /api/users/:id).
- * Parciální trio `clenstvi?/funkce?/isAdmin?` + `skola?/trida?`;
+ * Parciální trio `clenstvi?/funkce?/isAdmin?/isSuperadmin?` + `skola?/trida?`;
  * kombinaci `clen` + funkce odmítne server (422, `chybaKombinace3D`).
+ * Zapnutý hlavní admin vždy pošle i `isAdmin: true`.
  */
 export async function ulozProfilClena(
   id: string,
@@ -214,6 +201,10 @@ export async function ulozProfilClena(
   if (vstup.clenstvi !== undefined) telo["clenstvi"] = vstup.clenstvi;
   if (vstup.funkce !== undefined) telo["funkce"] = vstup.funkce;
   if (vstup.isAdmin !== undefined) telo["isAdmin"] = vstup.isAdmin;
+  if (vstup.isSuperadmin !== undefined) {
+    telo["isSuperadmin"] = vstup.isSuperadmin;
+  }
+  if (vstup.isSuperadmin === true) telo["isAdmin"] = true;
   if (vstup.skola !== undefined) telo["skola"] = vstup.skola;
   if (vstup.trida !== undefined) telo["trida"] = vstup.trida;
   return patchUzivatele(id, telo);
@@ -244,11 +235,11 @@ export async function smazClena(
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo: unknown = await ctiTelo(odpoved);
+    const telo: unknown = await ctiJsonTelo(odpoved);
     if (odpoved.status === 200 && jeSmazatUzivateleResponse(telo)) {
       return { ok: true, data: telo };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   } catch {
     return { ok: false, chyba: "Bez připojení účet smazat nejde. Zkus to později." };
   }

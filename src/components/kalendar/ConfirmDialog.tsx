@@ -152,7 +152,7 @@ export default function ConfirmDialog(
   return createPortal(
     <div
       data-confirm-dialog-portal=""
-      className={`fixed inset-0 ${vrstvaTrida} flex items-end justify-center bg-inkoust/60 p-4 sm:items-center${
+      className={`nocturne nahled-modal fixed inset-0 ${vrstvaTrida} flex items-end justify-center p-4 sm:items-center${
         props.trida !== undefined && props.trida.length > 0 ? ` ${props.trida}` : ""
       }`}
       onMouseDown={naKlikBackdropu}
@@ -163,12 +163,12 @@ export default function ConfirmDialog(
         aria-modal="true"
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border-2 border-inkoust bg-papir p-5 shadow-denik sm:p-6"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-papir p-5 shadow-denik sm:p-6"
       >
         <div className="flex items-start gap-3">
           <span
             aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-inkoust bg-jantar text-lg font-extrabold leading-none text-papir"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-jantar text-papir text-lg font-extrabold leading-none text-papir"
           >
             !
           </span>
@@ -197,7 +197,7 @@ export default function ConfirmDialog(
             <legend className="text-sm font-bold">Co odebrat?</legend>
             <div className="mt-2 space-y-2">
               <label
-                className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-md border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "vyskyt"
                     ? "border-inkoust bg-white/80"
                     : "border-linka bg-white/50"
@@ -219,7 +219,7 @@ export default function ConfirmDialog(
                 </span>
               </label>
               <label
-                className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-md border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "rada"
                     ? "border-inkoust bg-white/80"
                     : "border-linka bg-white/50"
@@ -247,7 +247,7 @@ export default function ConfirmDialog(
         {chyba !== null && chyba.trim().length > 0 && (
           <p
             role="alert"
-            className="mt-3 break-words rounded-md border-2 border-red-800 bg-red-50 px-3 py-2 text-sm font-bold text-red-900"
+            className="mt-3 break-words rounded-xl border border-red-800/30 bg-red-50 px-3 py-2 text-sm font-bold text-red-900"
           >
             {chyba}
           </p>
@@ -260,7 +260,7 @@ export default function ConfirmDialog(
             onClick={onZrusit}
             disabled={probiha}
             title={probiha ? "Mazání probíhá…" : zrusitPopisek}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md border-2 border-inkoust bg-papir px-5 py-2 text-center text-sm font-bold shadow-denik transition-colors hover:bg-linka/60 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 motion-reduce:transition-none sm:flex-none [touch-action:manipulation]"
+            className="nahled-press inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl bg-mlha px-6 py-2 text-center text-base font-semibold text-inkoust hover:bg-linka focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:flex-none [touch-action:manipulation]"
           >
             {zrusitPopisek}
           </button>
@@ -269,7 +269,7 @@ export default function ConfirmDialog(
             onClick={onPotvrdit}
             disabled={probiha}
             title={probiha ? "Mazání probíhá…" : potvrditPopisek}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md border-2 border-red-800 bg-red-800 px-5 py-2 text-center text-sm font-bold text-papir shadow-denik transition-colors hover:bg-red-900 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none sm:flex-none [touch-action:manipulation]"
+            className="nahled-press inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl bg-red-800 px-6 py-2 text-center text-base font-semibold text-papir hover:bg-red-900 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-wait disabled:opacity-60 sm:flex-none [touch-action:manipulation]"
           >
             {probiha ? probihaPopisek : potvrditPopisek}
           </button>

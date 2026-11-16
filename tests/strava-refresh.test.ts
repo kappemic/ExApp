@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   StravaNedostupnaChyba,
   StravaVymenaChyba,
+  chceVynutitObnoveni,
   jeStravaNedostupnaChyba,
   obnovStravaToken,
   vymenCodeZaTokeny,
@@ -44,6 +45,16 @@ function jsonOdpoved(status: number, telo: unknown): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+describe("chceVynutitObnoveni", () => {
+  it("jen obnovit=1 nebo true vymění klíč i před expirací", () => {
+    expect(chceVynutitObnoveni({ obnovit: "1" })).toBe(true);
+    expect(chceVynutitObnoveni({ obnovit: "true" })).toBe(true);
+    expect(chceVynutitObnoveni({})).toBe(false);
+    expect(chceVynutitObnoveni({ obnovit: "0" })).toBe(false);
+    expect(chceVynutitObnoveni(null)).toBe(false);
+  });
+});
 
 describe("obnovStravaToken (refresh bez atleta)", () => {
   it("HTTP 200 bez athlete uloží access, refresh i expiraci", async () => {

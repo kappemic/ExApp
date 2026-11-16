@@ -1,23 +1,52 @@
-import type { JSX } from "react";
+import { useEffect, useId, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 import type { ApiZprava } from "../../lib/diskuze-api";
-import { formatCasKratce } from "../../lib/format-cas";
+import { castiZpravy } from "../../shared/zminky";
+import { formatCasKratce, formatJenCas } from "../../lib/format-cas";
+import { formatVelikostiPrilohy, urlPrilohyZpravy } from "../../lib/prilohy-zpravy";
+import type { ApiZpravaPriloha } from "../../shared/api-types";
 import AvatarKruh from "../AvatarKruh";
+import ZnackaOrganizatora from "../ZnackaOrganizatora";
 import { TlacitkoProfilu } from "../clen/ClenProfil";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 
 export interface ZpravaBublinaProps {
   zprava: ApiZprava;
   /** Zobrazované jméno autora (řeší i dlouhý nick / e-mail, viz break-ui). */
   autorPopisek: string;
+  /** Author created this expedition. Off in general, private, and group chats. */
+  jeOrganizator?: boolean;
   jeMoje: boolean;
   muzeMazat: boolean;
   mazeSe: boolean;
+  /** Bubble is folding away; the row stays mounted until the motion ends. */
+  odchazi?: boolean;
   onSmazat: (id: string) => void;
+  /** Opens the chat lightroom on this image instead of a new tab. */
+  onOtevriObrazek?: (prilohaId: string) => void;
   /**
-   * Step 3 — seskupení po autorovi/dni: true = skrýt hlavičku s avatar+
-   * jménem (navazující bublina stejného autora ve stejný den).
-   * Hlavička `authorName` + „Ty" jen pro currentUserId (prop `jeMoje`).
+   * Later image-only messages from the same short burst. Their photos
+   * join this bubble's mosaic; each message keeps its own delete.
+   */
+  dalsiZpravy?: readonly ApiZprava[];
+  /** When set, decides delete for every message in the burst. */
+  lzeSmazat?: (id: string) => boolean;
+  mazeId?: string | null;
+  /**
+   * Hide the name row when the previous message is from the same author.
+   * The name stays on the first message of a run.
    */
   skrytHlavicku?: boolean;
+  /** Space before a new author. Continuation rows stay tight. */
+  odstup?: boolean;
+  /**
+ * `bublina` is the private and group chat. `zapis` is the expedition
+ * thread: a full-width row. Actions sit in a hover menu.
+   */
+  podoba?: "bublina" | "zapis";
+  /** Global chats render @tokens as labels. */
+  ukazZminky?: boolean;
+  jmena?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -49,51 +78,408 @@ export function inicialyProJmeno(jmeno: string): string {
     .slice(0, 4);
 }
 
-/**
- * „1. 10. 10:00" — krátký český formát času zprávy.
- * Re-export z `src/lib/format-cas.ts` pro zpětnou kompatibilitu
- * test-importů; jediná implementace žije ve `formatCasKratce`.
- */
-export function formatCasZpravy(iso: string): string {
-  return formatCasKratce(iso);
+function PrilohyZpravy({
+  prilohy,
+  svetlyText,
+  jeOptimisticka,
+  onOtevriObrazek,
+}: {
+  prilohy: readonly { priloha: ApiZpravaPriloha; optimisticka: boolean }[];
+  svetlyText: boolean;
+  jeOptimisticka: boolean;
+  onOtevriObrazek?: (prilohaId: string) => void;
+}): JSX.Element | null {
+  if (prilohy.length === 0) return null;
+  const odkaz: string = svetlyText
+    ? "text-papir underline decoration-papir/50 underline-offset-2"
+    : "text-inkoust underline decoration-inkoust/40 underline-offset-2";
+  const obrazky = prilohy.filter((polozka) => polozka.priloha.jeObrazek);
+  const soubory = prilohy.filter((polozka) => !polozka.priloha.jeObrazek);
+  const vicFotek = obrazky.length > 1;
+  return (
+    <div className="mt-1.5 w-full max-w-full">
+      {obrazky.length > 0 ? (
+        <ul
+          className={
+            vicFotek
+              ? "grid w-full grid-cols-2 gap-0.5"
+              : "flex w-full flex-col gap-1.5"
+          }
+        >
+          {obrazky.map((polozka, poradi) => {
+            const priloha = polozka.priloha;
+            const siroka = vicFotek && poradi === obrazky.length - 1 && obrazky.length % 2 === 1;
+            if (polozka.optimisticka || jeOptimisticka) {
+              return (
+                <li
+                  key={priloha.id}
+                  className={`min-w-0 truncate text-[13px] font-semibold ${siroka ? "col-span-2" : ""}`}
+                  title={priloha.nazev}
+                >
+                  {priloha.nazev}
+                </li>
+              );
+            }
+            const adresa: string = urlPrilohyZpravy(priloha.id);
+            const nahled = (
+              <PostupnaFotka
+                src={adresa}
+                alt={vicFotek ? "" : priloha.nazev}
+                className={
+                  vicFotek
+                    ? `h-full w-full ${siroka ? "aspect-[2/1]" : "aspect-square"} object-cover`
+                    : "max-h-56 w-full rounded-md border border-current/20 object-contain"
+                }
+              />
+            );
+            const obal = `block min-w-0 overflow-hidden [touch-action:manipulation] active:scale-[0.97] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+              vicFotek ? "w-full rounded-[4px]" : "w-full"
+            }`;
+            if (onOtevriObrazek !== undefined) {
+              return (
+                <li key={priloha.id} className={siroka ? "col-span-2 min-w-0" : "min-w-0"}>
+                  <button
+                    type="button"
+                    onClick={() => onOtevriObrazek(priloha.id)}
+                    className={obal}
+                    aria-label={`Otevřít fotku ${poradi + 1} z ${obrazky.length}, ${priloha.nazev}`}
+                  >
+                    {nahled}
+                  </button>
+                </li>
+              );
+            }
+            return (
+              <li key={priloha.id} className={siroka ? "col-span-2 min-w-0" : "min-w-0"}>
+                <a href={adresa} target="_blank" rel="noopener noreferrer" className={obal}>
+                  {nahled}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {soubory.length > 0 ? (
+        <ul className="mt-1.5 flex min-w-0 flex-col gap-1.5">
+          {soubory.map((polozka) => {
+            const priloha = polozka.priloha;
+            const velikost: string = formatVelikostiPrilohy(priloha.bajty);
+            if (polozka.optimisticka || jeOptimisticka) {
+              return (
+                <li key={priloha.id} className="min-w-0 truncate text-[13px] font-semibold" title={priloha.nazev}>
+                  {priloha.nazev}
+                  <span className="ml-1 font-normal tabular-nums opacity-80">{velikost}</span>
+                </li>
+              );
+            }
+            return (
+              <li key={priloha.id} className="min-w-0">
+                <a
+                  href={urlPrilohyZpravy(priloha.id)}
+                  className={`inline-flex min-h-[44px] max-w-full min-w-0 items-center gap-1.5 text-[13px] font-semibold [touch-action:manipulation] ${odkaz}`}
+                >
+                  <span className="min-w-0 truncate" title={priloha.nazev}>
+                    {priloha.nazev}
+                  </span>
+                  <span className="shrink-0 font-normal tabular-nums opacity-80">{velikost}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 /**
- * Jedna bublina vlákna — deníkové tokeny (border-inkoust, bg-papir,
- * shadow-denik). break-ui hardening: avatar `flex-shrink-0`, textový
- * sloupec `min-w-0`, dlouhý nick/e-mail/text `overflow-wrap:anywhere`,
- * akce `flex-shrink-0`, čas `tabular-nums`. React escapuje `{text}`
- * automaticky — text se nikdy nevkládá jako HTML (XSS-safe render).
+ * One thread row. `bublina` keeps the ink card (border-inkoust, bg-papir,
+ * shadow-denik) for private and group chat. `zapis` is a full-width
+ * expedition row: avatar, name and time, then the text. Hover reveals
+ * a toolbar; the three-dot button opens the actions.
+ * break-ui: avatar
+ * shrink-0, text column min-w-0, overflow-wrap anywhere, actions shrink-0,
+ * time tabular-nums. React escapes `{text}` — never inserted as HTML.
  */
 export default function ZpravaBublina({
   zprava,
   autorPopisek,
+  jeOrganizator = false,
   jeMoje,
   muzeMazat,
   mazeSe,
+  odchazi = false,
   onSmazat,
+  onOtevriObrazek,
+  dalsiZpravy = [],
+  lzeSmazat,
+  mazeId = null,
   skrytHlavicku = false,
+  odstup = false,
+  podoba = "bublina",
+  ukazZminky = false,
+  jmena = {},
 }: ZpravaBublinaProps): JSX.Element {
-  const cas: string = formatCasZpravy(zprava.createdAt);
+  const zapis: boolean = podoba === "zapis";
+  const cas: string =
+    zapis && skrytHlavicku ? formatJenCas(zprava.createdAt) : formatCasKratce(zprava.createdAt);
   const jeOptimisticka: boolean = zprava.id.startsWith("optimistic-");
+  const svetlyText: boolean = jeMoje && !zapis;
+  const celaDavka: readonly ApiZprava[] = [zprava, ...dalsiZpravy];
+  const prilohyDavky = celaDavka.flatMap((polozka) =>
+    polozka.prilohy.map((priloha) => ({
+      priloha,
+      optimisticka: polozka.id.startsWith("optimistic-") || priloha.id.startsWith("optimistic-"),
+    })),
+  );
+  const jenFotky =
+    celaDavka.every((polozka) => polozka.text.trim().length === 0) &&
+    prilohyDavky.length > 0 &&
+    prilohyDavky.every((polozka) => polozka.priloha.jeObrazek);
+  const keSmazani = celaDavka.filter((polozka) => {
+    if (polozka.id.startsWith("optimistic-")) return false;
+    if (lzeSmazat !== undefined) return lzeSmazat(polozka.id);
+    return polozka.id === zprava.id && muzeMazat;
+  });
+  const [menu, setMenu] = useState(false);
+  const [kotva, setKotva] = useState<{ top: number; right: number } | null>(null);
+  const menuId = useId();
+  const nastrojeRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    function venku(udalost: MouseEvent): void {
+      if (!(udalost.target instanceof Node)) return;
+      if (nastrojeRef.current?.contains(udalost.target)) return;
+      if (menuRef.current?.contains(udalost.target)) return;
+      setMenu(false);
+    }
+    function klavesa(udalost: KeyboardEvent): void {
+      if (udalost.key === "Escape") setMenu(false);
+    }
+    document.addEventListener("mousedown", venku);
+    document.addEventListener("keydown", klavesa);
+    return () => {
+      document.removeEventListener("mousedown", venku);
+      document.removeEventListener("keydown", klavesa);
+    };
+  }, [menu]);
+
+  const telo = (
+    <>
+      {zprava.text.length > 0 && (
+        <p
+          className={`min-w-0 break-words text-base ${zapis ? "leading-snug" : "mt-1 leading-relaxed lg:text-[15px]"}`}
+          style={{ overflowWrap: "anywhere" }}
+        >
+          {ukazZminky
+            ? castiZpravy(zprava.text, jmena).map((cast, index) =>
+                cast.druh === "text" ? (
+                  <span key={index}>{cast.text}</span>
+                ) : (
+                  <span key={index} className={svetlyText ? "font-semibold text-jantar" : "font-semibold text-smrk"}>
+                    @{cast.popisek}
+                  </span>
+                ),
+              )
+            : (
+                <>{zprava.text}</>
+              )}
+          {jeOptimisticka && <span className="sr-only"> (odesílá se…)</span>}
+        </p>
+      )}
+      {zprava.text.length === 0 && jeOptimisticka && <span className="sr-only">odesílá se…</span>}
+      <PrilohyZpravy
+        prilohy={prilohyDavky}
+        svetlyText={svetlyText}
+        jeOptimisticka={jeOptimisticka}
+        onOtevriObrazek={onOtevriObrazek}
+      />
+    </>
+  );
+
+  if (zapis) {
+    return (
+      <li
+        className={`zprava-radek group relative grid motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-[240ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+          odchazi ? "pointer-events-none grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+        } ${skrytHlavicku ? "" : odstup ? "mt-3" : ""}`}
+        aria-hidden={odchazi ? true : undefined}
+      >
+        <div
+          className={`relative flex min-h-0 min-w-0 items-start gap-3 rounded-md px-1 hover:bg-mlha/80 ${
+            skrytHlavicku ? "py-0" : "py-1"
+          } ${
+            jeOptimisticka ? "opacity-70" : ""
+          } ${odchazi ? "-translate-y-1" : ""}`}
+        >
+          <div className="relative flex w-10 shrink-0 justify-center pt-0.5">
+            {skrytHlavicku ? (
+              cas.length > 0 ? (
+                <time
+                  dateTime={zprava.createdAt}
+                  className="zprava-cas pt-0.5 text-center text-[11px] leading-tight whitespace-nowrap text-mech tabular-nums"
+                >
+                  {cas}
+                </time>
+              ) : null
+            ) : zprava.autorId !== null ? (
+              <TlacitkoProfilu
+                id={zprava.autorId}
+                jmeno={autorPopisek}
+                avatarUrl={zprava.authorAvatarUrl}
+                className="h-10 w-10 shrink-0 p-0 min-h-10!"
+              >
+                <AvatarKruh jmeno={autorPopisek} url={zprava.authorAvatarUrl} ton="cizi" />
+              </TlacitkoProfilu>
+            ) : (
+              <AvatarKruh jmeno={autorPopisek} url={zprava.authorAvatarUrl} ton="cizi" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            {!skrytHlavicku && (
+              <div className="flex min-w-0 items-baseline gap-2">
+                {zprava.autorId !== null ? (
+                  <TlacitkoProfilu
+                    id={zprava.autorId}
+                    jmeno={autorPopisek}
+                    avatarUrl={zprava.authorAvatarUrl}
+                    className="min-h-0! w-auto min-w-0 flex-none truncate bg-transparent p-0 text-sm font-semibold leading-tight text-inkoust"
+                  >
+                    <span title={autorPopisek} style={{ overflowWrap: "anywhere" }}>
+                      {autorPopisek}
+                      {jeOrganizator ? <ZnackaOrganizatora /> : null}
+                    </span>
+                  </TlacitkoProfilu>
+                ) : (
+                  <span
+                    title={autorPopisek}
+                    className="min-w-0 truncate text-sm font-semibold leading-tight text-inkoust"
+                    style={{ overflowWrap: "anywhere" }}
+                  >
+                    {autorPopisek}
+                    {jeOrganizator ? <ZnackaOrganizatora /> : null}
+                  </span>
+                )}
+                {cas.length > 0 && (
+                  <time dateTime={zprava.createdAt} className="shrink-0 text-[12px] leading-tight text-mech tabular-nums">
+                    {cas}
+                  </time>
+                )}
+              </div>
+            )}
+            {telo}
+            {jeOptimisticka && (
+              <span role="status" className="text-[12px] font-semibold text-mech">
+                Odesílá se…
+              </span>
+            )}
+          </div>
+          {keSmazani.length > 0 && (
+            <div
+              ref={nastrojeRef}
+              className="zprava-nastroje relative z-10 shrink-0 self-start"
+              data-otevreno={menu ? "true" : "false"}
+            >
+              <button
+                type="button"
+                aria-label="Další akce se zprávou"
+                aria-haspopup="menu"
+                aria-expanded={menu}
+                aria-controls={menuId}
+                onClick={(udalost) => {
+                  const ramec = udalost.currentTarget.getBoundingClientRect();
+                  const vyska = 52;
+                  const dolu = ramec.bottom + 4 + vyska <= window.innerHeight;
+                  setKotva({
+                    top: dolu ? ramec.bottom + 4 : Math.max(8, ramec.top - vyska - 4),
+                    right: Math.max(8, window.innerWidth - ramec.right),
+                  });
+                  setMenu((otevreno) => !otevreno);
+                }}
+                className="bez-prejeti inline-flex h-8 w-8 items-center justify-center rounded-md text-mech hover:bg-mlha hover:text-inkoust [touch-action:manipulation]"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.15" />
+                  <circle cx="12" cy="12" r="1.15" />
+                  <circle cx="19" cy="12" r="1.15" />
+                </svg>
+              </button>
+              {menu && kotva !== null &&
+                createPortal(
+                  <div
+                    ref={menuRef}
+                    id={menuId}
+                    role="menu"
+                    style={{ position: "fixed", top: kotva.top, right: kotva.right }}
+                    className="z-50 min-w-44 rounded-lg border border-pole bg-papir py-1 shadow-denik"
+                  >
+                    {keSmazani.map((polozka) => {
+                      const mazeTuhle = (mazeSe && polozka.id === zprava.id) || mazeId === polozka.id;
+                      const popisek =
+                        polozka.text.trim().length > 0
+                          ? polozka.text.slice(0, 60)
+                          : (polozka.prilohy[0]?.nazev ?? "fotky");
+                      return (
+                        <button
+                          key={polozka.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenu(false);
+                            onSmazat(polozka.id);
+                          }}
+                          disabled={mazeTuhle}
+                          aria-label={`Smazat zprávu: ${popisek}`}
+                          className="bez-prejeti flex min-h-[44px] w-full items-center px-3 text-left text-sm font-semibold text-red-800 [touch-action:manipulation] hover:bg-mlha disabled:opacity-60"
+                        >
+                          {mazeTuhle ? "Mažu…" : "Smazat zprávu"}
+                        </button>
+                      );
+                    })}
+                  </div>,
+                  document.body,
+                )}
+            </div>
+          )}
+        </div>
+      </li>
+    );
+  }
 
   return (
     <li
-      className={`flex gap-2.5 ${jeMoje ? "flex-row-reverse" : "flex-row"} ${
-        skrytHlavicku ? "mt-[-8px]" : ""
-      }`}
+      className={`grid motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-[240ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+        odchazi ? "pointer-events-none grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+      } ${skrytHlavicku ? (zapis ? "mt-1" : "mt-[-8px]") : odstup ? (zapis ? "mt-3" : "mt-4") : ""}`}
+      aria-hidden={odchazi ? true : undefined}
     >
-      {skrytHlavicku ? (
+      <div
+        className={`flex min-h-0 items-start overflow-hidden motion-safe:transition-transform motion-safe:duration-[240ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+          zapis ? "" : "gap-1"
+        } ${
+          zapis || !jeMoje ? "flex-row" : "flex-row-reverse"
+        } ${
+          odchazi
+            ? zapis
+              ? "-translate-y-1"
+              : jeMoje
+                ? "translate-x-3"
+                : "-translate-x-3"
+            : "translate-x-0 translate-y-0"
+        }`}
+      >
+      {zapis ? null : skrytHlavicku ? (
         <span
           aria-hidden="true"
-          className="w-9 shrink-0 grow-0 basis-9"
+          className="h-9 w-9 shrink-0 grow-0 basis-9 self-start"
         />
       ) : zprava.autorId !== null ? (
         <TlacitkoProfilu
           id={zprava.autorId}
           jmeno={autorPopisek}
           avatarUrl={zprava.authorAvatarUrl}
-          className="shrink-0 p-0"
+          className="h-9 w-9 shrink-0 self-start p-0 min-h-9!"
         >
           <AvatarKruh
             jmeno={autorPopisek}
@@ -109,54 +495,56 @@ export default function ZpravaBublina({
         />
       )}
 
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 ${jenFotky ? "w-full max-w-[min(16rem,82%)]" : zapis ? "max-w-[min(36rem,100%)]" : "w-fit max-w-[min(70ch,100%)]"}`}>
         <div
-          className={`rounded-2xl border-2 border-inkoust px-3 py-2 shadow-denik ${
-            jeMoje ? "bg-smrk text-papir" : "bg-papir text-inkoust"
-          } ${jeOptimisticka ? "opacity-70" : ""}`}
+          className={
+            zapis
+              ? `w-fit max-w-full rounded-2xl text-inkoust ${
+                  jeMoje ? "bg-okr/25" : "border border-pole bg-papir"
+                } ${jenFotky ? "p-1" : "px-3 py-2"} ${jeOptimisticka ? "opacity-70" : ""}`
+              : `rounded-2xl border-2 border-inkoust shadow-denik ${
+                  jenFotky ? "px-1.5 py-1.5" : "px-3 py-2"
+                } ${jeMoje ? "bg-smrk text-papir" : "bg-papir text-inkoust"} ${
+                  jeOptimisticka ? "opacity-70" : ""
+                }`
+          }
         >
           {!skrytHlavicku && (
-            <div className="flex min-w-0 items-baseline justify-between gap-2">
+            <div className={zapis ? "flex min-w-0 items-baseline gap-1.5" : "flex min-w-0 items-baseline justify-between gap-2"}>
               {zprava.autorId !== null ? (
                 <TlacitkoProfilu
                   id={zprava.autorId}
                   jmeno={autorPopisek}
                   avatarUrl={zprava.authorAvatarUrl}
-                  className={`min-w-0 flex-1 truncate bg-transparent p-0 text-[12px] font-bold ${
-                    jeMoje ? "text-papir/90" : "text-inkoust/70"
-                  }`}
+                  className={`min-w-0 truncate bg-transparent p-0 ${
+                    zapis
+                      ? "min-h-0! w-auto flex-none text-[13px] font-semibold leading-tight"
+                      : "min-h-[44px] flex-1 text-sm font-bold lg:text-[12px]"
+                  } ${svetlyText ? "text-papir/90" : zapis ? "text-inkoust" : "text-inkoust/70"}`}
                 >
                   <span title={autorPopisek} style={{ overflowWrap: "anywhere" }}>
                     {autorPopisek}
-                    {jeMoje && (
-                      <span className="ml-1.5 inline-flex shrink-0 whitespace-nowrap rounded-full border border-current px-1.5 py-px align-middle text-[10px] font-extrabold uppercase tracking-wider opacity-80">
-                        ty
-                      </span>
-                    )}
+                    {jeOrganizator ? <ZnackaOrganizatora /> : null}
                   </span>
                 </TlacitkoProfilu>
               ) : (
                 <span
                   title={autorPopisek}
-                  className={`min-w-0 flex-1 truncate text-[12px] font-bold ${
-                    jeMoje ? "text-papir/90" : "text-inkoust/70"
-                  }`}
+                  className={`min-w-0 truncate text-sm ${
+                    zapis ? "w-auto flex-none text-[13px] font-semibold leading-tight" : "flex-1 font-bold lg:text-[12px]"
+                  } ${svetlyText ? "text-papir/90" : zapis ? "text-inkoust" : "text-inkoust/70"}`}
                   style={{ overflowWrap: "anywhere" }}
                 >
                   {autorPopisek}
-                  {jeMoje && (
-                    <span className="ml-1.5 inline-flex shrink-0 whitespace-nowrap rounded-full border border-current px-1.5 py-px align-middle text-[10px] font-extrabold uppercase tracking-wider opacity-80">
-                      ty
-                    </span>
-                  )}
+                  {jeOrganizator ? <ZnackaOrganizatora /> : null}
                 </span>
               )}
               {cas.length > 0 && (
                 <time
                   dateTime={zprava.createdAt}
-                  className={`shrink-0 text-[11px] tabular-nums ${
-                    jeMoje ? "text-papir/75" : "text-inkoust/55"
-                  }`}
+                  className={`shrink-0 tabular-nums ${
+                    zapis ? "text-[12px] leading-tight" : "text-[13px]"
+                  } ${svetlyText ? "text-papir/75" : zapis ? "text-mech" : "text-inkoust/55"}`}
                 >
                   {cas}
                 </time>
@@ -168,42 +556,48 @@ export default function ZpravaBublina({
               <time dateTime={zprava.createdAt}>{cas}</time>
             </span>
           )}
-          <p
-            className="mt-1 min-w-0 break-words text-[15px] leading-relaxed"
-            style={{ overflowWrap: "anywhere" }}
-          >
-            {zprava.text}
-            {jeOptimisticka && (
-              <span className="sr-only"> (odesílá se…)</span>
-            )}
-          </p>
+          {telo}
         </div>
 
-        <div className="mt-1 flex min-h-[24px] items-center gap-2">
+        {(jeOptimisticka || keSmazani.length > 0) && (
+        <div className={`flex items-center gap-2 ${zapis ? "" : "mt-1 min-h-[24px]"}`}>
           {jeOptimisticka ? (
             <span
               role="status"
               className={`text-[12px] font-semibold ${
-                jeMoje ? "text-right" : ""
-              } text-inkoust/55`}
+                jeMoje && !zapis ? "text-right" : ""
+              } ${zapis ? "text-mech" : "text-inkoust/55"}`}
             >
               Odesílá se…
             </span>
           ) : (
-            muzeMazat && (
-              <button
-                type="button"
-                onClick={() => onSmazat(zprava.id)}
-                disabled={mazeSe}
-                aria-label={`Smazat zprávu: ${zprava.text.slice(0, 60)}`}
-                title={mazeSe ? "Mazání probíhá…" : "Smazat zprávu"}
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-[12px] font-bold text-inkoust/55 underline underline-offset-2 [touch-action:manipulation] motion-safe:transition-colors motion-safe:hover:text-red-800 disabled:opacity-60"
-              >
-                {mazeSe ? "Mažu…" : "Smazat"}
-              </button>
-            )
+            keSmazani.map((polozka) => {
+              const mazeTuhle = mazeSe && polozka.id === zprava.id || mazeId === polozka.id;
+              const popisek = polozka.text.trim().length > 0
+                ? polozka.text.slice(0, 60)
+                : polozka.prilohy[0]?.nazev ?? "fotky";
+              return (
+                <button
+                  key={polozka.id}
+                  type="button"
+                  onClick={() => onSmazat(polozka.id)}
+                  disabled={mazeTuhle}
+                  aria-label={`Smazat zprávu: ${popisek}`}
+                  title={mazeTuhle ? "Mazání probíhá…" : "Smazat zprávu"}
+                  className={`bez-prejeti inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 underline-offset-2 [touch-action:manipulation] hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 motion-safe:transition-colors ${
+                    zapis
+                      ? "rounded-lg text-[13px] font-semibold text-mech"
+                      : "rounded-xl text-[12px] font-bold text-inkoust/55 underline"
+                  }`}
+                >
+                  {mazeTuhle ? "Mažu…" : keSmazani.length > 1 ? `Smazat ${formatCasKratce(polozka.createdAt)}` : "Smazat"}
+                </button>
+              );
+            })
           )}
         </div>
+        )}
+      </div>
       </div>
     </li>
   );

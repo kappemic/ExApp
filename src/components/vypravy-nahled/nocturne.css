@@ -1,58 +1,91 @@
 /* Preview-only journal surface. Scoped so production tokens stay untouched. */
 
 .nocturne {
-  --background: 38 32% 91%;
-  --foreground: 26 32% 12%;
-  --card: 40 36% 94%;
-  --secondary: 36 22% 85%;
-  --muted-foreground: 30 12% 38%;
-  --border: 30 16% 70%;
-  --input: 30 16% 70%;
-  --hairline: 30 14% 62%;
-  --ink: 26 30% 9%;
-  --ink-foreground: 38 30% 88%;
-  /* Same beige, stepped toward yellow. No second hue. */
-  --film-ruz: 36 24% 87%;
-  --film-mech: 46 32% 86%;
-  --film-nebe: 42 26% 83%;
+  /* Redesign C2, paleta 12f „Bílá s olivou“. Deníkové proměnné drží stejné
+     role, jen v nových barvách; globální --color-* tokeny se tu už
+     nepřemapovávají, platí hodnoty z index.css. */
+  --background: 0 0% 100%;
+  --foreground: 87 30% 15%;
+  --card: 70 26% 96%;
+  --secondary: 74 32% 92%;
+  --muted-foreground: 87 16% 36%;
+  --border: 73 17% 83%;
+  --input: 73 17% 83%;
+  --hairline: 75 16% 78%;
+  --ink: 82 39% 30%;
+  --ink-foreground: 0 0% 100%;
+  /* Jemné olivové tóny pro rámečky fotek. */
+  --film-ruz: 70 20% 92%;
+  --film-mech: 80 25% 90%;
+  --film-nebe: 60 25% 92%;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   color: hsl(var(--foreground));
   background: transparent;
-  font-family: "Archivo", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
   caret-color: hsl(var(--ink));
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   color-scheme: light;
   accent-color: hsl(var(--ink));
-  /* Calendar utilities read these. Remap only inside the preview. */
-  --color-papir: hsl(40 36% 94%);
-  --color-inkoust: hsl(26 32% 12%);
-  --color-smrk: hsl(26 30% 9%);
-  --color-linka: hsl(30 14% 62%);
-  --color-jantar: hsl(26 32% 12%);
-  --color-mech: hsl(30 12% 38%);
-  --shadow-denik: none;
-  --shadow-razitko: none;
 }
 
+/* The journal shell is transparent on purpose. A popover portaled to
+   the body still carries that class, so it needs its own solid sheet. */
+.nocturne.vyskakovaci-panel {
+  background-color: var(--color-papir);
+  box-shadow: 0 16px 40px rgba(38, 48, 26, 0.18);
+}
+
+/* Dřívější šířkové řezy Archiva. V C2 je nahrazuje display písmo. */
 .nocturne .font-expanded {
-  font-stretch: 122%;
+  font-family: var(--font-display);
 }
 
 .nocturne .font-condensed {
-  font-stretch: 74%;
-}
-
-.nocturne ::selection {
-  background: hsl(var(--foreground));
-  color: hsl(var(--background));
+  font-family: var(--font-sans);
 }
 
 .nocturne :focus-visible {
   outline: 2px solid hsl(var(--ink));
   outline-offset: 3px;
-  border-radius: 0;
+}
+
+/* A text field already has its own edge. The detached focus box stacked
+   a second frame on it (and a square one on the borderless chat line).
+   The caret is the signal; a field that has a border only darkens it. */
+.nocturne :where(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  select
+) {
+  transition: border-color 160ms var(--ease-out);
+}
+
+.nocturne :where(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  select
+):focus,
+.nocturne :where(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  select
+):focus-visible {
+  outline: none;
+}
+
+.nocturne :where(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  select
+):not(.border-red-800):focus,
+.nocturne :where(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  select
+):not(.border-red-800):focus-visible {
+  border-color: var(--color-smrk);
 }
 
 .nocturne .na-inkoustu:focus-visible {
@@ -61,6 +94,15 @@
 
 .nahled-press {
   transition: transform 160ms var(--ease-out);
+}
+
+/* Quiet controls opt out of the ink wash, so the lift and tint need their own timing. */
+.bez-prejeti.nahled-press {
+  transition:
+    transform 160ms var(--ease-out),
+    translate 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
 }
 
 .nahled-press:active {
@@ -121,32 +163,11 @@
   appearance: none;
 }
 
-/* Keep the expedition band's own radius. Only drop the paper shadow. */
-.nocturne .nahled-kalendar-plocha,
-.nocturne .nahled-kalendar-plocha * {
-  box-shadow: none;
+/* A select-shaped field should not shrink when pressed. */
+.nocturne button.pole-vyberu:active {
+  transform: none;
 }
 
-/* Meeting dot sits on the ink band, so it needs a paper rim. */
-.nocturne .nahled-kalendar-plocha .bg-jantar {
-  background-color: hsl(var(--ink-foreground));
-  box-shadow: 0 0 0 1px hsl(var(--ink));
-}
-
-.nocturne .nahled-kalendar-plocha [class*="bg-white"] {
-  background-color: hsl(var(--card));
-}
-
-/* Preview dialog. Square the production chrome; the 4:3 cover stays a plate. */
-.nahled-modal,
-.nahled-modal * {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.nahled-modal .avatar-kruh {
-  border-radius: 9999px;
-}
 
 .nocturne :is(a, button, [role="button"]),
 .nahled-ovladani :is(a, button, [role="button"]) {
@@ -161,6 +182,16 @@
 .nocturne :is(a, button, [role="button"]):not(:disabled):active,
 .nahled-ovladani :is(a, button, [role="button"]):not(:disabled):active {
   transform: scale(0.97);
+}
+
+/* Chat rows are the scroll surface. A press-scale here cancels the pan
+   on iOS the moment the finger lands on a group. */
+.nocturne .seznam-scroll :is(a, button, [role="button"]) {
+  touch-action: pan-y;
+}
+
+.nocturne .seznam-scroll :is(a, button, [role="button"]):active {
+  transform: none;
 }
 
 /* Shared edges. Scaling the whole control opens a gap in the band. */
@@ -205,7 +236,13 @@
   }
 }
 
-.nahled-modal > [role="dialog"] {
+/* Photo lightbox is solid black. Ink is brown and read as the page behind it. */
+.lightbox-pozadi,
+.nahled-modal.lightbox-pozadi {
+  background-color: #000;
+}
+
+.nahled-modal > :is([role="dialog"], [role="alertdialog"]) {
   opacity: 1;
   transform: none;
   transform-origin: center;
@@ -259,7 +296,7 @@
   }
 }
 
-.nahled-modal.nahled-zavira > [role="dialog"] {
+.nahled-modal.nahled-zavira > :is([role="dialog"], [role="alertdialog"]) {
   opacity: 0;
   transform: translateY(8px);
 }
@@ -287,32 +324,46 @@ html.nahled-stranka {
   scrollbar-color: transparent transparent;
 }
 
+/* A thin bar still reserves a column. On the dialog that column is white
+   beside the full-bleed landscape. Hide the bar so the sheet stays flush. */
+.nahled-modal > :is([role="dialog"], [role="alertdialog"]) {
+  scrollbar-width: none;
+}
+
+.nahled-modal > :is([role="dialog"], [role="alertdialog"])::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .nahled-modal.nahled-scrolluje,
 .nahled-modal .nahled-scrolluje,
 html.nahled-stranka.nahled-scrolluje {
   scrollbar-color: hsl(var(--foreground) / 0.45) transparent;
 }
 
-.nahled-modal::-webkit-scrollbar,
-.nahled-modal *::-webkit-scrollbar,
-html.nahled-stranka::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
+/* scrollbar-color above already paints the thumb. Keep WebKit only where that property is missing. */
+@supports not (scrollbar-color: auto) {
+  .nahled-modal::-webkit-scrollbar,
+  .nahled-modal *::-webkit-scrollbar,
+  html.nahled-stranka::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
 
-.nahled-modal::-webkit-scrollbar-thumb,
-.nahled-modal *::-webkit-scrollbar-thumb,
-html.nahled-stranka::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--foreground) / 0.45);
-  opacity: 0;
-  transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
-}
+  .nahled-modal::-webkit-scrollbar-thumb,
+  .nahled-modal *::-webkit-scrollbar-thumb,
+  html.nahled-stranka::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--foreground) / 0.45);
+    opacity: 0;
+    transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
 
-.nahled-modal.nahled-scrolluje::-webkit-scrollbar-thumb,
-.nahled-modal .nahled-scrolluje::-webkit-scrollbar-thumb,
-html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
-  opacity: 1;
-  transition-duration: 140ms;
+  .nahled-modal.nahled-scrolluje::-webkit-scrollbar-thumb,
+  .nahled-modal .nahled-scrolluje::-webkit-scrollbar-thumb,
+  html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
+    opacity: 1;
+    transition-duration: 140ms;
+  }
 }
 
 .nahled-pane {
@@ -328,7 +379,26 @@ html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
   }
 }
 
+/* C2: sekundární tlačítko si nechá vlastní výplň, při najetí jen jemně
+   ztmavne. Dřívější deníkové zalití inkoustem přebíjelo výplň tlačítek. */
+.nocturne :is(a, button).nahled-prejeti {
+  transition:
+    transform 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+
 @media (hover: hover) and (pointer: fine) {
+  .nocturne :is(a, button).nahled-prejeti:hover:not(:disabled) {
+    background-color: var(--color-mlha);
+  }
+
+  .nocturne :is(a, button).nahled-prejeti.nahled-nebezpeci:hover:not(:disabled) {
+    background-color: #fef2f2;
+  }
+
   .nahled-invert {
     transition:
       background-color 160ms var(--ease-out),
@@ -355,57 +425,32 @@ html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
   .nahled-odkaz:hover {
     text-decoration-thickness: 2px;
   }
-
-  /* Ink wash across the outline actions. Clip, not a scale, so the frame stays put. */
-  .nocturne button.nahled-prejeti {
-    position: relative;
-    z-index: 0;
-    isolation: isolate;
-    transition:
-      transform 160ms var(--ease-out),
-      color 180ms var(--ease-out),
-      background-color 180ms var(--ease-out),
-      border-color 160ms var(--ease-out);
-  }
-
-  .nocturne button.nahled-prejeti::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: hsl(var(--foreground));
-    clip-path: inset(0 100% 0 0);
-    transition: clip-path 180ms var(--ease-out);
-  }
-
-  .nocturne button.nahled-prejeti:hover:not(:disabled) {
-    color: hsl(var(--background));
-  }
-
-  .nocturne button.nahled-prejeti:hover:not(:disabled)::before {
-    clip-path: inset(0 0 0 0);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .nahled-press,
-  .nocturne button.nahled-prejeti::before,
+  .nocturne :is(a, button).nahled-prejeti,
   .nahled-hledani,
   .nahled-sipka,
   .nahled-radek,
   .nahled-invert,
   .nahled-pane,
-  .nahled-modal > [role="dialog"],
+  .nahled-modal > :is([role="dialog"], [role="alertdialog"]),
   .nocturne :is(a, button, input, textarea, select, [role="button"]),
-  .nahled-ovladani :is(a, button, input, textarea, select, [role="button"]),
-  .nahled-modal::-webkit-scrollbar-thumb,
-  .nahled-modal *::-webkit-scrollbar-thumb,
-  html.nahled-stranka::-webkit-scrollbar-thumb {
+  .nahled-ovladani :is(a, button, input, textarea, select, [role="button"]) {
     transition: none;
   }
 
+  @supports not (scrollbar-color: auto) {
+    .nahled-modal::-webkit-scrollbar-thumb,
+    .nahled-modal *::-webkit-scrollbar-thumb,
+    html.nahled-stranka::-webkit-scrollbar-thumb {
+      transition: none;
+    }
+  }
+
   .nahled-pane,
-  .nahled-modal > [role="dialog"] {
+  .nahled-modal > :is([role="dialog"], [role="alertdialog"]) {
     opacity: 1;
     transform: none;
   }
@@ -418,5 +463,28 @@ html.nahled-stranka.nahled-scrolluje::-webkit-scrollbar-thumb {
   .nahled-modal .nahled-poslat:not(:disabled):active,
   .nocturne button.nahled-segment:not(:disabled):active .nahled-segment-text {
     transform: none;
+  }
+}
+
+/* Expedition messages: the action pill stays hidden until the row is hovered. */
+.nocturne .zprava-radek .zprava-nastroje,
+.nocturne .zprava-radek .zprava-cas {
+  opacity: 0;
+}
+.nocturne .zprava-radek .zprava-nastroje[data-otevreno="true"] {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .nocturne .zprava-radek:hover .zprava-nastroje,
+  .nocturne .zprava-radek:focus-within .zprava-nastroje,
+  .nocturne .zprava-radek:hover .zprava-cas,
+  .nocturne .zprava-radek:focus-within .zprava-cas {
+    opacity: 1;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .nocturne .zprava-radek .zprava-nastroje,
+  .nocturne .zprava-radek .zprava-cas {
+    opacity: 1;
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   kratkyNazevSouboru,
   type PolozkaStavuFotek,
@@ -7,7 +7,16 @@ import {
   idsFotekKeStazeni,
   type RozsahStahovaniFotek,
 } from "../lib/fotky-stahovani";
-import { stahniFotkyJakoZip } from "../lib/stahni-fotku";
+import {
+  jeDotykoveZarizeni,
+  lzeSdiletSoubory,
+  maStahnoutDoGalerie,
+  sdilejSoubory,
+  stahniFotkyDoGalerie,
+  stahniFotkyDoSlozky,
+  stahniFotkyJakoZip,
+  vyberSlozkuKUlozeni,
+} from "../lib/stahni-fotku";
 
 export interface PripravaStahovaniAlba {
   polozky: readonly { url: string; nazevSouboru: string; popisek: string }[];
@@ -20,6 +29,9 @@ export interface UseFotkyStahovaniVysledek {
   stahujeSe: boolean;
   stahovatChyba: string | null;
   operacePolozky: readonly PolozkaStavuFotek[];
+  /** Files are fetched; the next tap opens the gallery share sheet. */
+  galeriePripravena: boolean;
+  ulozDoGalerie: () => Promise<void>;
   zacniStahovani: () => void;
   zrusStahovani: () => void;
   prepniVyber: (fotkaId: string) => void;
@@ -29,7 +41,8 @@ export interface UseFotkyStahovaniVysledek {
 
 /**
  * Shared download-mode state for album photo grids (mirrors delete-mode UX).
- * Bulk actions pack photos into one browser ZIP download.
+ * On a phone, several photos open the system sheet and can land in the gallery.
+ * Elsewhere they pack into one browser ZIP, or a folder the user picks.
  */
 export function useFotkyStahovani(
   fotky: readonly { id: string }[],
@@ -40,12 +53,16 @@ export function useFotkyStahovani(
   const [stahujeSe, setStahujeSe] = useState<boolean>(false);
   const [stahovatChyba, setStahovatChyba] = useState<string | null>(null);
   const [operacePolozky, setOperacePolozky] = useState<readonly PolozkaStavuFotek[]>([]);
+  const [galeriePripravena, setGaleriePripravena] = useState<boolean>(false);
+  const souboryGalerie = useRef<File[]>([]);
 
   const resetStahovani = useCallback((): void => {
     setStahovaciRezim(false);
     setVybrane(new Set<string>());
     setStahovatChyba(null);
     setOperacePolozky([]);
+    setGaleriePripravena(false);
+    souboryGalerie.current = [];
   }, []);
 
   const zacniStahovani = useCallback((): void => {
@@ -69,13 +86,49 @@ export function useFotkyStahovani(
     });
   }, []);
 
+  const dokonciUspesne = useCallback((): void => {
+    setGaleriePripravena(false);
+    souboryGalerie.current = [];
+    setStahujeSe(false);
+    setStahovaciRezim(false);
+    setVybrane(new Set<string>());
+    window.setTimeout(() => {
+      setOperacePolozky([]);
+    }, 2400);
+  }, []);
+
+  const ulozDoGalerie = useCallback(async (): Promise<void> => {
+    const soubory = souboryGalerie.current;
+    if (soubory.length === 0) return;
+    setStahujeSe(true);
+    setStahovatChyba(null);
+    const vysledek = await sdilejSoubory(navigator, soubory);
+    if (vysledek === "ok") {
+      dokonciUspesne();
+      return;
+    }
+    setStahujeSe(false);
+    if (vysledek === "zruseno") return;
+    setStahovatChyba("Fotky se nepodařilo uložit do galerie. Zkus to znovu.");
+  }, [dokonciUspesne]);
+
   const provedStahovani = useCallback(
     async (rozsah: RozsahStahovaniFotek): Promise<void> => {
       const ids = idsFotekKeStazeni(fotky, vybrane, rozsah);
       if (ids.length === 0) return;
 
       const { polozky, nazevZip } = pripravStahovani(ids);
+      const doGalerie = maStahnoutDoGalerie(
+        jeDotykoveZarizeni(),
+        lzeSdiletSoubory(navigator),
+        polozky.length,
+      );
+      const slozka = doGalerie ? null : await vyberSlozkuKUlozeni();
+      if (slozka === "zruseno") return;
+
       setStahovatChyba(null);
+      setGaleriePripravena(false);
+      souboryGalerie.current = [];
       setStahujeSe(true);
       setOperacePolozky(
         polozky.map((polozka, index) => ({
@@ -85,44 +138,67 @@ export function useFotkyStahovani(
         })),
       );
 
-      const vysledek = await stahniFotkyJakoZip(
-        polozky,
-        nazevZip,
-        (index, faze, chyba) => {
-          setOperacePolozky((prev) =>
-            prev.map((radek, i) => {
-              if (i !== index) {
-                if (faze === "probiha" && radek.stav === "probiha") {
-                  return { ...radek, stav: "ceka" };
-                }
-                return radek;
+      const hlasPrubeh = (index: number, faze: "probiha" | "hotovo" | "chyba", chyba?: string): void => {
+        setOperacePolozky((prev) =>
+          prev.map((radek, i) => {
+            if (i !== index) {
+              if (faze === "probiha" && radek.stav === "probiha") {
+                return { ...radek, stav: "ceka" };
               }
-              if (faze === "probiha") return { ...radek, stav: "probiha" };
-              if (faze === "hotovo") return { ...radek, stav: "hotovo" };
-              return { ...radek, stav: "chyba", chyba: chyba ?? "Nepodařilo se stáhnout." };
-            }),
-          );
-        },
-      );
-
-      setStahujeSe(false);
-
-      if (!vysledek.ok) {
-        setStahovatChyba(
-          vysledek.uspech > 0
-            ? `Staženo ${vysledek.uspech} z ${polozky.length}. ${vysledek.chyba}`
-            : vysledek.chyba,
+              return radek;
+            }
+            if (faze === "probiha") return { ...radek, stav: "probiha" };
+            if (faze === "hotovo") return { ...radek, stav: "hotovo" };
+            return { ...radek, stav: "chyba", chyba: chyba ?? "Nepodařilo se stáhnout." };
+          }),
         );
+      };
+
+      const ukazChybu = (uspech: number, chyba: string): void => {
+        setStahujeSe(false);
+        setStahovatChyba(
+          uspech > 0 ? `Staženo ${uspech} z ${polozky.length}. ${chyba}` : chyba,
+        );
+      };
+
+      if (doGalerie) {
+        const vysledek = await stahniFotkyDoGalerie(polozky, hlasPrubeh);
+        if (vysledek.ok && vysledek.zruseno === true) {
+          setStahujeSe(false);
+          return;
+        }
+        if (!vysledek.ok && vysledek.soubory !== undefined && vysledek.soubory.length > 0) {
+          souboryGalerie.current = vysledek.soubory;
+          setGaleriePripravena(true);
+          setStahujeSe(false);
+          setStahovatChyba(null);
+          return;
+        }
+        if (!vysledek.ok) {
+          ukazChybu(vysledek.uspech, vysledek.chyba);
+          return;
+        }
+        dokonciUspesne();
         return;
       }
 
-      setStahovaciRezim(false);
-      setVybrane(new Set<string>());
-      window.setTimeout(() => {
-        setOperacePolozky([]);
-      }, 2400);
+      let vysledek =
+        slozka === null
+          ? await stahniFotkyJakoZip(polozky, nazevZip, hlasPrubeh)
+          : await stahniFotkyDoSlozky(polozky, slozka, hlasPrubeh);
+
+      if (!vysledek.ok && slozka !== null && vysledek.uspech === 0) {
+        vysledek = await stahniFotkyJakoZip(polozky, nazevZip, hlasPrubeh);
+      }
+
+      if (!vysledek.ok) {
+        ukazChybu(vysledek.uspech, vysledek.chyba);
+        return;
+      }
+
+      dokonciUspesne();
     },
-    [fotky, pripravStahovani, vybrane],
+    [dokonciUspesne, fotky, pripravStahovani, vybrane],
   );
 
   return {
@@ -131,6 +207,8 @@ export function useFotkyStahovani(
     stahujeSe,
     stahovatChyba,
     operacePolozky,
+    galeriePripravena,
+    ulozDoGalerie,
     zacniStahovani,
     zrusStahovani,
     prepniVyber,

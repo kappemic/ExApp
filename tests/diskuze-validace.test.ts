@@ -10,7 +10,8 @@
  *   guardy `jeApiZprava` / `jeZpravyOdpoved`, matice oprávnění.
  * Strict TS, žádný zakázaný typ.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   EXPEDICE_ZPRAVA_DETAIL_VZOR,
@@ -118,6 +119,7 @@ describe("toApiZprava (DB řádek → ApiZprava)", () => {
       authorAvatarUrl: null,
       channel: "expedice",
       text: "Ahoj z výpravy",
+      prilohy: [],
       createdAt: "2026-10-01T10:00:00.000Z",
     });
   });
@@ -211,6 +213,7 @@ describe("kontrakt diskuze (§ Diskuze)", () => {
         authorName: "Bývalý člen",
         channel: "expedice",
         text: "Ahoj",
+        prilohy: [],
         createdAt: "2026-10-01T10:00:00.000Z",
       }),
     ).toBe(true);
@@ -239,6 +242,14 @@ describe("kontrakt diskuze (§ Diskuze)", () => {
 describe("diskuze — nové soubory bez any", () => {
   it("žádný zakázaný typ any v nových souborech", () => {
     const zakazanyTyp = ["as", "any"].join(" ");
+    const domeny = [
+      ...readdirSync("server/src/validace-domeny").map((jmeno) =>
+        join("server/src/validace-domeny", jmeno),
+      ),
+      ...readdirSync("src/shared/api-typy").map((jmeno) =>
+        join("src/shared/api-typy", jmeno),
+      ),
+    ];
     for (const soubor of [
       "server/src/diskuze.ts",
       "server/src/validace.ts",
@@ -246,6 +257,7 @@ describe("diskuze — nové soubory bez any", () => {
       "src/lib/diskuze-api.ts",
       "tests/diskuze-validace.test.ts",
       "tests/diskuze-api.test.ts",
+      ...domeny,
     ]) {
       const obsah = readFileSync(soubor, "utf8");
       expect(obsah).not.toMatch(/:\s*any\b/);

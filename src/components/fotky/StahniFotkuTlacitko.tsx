@@ -1,8 +1,8 @@
 import { useCallback, useState, type JSX } from "react";
 import { stahniFotkuZeUrl } from "../../lib/stahni-fotku";
+import { fotkyLightboxIkona } from "./fotky-ui";
 
-const TLACITKO =
-  "inline-flex min-h-[44px] touch-manipulation select-none items-center justify-center rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold text-inkoust active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk";
+const TLACITKO = `${fotkyLightboxIkona} disabled:opacity-60`;
 
 interface StahniFotkuTlacitkoProps {
   url: string;
@@ -33,10 +33,11 @@ export default function StahniFotkuTlacitko({
           void stahni();
         }}
         disabled={probiha || url.length === 0}
-        aria-label="Stáhnout fotku"
+        aria-label={probiha ? "Ukládám fotku" : "Stáhnout fotku"}
+        title={probiha ? "Ukládám…" : "Stáhnout"}
         className={TLACITKO}
       >
-        {probiha ? "Ukládám…" : "Stáhnout"}
+        <IkonaStazeni />
       </button>
       {chyba !== null ? (
         <span role="alert" className="max-w-[14rem] text-right text-xs font-semibold text-red-800">
@@ -44,5 +45,27 @@ export default function StahniFotkuTlacitko({
         </span>
       ) : null}
     </span>
+  );
+}
+
+function IkonaStazeni(): JSX.Element {
+  return (
+    <svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path
+        d="M12 4v10M8 10.5 12 14.5 16 10.5M5 19h14"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

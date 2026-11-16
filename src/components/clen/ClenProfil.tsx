@@ -10,7 +10,9 @@ import {
 import { createPortal } from "react-dom";
 import { nactiCleny } from "../../lib/admin-clenove";
 import { inicialyProAvatar, urlAvataruProZobrazeni } from "../../lib/storage/avatar";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 import type { UserListItem } from "../../shared/api-types";
+import { zobrazeniTelefonu } from "../../shared/telefon";
 
 export interface ClenProfilVstup {
   id: string;
@@ -137,6 +139,14 @@ function KartaProfilu({
   }, []);
 
   useEffect(() => {
+    const puvodniOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = puvodniOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     function naKlavesu(udalost: KeyboardEvent): void {
       if (udalost.key !== "Escape") return;
       udalost.preventDefault();
@@ -151,14 +161,14 @@ function KartaProfilu({
   const jmeno = detail?.jmeno ?? vstup.jmeno;
   const ulozenaUrl = detail?.avatarUrl ?? vstup.avatarUrl ?? null;
   const fotka = rozbity ? null : urlAvataruProZobrazeni(ulozenaUrl);
-  const telefon = (detail?.telefon ?? "").trim();
+  const telefonZobrazeni = zobrazeniTelefonu(detail?.telefon);
   const discord = (detail?.discordNick ?? "").trim();
   const email = (detail?.email ?? "").trim();
 
   return (
     <>
       <div
-        className="fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-4 sm:items-center"
+        className="nocturne fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-none bg-inkoust/50 p-4 sm:items-center"
         onClick={onZavrit}
       >
         <div
@@ -166,7 +176,7 @@ function KartaProfilu({
           aria-modal="true"
           aria-labelledby={titulekId}
           onClick={(udalost) => udalost.stopPropagation()}
-          className="w-full max-w-sm rounded-2xl border-2 border-inkoust bg-papir p-5 shadow-denik"
+          className="my-auto w-full max-w-sm rounded-2xl border-2 border-inkoust bg-papir p-5 shadow-denik"
         >
           <div className="flex flex-col items-center gap-3 text-center">
             {fotka !== null ? (
@@ -176,7 +186,7 @@ function KartaProfilu({
                 aria-label="Zvětšit fotku"
                 className="h-32 w-32 overflow-hidden rounded-full border-2 border-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
               >
-                <img
+                <PostupnaFotka
                   src={fotka}
                   alt=""
                   width={128}
@@ -212,8 +222,12 @@ function KartaProfilu({
               {email.length > 0 && (
                 <RadekKontaktu popisek="E-mail" hodnota={email} href={`mailto:${email}`} />
               )}
-              {telefon.length > 0 && (
-                <RadekKontaktu popisek="Telefon" hodnota={telefon} href={`tel:${telefon}`} />
+              {telefonZobrazeni.text.length > 0 && (
+                <RadekKontaktu
+                  popisek="Telefon"
+                  hodnota={telefonZobrazeni.text}
+                  href={telefonZobrazeni.href ?? undefined}
+                />
               )}
               {discord.length > 0 && <RadekKontaktu popisek="Discord" hodnota={discord} />}
             </div>
@@ -222,7 +236,7 @@ function KartaProfilu({
           <button
             type="button"
             onClick={onZavrit}
-            className="mt-5 inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+            className="mt-5 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           >
             Zavřít
           </button>
@@ -230,22 +244,34 @@ function KartaProfilu({
       </div>
       {zvetseno && fotka !== null && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-inkoust/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Fotka: ${jmeno}`}
+          className="nocturne lightbox-pozadi fixed inset-0 z-[120] flex flex-col"
           onClick={() => setZvetseno(false)}
         >
-          <button
-            type="button"
-            onClick={() => setZvetseno(false)}
-            className="absolute right-4 top-4 inline-flex min-h-[44px] items-center rounded-full border-2 border-papir bg-inkoust px-4 text-sm font-bold text-papir"
-          >
-            Zavřít
-          </button>
-          <img
-            src={fotka}
-            alt={jmeno}
-            onClick={(udalost) => udalost.stopPropagation()}
-            className="max-h-[85dvh] max-w-full rounded-lg border-2 border-papir object-contain"
-          />
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <PostupnaFotka
+              src={fotka}
+              alt={jmeno}
+              prednost
+              zamlzeni
+              onClick={(udalost) => udalost.stopPropagation()}
+              className="max-h-full max-w-full rounded-lg border-2 border-papir object-contain"
+            />
+          </div>
+          <div className="flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            <button
+              type="button"
+              onClick={(udalost) => {
+                udalost.stopPropagation();
+                setZvetseno(false);
+              }}
+              className="inline-flex min-h-[44px] min-w-[7.5rem] items-center justify-center rounded-xl border-2 border-papir bg-inkoust px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-papir [touch-action:manipulation]"
+            >
+              Zavřít
+            </button>
+          </div>
         </div>
       )}
     </>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import ConfirmDialog from "../kalendar/ConfirmDialog";
+import { KostraFotky } from "../StrankaKostra";
 import FotkyKosHlavicka from "./FotkyKosHlavicka";
 import FotkyMazaciHlavicka from "./FotkyMazaciHlavicka";
 import FotkyStahovaciHlavicka from "./FotkyStahovaciHlavicka";
+import FotkyNahravaciIkona from "./FotkyNahravaciIkona";
 import FotkaDialog from "./FotkaDialog";
 import MazaniVyberVrstva from "./MazaniVyberVrstva";
 import StahovaniVyberVrstva from "./StahovaniVyberVrstva";
@@ -32,10 +34,13 @@ import {
   type ApiFotkaAlba,
 } from "../../lib/alba-api";
 import FotkyStavPanel from "./FotkyStavPanel";
+import FotkyRadkovaMrizka from "./FotkyRadkovaMrizka";
+import PostupnaFotka from "./PostupnaFotka";
 import {
   fotkyAlbumToolbarKompaktni,
   fotkyAlbumToolbarZaklad,
   fotkyMrizkaDlazdice,
+  fotkyTlacitkoZaklad,
 } from "./fotky-ui";
 import {
   nazevSouboruAlba,
@@ -51,16 +56,27 @@ interface AlbumFotkyProps {
   isAdmin: boolean;
   /** Album list cover/count should refresh after deletes. */
   onZmenaAlba?: () => void;
+  /** Journal chrome on the photo lightbox and its confirm dialogs. */
+  denik?: boolean;
 }
 
 type Stav = "nacitani" | "hotovo" | "chyba";
 
 /** Photos inside one album. A tap opens a large view, not the expedition lightbox. */
+/** Selection prompt, then a count once any photo is marked. */
+function popisekVyberu(pocet: number, prazdny: string): string {
+  if (pocet <= 0) return prazdny;
+  if (pocet === 1) return "Vybraná 1 fotka.";
+  if (pocet < 5) return `Vybrané ${pocet} fotky.`;
+  return `Vybraných ${pocet} fotek.`;
+}
+
 export default function AlbumFotky({
   album,
   obnova,
   isAdmin,
   onZmenaAlba,
+  denik = false,
 }: AlbumFotkyProps): JSX.Element {
   const jeKos = album.druh === "kos";
   const [fotky, setFotky] = useState<ApiFotkaAlba[]>([]);
@@ -290,21 +306,10 @@ export default function AlbumFotky({
           : "border-inkoust";
 
   const akceRowTrida =
-    vyberovyRezim && !jeKos
-      ? "flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:min-w-[11rem]"
-      : "flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end sm:gap-2";
+    "flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto";
 
   if (stav === "nacitani") {
-    return (
-      <div role="status" aria-label="Načítám fotky" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="aspect-square animate-pulse rounded-lg border-2 border-inkoust/20 bg-white/60 motion-reduce:animate-none"
-          />
-        ))}
-      </div>
-    );
+    return <KostraFotky />;
   }
 
   if (stav === "chyba") {
@@ -325,8 +330,19 @@ export default function AlbumFotky({
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
           {jeKos
             ? `Fotky v koši se po ${KOS_RETENTION_DAYS} dnech smažou natrvalo.`
-            : "Nahrát je můžeš ze seznamu všech alb."}
+            : "Přidej první fotky tlačítkem, nebo je přetáhni nahoře v Nahrát fotky."}
         </p>
+        {isAdmin && !jeKos ? (
+          <div className="mt-4 flex justify-center">
+            <FotkyNahravaciIkona
+              albumId={album.id}
+              onNahrano={() => {
+                onZmenaAlba?.();
+                void nacist();
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -398,23 +414,29 @@ export default function AlbumFotky({
         <>
           <div
             className={`${fotkyAlbumToolbarZaklad} px-3 py-2.5 ${toolbarRezimTrida} ${
-              vyberovyRezim ? fotkyAlbumToolbarKompaktni : ""
-            }`}
+              vyberovyRezim && !mazani.mazaciRezim && !stahovani.stahovaciRezim
+                ? fotkyAlbumToolbarKompaktni
+                : ""
+            } ${vyberovyRezim ? "" : "max-sm:flex-row max-sm:items-center max-sm:justify-between"}`}
             data-fotky-album-toolbar
+            {...(jeKos && mazani.mazaciRezim ? { "data-kos-sprava": "" } : {})}
           >
             <p
               data-fotky-album-toolbar-nadpis
-              className="min-w-0 shrink-0 text-sm font-semibold text-inkoust sm:max-w-[50%]"
+              className="min-w-0 flex-1 text-sm font-semibold leading-snug text-inkoust"
             >
               {mazani.mazaciRezim
                 ? jeKos
-                  ? "Vyber fotky v koši."
-                  : "Vyber fotky ke smazání."
+                  ? popisekVyberu(mazani.vybrane.size, "Vyber fotky v koši.")
+                  : popisekVyberu(mazani.vybrane.size, "Vyber fotky ke smazání.")
                 : stahovani.stahovaciRezim
-                  ? "Vyber fotky ke stažení."
+                  ? popisekVyberu(stahovani.vybrane.size, "Vyber fotky ke stažení.")
                   : popisekPoctuFotek(fotky.length)}
             </p>
-            <div data-fotky-album-akce-row className={akceRowTrida}>
+            <div
+              data-fotky-album-akce-row
+              className={`${akceRowTrida}${vyberovyRezim ? "" : " max-sm:w-auto max-sm:shrink-0 max-sm:flex-nowrap max-sm:gap-1.5"}`}
+            >
               {jeKos ? (
                 isAdmin ? hlavickaKos : null
               ) : mazani.mazaciRezim ? (
@@ -423,6 +445,15 @@ export default function AlbumFotky({
                 hlavickaStahovani
               ) : (
                 <>
+                  {isAdmin && !jeKos ? (
+                    <FotkyNahravaciIkona
+                      albumId={album.id}
+                      onNahrano={() => {
+                        onZmenaAlba?.();
+                        void nacist();
+                      }}
+                    />
+                  ) : null}
                   {hlavickaStahovani}
                   {hlavickaMazani}
                 </>
@@ -437,59 +468,69 @@ export default function AlbumFotky({
         </>
       ) : null}
 
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
-        {fotky.map((fotka, poradi) => {
+      {stahovani.stahovatChyba !== null ? (
+        <p role="alert" className="mb-3 text-sm font-semibold text-inkoust">
+          {stahovani.stahovatChyba}
+        </p>
+      ) : null}
+
+      <FotkyRadkovaMrizka
+        fotky={fotky}
+        className="-mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] lg:mx-0 lg:w-full"
+        render={(fotka, _rozmer, nahlasRozmer) => {
           const src = srcFotkyAlba(album, fotka);
+          const poradi = fotky.findIndex((polozka) => polozka.id === fotka.id);
           const vybrana =
             (mazani.mazaciRezim && mazani.vybrane.has(fotka.id)) ||
             (stahovani.stahovaciRezim && stahovani.vybrane.has(fotka.id));
           const jeNahled = fotka.jeNahled;
+          if (mazani.mazaciRezim) {
+            return (
+              <button
+                type="button"
+                aria-pressed={vybrana}
+                aria-current={jeNahled ? "true" : undefined}
+                aria-label={jeKos ? "Vybrat fotku v koši" : "Vybrat fotku ke smazání"}
+                onClick={() => {
+                  mazani.prepniVyber(fotka.id);
+                }}
+                className={`group ${fotkyMrizkaDlazdice}`}
+              >
+                <Miniatura src={src} onRozmer={nahlasRozmer} />
+                <MazaniVyberVrstva vybrana={vybrana} />
+              </button>
+            );
+          }
+          if (!jeKos && stahovani.stahovaciRezim) {
+            return (
+              <button
+                type="button"
+                aria-pressed={vybrana}
+                aria-current={jeNahled ? "true" : undefined}
+                aria-label="Vybrat fotku ke stažení"
+                onClick={() => {
+                  stahovani.prepniVyber(fotka.id);
+                }}
+                className={`group ${fotkyMrizkaDlazdice}`}
+              >
+                <Miniatura src={src} onRozmer={nahlasRozmer} />
+                <StahovaniVyberVrstva vybrana={vybrana} />
+              </button>
+            );
+          }
           return (
-            <li key={fotka.id} className="min-w-0">
-              {mazani.mazaciRezim ? (
-                <button
-                  type="button"
-                  aria-pressed={vybrana}
-                  aria-label={jeKos ? "Vybrat fotku v koši" : "Vybrat fotku ke smazání"}
-                  onClick={() => {
-                    mazani.prepniVyber(fotka.id);
-                  }}
-                  className={`group ${fotkyMrizkaDlazdice} ${
-                    vybrana ? "border-jantar ring-2 ring-jantar/30" : jeNahled ? "border-inkoust" : "border-inkoust/40"
-                  }`}
-                >
-                  <Miniatura src={src} />
-                  <MazaniVyberVrstva vybrana={vybrana} />
-                </button>
-              ) : !jeKos && stahovani.stahovaciRezim ? (
-                <button
-                  type="button"
-                  aria-pressed={vybrana}
-                  aria-label="Vybrat fotku ke stažení"
-                  onClick={() => {
-                    stahovani.prepniVyber(fotka.id);
-                  }}
-                  className={`group ${fotkyMrizkaDlazdice} ${
-                    vybrana ? "border-smrk ring-2 ring-smrk/30" : jeNahled ? "border-inkoust" : "border-inkoust/40"
-                  }`}
-                >
-                  <Miniatura src={src} />
-                  <StahovaniVyberVrstva vybrana={vybrana} />
-                </button>
-              ) : (
-                <FotoTlacitko
-                  src={src}
-                  poradi={poradi}
-                  celkem={fotky.length}
-                  onOtevrit={() => {
-                    setIndex(poradi);
-                  }}
-                />
-              )}
-            </li>
+            <FotoTlacitko
+              src={src}
+              poradi={poradi}
+              celkem={fotky.length}
+              onRozmer={nahlasRozmer}
+              onOtevrit={() => {
+                setIndex(poradi);
+              }}
+            />
           );
-        })}
-      </ul>
+        }}
+      />
 
       {mazani.mazatChyba !== null ? (
         <p role="alert" className="mt-3 text-sm font-semibold text-inkoust">
@@ -497,10 +538,20 @@ export default function AlbumFotky({
         </p>
       ) : null}
 
-      {stahovani.stahovatChyba !== null ? (
-        <p role="alert" className="mt-3 text-sm font-semibold text-inkoust">
-          {stahovani.stahovatChyba}
-        </p>
+      {stahovani.galeriePripravena ? (
+        <div className="mt-3 flex flex-col items-start gap-2">
+          <p className="text-sm leading-snug text-inkoust">Fotky jsou připravené. Ulož je do galerie telefonu.</p>
+          <button
+            type="button"
+            onClick={() => {
+              void stahovani.ulozDoGalerie();
+            }}
+            disabled={stahovani.stahujeSe}
+            className={`${fotkyTlacitkoZaklad} rounded-md border-2 border-inkoust bg-inkoust px-4 text-sm font-bold text-papir disabled:opacity-60`}
+          >
+            Uložit do galerie
+          </button>
+        </div>
       ) : null}
 
       {index !== null ? (
@@ -512,6 +563,7 @@ export default function AlbumFotky({
           onZavrit={() => {
             setIndex(null);
           }}
+          denik={denik}
           isAdmin={isAdmin}
           mazeSe={mazani.mazeSe || obnovujeSe}
           jeKos={jeKos}
@@ -598,21 +650,28 @@ export default function AlbumFotky({
   );
 }
 
-function Miniatura({ src }: { src: string }): JSX.Element {
+function Miniatura({
+  src,
+  onRozmer,
+}: {
+  src: string;
+  onRozmer: (sirka: number, vyska: number) => void;
+}): JSX.Element {
   const [rozbita, setRozbita] = useState<boolean>(false);
   const ukaz = src.length > 0 && !rozbita;
   return ukaz ? (
-    <img
+    <PostupnaFotka
       src={src}
       alt=""
       loading="lazy"
       className="absolute inset-0 h-full w-full object-cover"
+      onRozmer={onRozmer}
       onError={() => {
         setRozbita(true);
       }}
     />
   ) : (
-    <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-inkoust/60">
+    <span className="absolute inset-0 flex items-center justify-center bg-inkoust/5 text-xs font-semibold text-inkoust/60">
       Chyba
     </span>
   );
@@ -622,11 +681,13 @@ function FotoTlacitko({
   src,
   poradi,
   celkem,
+  onRozmer,
   onOtevrit,
 }: {
   src: string;
   poradi: number;
   celkem: number;
+  onRozmer: (sirka: number, vyska: number) => void;
   onOtevrit: () => void;
 }): JSX.Element {
   const [rozbita, setRozbita] = useState<boolean>(false);
@@ -638,18 +699,15 @@ function FotoTlacitko({
       type="button"
       onClick={onOtevrit}
       aria-label={popisek}
-      className={`${fotkyMrizkaDlazdice} border-inkoust`}
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(to bottom, transparent 0 23px, rgba(26,46,34,0.08) 23px 24px)",
-      }}
+      className={`${fotkyMrizkaDlazdice} bg-inkoust/5`}
     >
       {ukaz ? (
-        <img
+        <PostupnaFotka
           src={src}
           alt=""
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover"
+          onRozmer={onRozmer}
           onError={() => {
             setRozbita(true);
           }}

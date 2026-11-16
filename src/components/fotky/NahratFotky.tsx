@@ -1,11 +1,10 @@
-import { useRef, useState, type FormEvent, type JSX } from "react";
+import { useRef, useState, type DragEvent, type JSX } from "react";
 import { nahrajFotku, popisekPoctuFotek, type ApiAlbum } from "../../lib/alba-api";
 import {
   kratkyNazevSouboru,
   type PolozkaStavuFotek,
 } from "../../lib/fotky-operace-stav";
 import FotkyStavPanel from "./FotkyStavPanel";
-import { fotkyHoverBgSmrkPlne, fotkyTlacitkoZaklad } from "./fotky-ui";
 
 interface NahratFotkyProps {
   alba: readonly ApiAlbum[];
@@ -32,10 +31,8 @@ export default function NahratFotky({
   const [operacePolozky, setOperacePolozky] = useState<readonly PolozkaStavuFotek[]>([]);
   const bezAlb = alba.length === 0;
 
-  async function odeslat(udalost: FormEvent<HTMLFormElement>): Promise<void> {
-    udalost.preventDefault();
-    const soubory = vstupRef.current?.files;
-    if (soubory === null || soubory === undefined || soubory.length === 0) {
+  async function odeslatSoubory(seznam: readonly File[]): Promise<void> {
+    if (seznam.length === 0) {
       setChyba("Vyber aspoň jednu fotku.");
       setHotovoShrnuti(null);
       return;
@@ -48,7 +45,6 @@ export default function NahratFotky({
     setOdesila(true);
     setChyba(null);
     setHotovoShrnuti(null);
-    const seznam = Array.from(soubory);
     const radky: PolozkaStavuFotek[] = seznam.map((soubor, index) => ({
       id: `${index}-${soubor.name}`,
       popisek: kratkyNazevSouboru(soubor.name),
@@ -99,13 +95,61 @@ export default function NahratFotky({
     }, 2400);
   }
 
+  function prijmiSoubory(soubory: FileList | null): void {
+    const seznam = soubory === null ? [] : Array.from(soubory).filter((soubor) => soubor.type.startsWith("image/"));
+    setPocet(seznam.length);
+    setChyba(null);
+    setHotovoShrnuti(null);
+    void odeslatSoubory(seznam);
+  }
+
+  function naPretazeni(udalost: DragEvent<HTMLLabelElement>): void {
+    udalost.preventDefault();
+    if (odesila || bezAlb) return;
+    prijmiSoubory(udalost.dataTransfer.files);
+  }
+
   return (
     <>
-      <form onSubmit={(udalost) => void odeslat(udalost)} className="flex flex-col gap-3">
-        <div>
-          <label htmlFor="fotky-soubory" className="text-sm font-bold tracking-tight">
-            Fotky
+      <div className="flex flex-col gap-3">
+        <div className="min-w-0">
+          <label htmlFor="fotky-album" className="text-sm font-bold tracking-tight">
+            Uložit do alba
           </label>
+          <div className="fotky-album-vyber mt-1">
+          <select
+            id="fotky-album"
+            name="album"
+            value={vybraneId}
+            disabled={odesila || bezAlb}
+            onChange={(udalost) => {
+              onVyber(udalost.target.value);
+            }}
+            className="block min-h-[44px] w-full rounded-md border-2 border-inkoust bg-papir px-3 text-base font-bold text-inkoust"
+          >
+            {bezAlb ? <option value="">Žádné album</option> : null}
+            {alba.map((album) => (
+              <option key={album.id} value={album.id}>
+                {album.nazev}
+              </option>
+            ))}
+          </select>
+          </div>
+        </div>
+        <label
+          htmlFor="fotky-soubory"
+          onDragOver={(udalost) => {
+            udalost.preventDefault();
+          }}
+          onDrop={naPretazeni}
+          className={`flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-1 border-2 border-dashed border-inkoust bg-papir px-4 py-4 text-center ${
+            odesila || bezAlb ? "pointer-events-none opacity-60" : ""
+          }`}
+        >
+          <span className="text-sm font-extrabold text-inkoust">
+            {odesila ? "Nahrávám…" : "Přetáhni fotky sem"}
+          </span>
+          <span className="text-sm text-inkoust/70">nebo klepni a vyber je</span>
           <input
             ref={vstupRef}
             id="fotky-soubory"
@@ -115,54 +159,25 @@ export default function NahratFotky({
             multiple
             disabled={odesila || bezAlb}
             onChange={(udalost) => {
-              setPocet(udalost.target.files?.length ?? 0);
-              setChyba(null);
-              setHotovoShrnuti(null);
+              prijmiSoubory(udalost.target.files);
             }}
-            className="mt-1 block min-h-[44px] w-full text-base file:mr-3 file:inline-flex file:min-h-[44px] file:items-center file:rounded-md file:border-2 file:border-inkoust file:bg-papir file:px-3 file:text-base file:font-bold file:text-inkoust"
+            className="sr-only"
           />
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="fotky-album" className="text-sm font-bold tracking-tight">
-              Do alba
-            </label>
-            <select
-              id="fotky-album"
-              name="album"
-              value={vybraneId}
-              disabled={odesila || bezAlb}
-              onChange={(udalost) => {
-                onVyber(udalost.target.value);
-              }}
-              className="mt-1 block min-h-[44px] w-full rounded-md border-2 border-inkoust bg-white/80 px-3 text-base font-bold text-inkoust"
-            >
-              {bezAlb ? <option value="">Žádné album</option> : null}
-              {alba.map((album) => (
-                <option key={album.id} value={album.id}>
-                  {album.nazev}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={odesila || bezAlb}
-            className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrkPlne} rounded-md border-2 border-inkoust bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60`}
-          >
-            {odesila ? "Nahrávám…" : "Nahrát"}
-          </button>
-        </div>
+        </label>
         <p role="status" className="text-sm text-inkoust/70">
           {hotovoShrnuti ??
-            (pocet === 0 ? "Můžeš vybrat víc fotek najednou." : `Vybráno: ${pocet}.`)}
+            (pocet === 0
+              ? "Můžeš vybrat celý víkend najednou. Fotky se nahrají hned po výběru."
+              : odesila
+                ? `Nahrávám ${pocet}…`
+                : `Vybráno: ${pocet}.`)}
         </p>
         {chyba !== null ? (
           <p role="alert" className="text-sm font-semibold text-red-800">
             {chyba}
           </p>
         ) : null}
-      </form>
+      </div>
 
       <FotkyStavPanel
         rezim="nahravani"

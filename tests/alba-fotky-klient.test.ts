@@ -50,6 +50,35 @@ describe("nactiFotkyAlba — parsování kontraktu", () => {
     }
   });
 
+  it("odpověď bez šířky a výšky se pořád normalizuje", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => odpovedJson({ fotky: [fotkaKontrakt()] }, 200)),
+    );
+    const vysledek = await nactiFotkyAlba(ALBUM_ID);
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.sirka).toBeUndefined();
+      expect(vysledek.data[0]?.vyska).toBeUndefined();
+      expect(vysledek.data[0]?.id).toBe("f1");
+    }
+  });
+
+  it("odpověď se šířkou a výškou čísla zachová", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        odpovedJson({ fotky: [{ ...fotkaKontrakt(), sirka: 1200, vyska: 800 }] }, 200),
+      ),
+    );
+    const vysledek = await nactiFotkyAlba(ALBUM_ID);
+    expect(vysledek.ok).toBe(true);
+    if (vysledek.ok) {
+      expect(vysledek.data[0]?.sirka).toBe(1200);
+      expect(vysledek.data[0]?.vyska).toBe(800);
+    }
+  });
+
   it("doplní null pro chybějící expeditionId a albumId", async () => {
     const bezVazeb = {
       id: "f2",

@@ -13,6 +13,7 @@
  */
 import {
   boolean,
+  integer,
   pgTable,
   uuid,
   text,
@@ -42,6 +43,9 @@ export const photos = pgTable("photos", {
     .defaultNow(),
   /** NULL = visible; NOT NULL = in admin trash (Koš). */
   smazanoAt: timestamp("smazano_at", { withTimezone: true }),
+  /** Pixel size of the stored file after orientation is baked in. Null on older rows. */
+  sirka: integer("sirka"),
+  vyska: integer("vyska"),
 });
 
 export type Photo = typeof photos.$inferSelect;

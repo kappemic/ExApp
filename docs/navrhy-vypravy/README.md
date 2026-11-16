@@ -1,4 +1,6 @@
-# Návrhy výprav — 5 hi-fi prototypů
+# Návrhy výprav — 3 hi-fi prototypy
+
+> Archiv původních návrhů. Skutečný vzhled stránky `/vypravy` popisuje `DESIGN.md`.
 
 Izolované klikatelné preview soubory. **Nemění** `src/pages/*`, `src/components/expeditions/*`, `server/*`. Čistá statika — otevřít dvojklikem, bez buildu, bez BFF/DB.
 
@@ -7,8 +9,8 @@ Izolované klikatelné preview soubory. **Nemění** `src/pages/*`, `src/compone
 - `A-denik.html` — otevřít v prohlížeči (dvojklik nebo `start docs\navrhy-vypravy\A-denik.html`)
 - `B-fotokarty.html` — dtto
 - `C-osa.html` — dtto
-- `D-srazovka.html` — dtto
-- `E-stopa.html` — dtto
+
+Varianty D (Srazovka) a E (Stopa) jsou níže popsané jen jako koncept, jejich HTML soubory v repu nejsou.
 
 Z repo-rootu: `C:/dev/ExApp/docs/navrhy-vypravy/A-denik.html` atd.
 
@@ -26,7 +28,7 @@ Z repo-rootu: `C:/dev/ExApp/docs/navrhy-vypravy/A-denik.html` atd.
 
 A–C obsahují: header · přepínač **Seznam / Kalendář** · filtr (Vše/Volno/Skoro plno/Proběhlé) · kartu (název, datum, sraz, kapacita, unread tečka) · modal/detail (název, datum, sraz, kapacita, stav, popis, akce) · česky.
 
-D a E berou stejných 7 výprav a stejný dialog. D nemá filtr ani kalendář — stránka je lístek, fronta a sbalený archiv. E filtruje jen ušlou stopu (Vše / Spárováno / Bez stopy).
+Koncept D a E počítá se stejnými 7 výpravami a stejným dialogem. D nemá filtr ani kalendář — stránka je lístek, fronta a sbalený archiv. E filtruje jen ušlou stopu (Vše / Spárováno / Bez stopy).
 
 ## Která varianta co řeší
 
@@ -49,7 +51,7 @@ D a E nepřidávají paletu. Klubové tokeny zůstávají stejné: papír, inkou
 
 ## Acceptance checks
 
-1. ✅ Všech 5 variant renderuje stejných 7 mock výprav a jde otevřít bez BFF/DB (file:// stačí).
+1. ✅ Všechny 3 varianty renderují stejných 7 mock výprav a jdou otevřít bez BFF/DB (file:// stačí).
 2. ✅ Responsive 360 / 768 / 1280 — `minmax(0,1fr)`, `overflow-wrap:anywhere`, mobilní kalendář v C, žádný horizontální scroll.
 3. ✅ Viditelný `:focus-visible` (3px, barva dle varianty), kontrast: tmavý inkoust na papíru, papír na tmavém podkladu; jantar jen pro velké prvky/tečky s textovým doprovodem stavu.
 4. ✅ `@media (prefers-reduced-motion: reduce)` — vypíná animace/přechody i natočení razítka.

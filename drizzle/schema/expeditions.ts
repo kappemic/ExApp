@@ -7,7 +7,8 @@
  * stav 'volno' | 'skoro plno' | 'proběhlá', datum DATE).
  */
 
-import { date, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { date, integer, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { users } from "./users";
 
 export const expeditions = pgTable("expeditions", {
   id: text("id").primaryKey(),
@@ -31,6 +32,10 @@ export const expeditions = pgTable("expeditions", {
   stravaActivityId: text("strava_activity_id").unique(),
   /** Zakódovaná trasa (Strava polyline) pro heatmapu. NULL = bez trasy. */
   trasaPolyline: text("trasa_polyline"),
+  /** Uživatel, který výpravu vytvořil (organizátor). NULL = neevidováno. */
+  organizatorId: uuid("organizator_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

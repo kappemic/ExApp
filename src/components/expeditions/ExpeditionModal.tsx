@@ -2,13 +2,19 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type JSX,
   type MouseEvent,
 } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { apiBase } from "../../lib/api-base";
 import AvatarKruh from "../AvatarKruh";
+import VyberPole from "../VyberPole";
+import ZastupnySnimek from "../vypravy-nahled/ZastupnySnimek";
+import { paletaVypravy } from "../../lib/krajina";
+import ZnackaOrganizatora from "../ZnackaOrganizatora";
 import { jeClenProfilOtevreny, TlacitkoProfilu } from "../clen/ClenProfil";
 import {
   formatRozsahData,
@@ -20,7 +26,10 @@ import {
   volnaMista,
 } from "../../lib/expedition-utils";
 import {
+  nactiDetailVypravy,
   nactiUcastniky,
+  nahrajCestaSnimky,
+  smazCestaSnimek,
   nactiUzivateleProSelektor,
   odeberUcastnika,
   odhlasZVypravy,
@@ -31,6 +40,8 @@ import {
   uzavriVypravu,
   type ApiUcastnik,
 } from "../../lib/expeditions-ucast";
+import type { ApiCestaSnimek } from "../../shared/api-types";
+import type { SnimkyCestyVyber } from "./ExpeditionForm";
 import type { Expedition } from "../../lib/mock-expeditions";
 import type {
   UserId,
@@ -51,6 +62,7 @@ import ExpeditionPhotos from "./ExpeditionPhotos";
 import { jeFotkyLightboxOtevreny } from "./FotkyLightbox";
 import VypravaNahled from "./VypravaNahled";
 import { useNahledFotkaId } from "../../hooks/useNahledFotkaId";
+import { rozdelViditelne } from "../../lib/sbaleny-seznam";
 import ExpeditionTrasaPrehled from "./ExpeditionTrasaPrehled";
 import StravaParovani from "./StravaParovani";
 
@@ -72,6 +84,8 @@ export interface ExpeditionModalProps {
    * nechává `false` — detail začíná odshora jako dosud.
    */
   startNaDiskuzi?: boolean;
+  /** Shown once after create when screenshot upload failed. */
+  hlaseni?: string | null;
   /**
    * Journal chrome for the preview route. Production keeps the diary modal.
    * The cover frame is 4:3 so a standard photo fills it.
@@ -102,6 +116,7 @@ function prevedExpedici(
     sraz: api.sraz,
     popis: api.popis,
     trasaOdkaz: api.trasaOdkaz,
+    organizatorId: api.organizatorId ?? null,
     kapacita: { prihlaseno: api.kapacita.prihlaseno, celkem: api.kapacita.celkem },
     stav: api.stav,
     // Step 4 — stav párování z detailu (expedice-level): Strava id NEBO
@@ -121,18 +136,73 @@ function statusUcastiPopisek(status: ApiUcastnik["status"]): string {
   return "přihlášen";
 }
 
+/** "Jede 11 lidí" before the trip; afterwards just the signed-up count. */
+function textPoctuPrihlasenych(pocet: number, jede: boolean): string {
+  if (pocet <= 0) return "";
+  if (!jede) {
+    if (pocet === 1) return "1 přihlášený";
+    if (pocet < 5) return `${pocet} přihlášení`;
+    return `${pocet} přihlášených`;
+  }
+  if (pocet === 1) return "Jede 1 člověk";
+  if (pocet < 5) return `Jedou ${pocet} lidé`;
+  return `Jede ${pocet} lidí`;
+}
+
+/** Every name, in one sentence. Nothing is held back for a second list. */
+function textJmenPrihlasenych(jmena: readonly string[]): string {
+  const cista = jmena.map((jmeno) => jmeno.trim()).filter((jmeno) => jmeno.length > 0);
+  if (cista.length === 0) return "";
+  if (cista.length === 1) return cista[0] ?? "";
+  const posledni = cista[cista.length - 1] ?? "";
+  return `${cista.slice(0, -1).join(", ")} a ${posledni}`;
+}
+
+function PrehledPrihlasenych({
+  ucastnici,
+  jede,
+}: {
+  ucastnici: readonly ApiUcastnik[];
+  jede: boolean;
+}): JSX.Element | null {
+  const lide = jede ? ucastnici.filter((clovek) => clovek.status !== "omluven") : ucastnici;
+  const pocet = textPoctuPrihlasenych(lide.length, jede);
+  if (pocet.length === 0) return null;
+  const jmena = textJmenPrihlasenych(lide.map((clovek) => clovek.jmeno));
+  return (
+    <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex max-w-full flex-wrap sm:max-w-56">
+        {lide.map((clovek, index) => (
+          <span key={clovek.id} className={`rounded-full ring-2 ring-papir ${index === 0 ? "" : "-ml-2"}`}>
+            <AvatarKruh jmeno={clovek.jmeno} url={clovek.avatarUrl} />
+          </span>
+        ))}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-inkoust">{pocet}</p>
+        {jmena.length > 0 && (
+          <p className="text-[13px] leading-snug text-mech">{jmena}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function JmenoUcastnika({
   ucastnik,
   doplnek,
+  jeOrganizator = false,
 }: {
   ucastnik: ApiUcastnik;
   doplnek?: JSX.Element;
+  jeOrganizator?: boolean;
 }): JSX.Element {
   const obsah = (
     <>
       <AvatarKruh jmeno={ucastnik.jmeno} url={ucastnik.avatarUrl} />
       <span className="min-w-0 truncate font-semibold">
         {ucastnik.jmeno}
+        {jeOrganizator ? <ZnackaOrganizatora /> : null}
         {doplnek}
       </span>
     </>
@@ -157,8 +227,109 @@ function JmenoUcastnika({
  * klik na backdrop, křížek; po zavření vrací focus na kartu, která ho otevřela.
  * USER: seznam přihlášených + Přihlásit / Odhlásit. Správa výprav
  * (aktivní člen, dual-guard): Upravit (reuse ExpeditionForm),
- * Odstranit (potvrzení), Uzavřít s docházkou (checkboxy).
+ * Odstranit (potvrzení), Uzavřít (bez vyplňování docházky).
  */
+function srcSnimku(url: string): string {
+  if (url.startsWith("/api/")) return `${apiBase()}${url}`;
+  return url;
+}
+
+function MrizkaSnimku({
+  nadpis,
+  snimky,
+}: {
+  nadpis: string;
+  snimky: readonly ApiCestaSnimek[];
+}): JSX.Element | null {
+  if (snimky.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <h3 className="text-sm font-bold">{nadpis}</h3>
+      <ul className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {snimky.map((snimek) => (
+          <li key={snimek.id}>
+            <a href={srcSnimku(snimek.url)} target="_blank" rel="noopener noreferrer" className="block">
+              <img
+                src={srcSnimku(snimek.url)}
+                alt={nadpis}
+                className="aspect-square w-full rounded-xl object-cover"
+              />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Tlačítka dialogu (C2): stejná výška, zaoblení a písmo ve všech režimech. */
+const TLACITKO_ZAKLAD =
+  "inline-flex min-h-[48px] items-center justify-center rounded-xl px-6 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60";
+const PAPIR = `${TLACITKO_ZAKLAD} bg-mlha text-inkoust hover:bg-linka`;
+const TLACITKO_HLAVNI = `${TLACITKO_ZAKLAD} bg-okr text-inkoust hover:bg-okr-tmavy`;
+const TLACITKO_NEBEZPECI = `${TLACITKO_ZAKLAD} bg-red-800 text-papir hover:bg-red-900`;
+const TLACITKO_UZAVRIT = `${TLACITKO_ZAKLAD} bg-jantar text-papir hover:brightness-95`;
+const TLACITKO_NA_MLZE = `${TLACITKO_ZAKLAD} bg-papir text-inkoust hover:bg-linka`;
+/** Lišta akcí na konci režimu: na telefonu pod sebou, od sm vedle sebe vpravo. */
+const LISTA_AKCI = "mt-6 flex flex-col-reverse gap-2 border-t border-linka pt-4 sm:flex-row sm:justify-end";
+
+function TlacitkoPapir({
+  onClick,
+  disabled,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  title: string;
+  children: string;
+}): JSX.Element {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={title} className={PAPIR}>
+      {children}
+    </button>
+  );
+}
+
+/** Two full rows of the two-column grid, so the next name cannot snap into a hole. */
+const VIDITELNYCH_PRIHLASENYCH = 4;
+
+function viditelniUcastnici(
+  seznam: readonly ApiUcastnik[],
+): { nahore: ApiUcastnik[]; dole: ApiUcastnik[]; skrytych: number } {
+  const rozdelene = rozdelViditelne(seznam, VIDITELNYCH_PRIHLASENYCH);
+  return {
+    nahore: rozdelene.viditelne,
+    dole: rozdelene.skryte,
+    skrytych: rozdelene.skryte.length,
+  };
+}
+
+function TlacitkoDalsichUcastniku({
+  skrytych,
+  vysunuto,
+  onPrepnout,
+}: {
+  skrytych: number;
+  vysunuto: boolean;
+  onPrepnout: () => void;
+}): JSX.Element | null {
+  if (skrytych <= 0) return null;
+  return (
+    <button
+      type="button"
+      aria-expanded={vysunuto}
+      onClick={onPrepnout}
+      className="inline-flex min-h-[44px] w-full touch-manipulation select-none items-center justify-center gap-2 rounded-lg border border-pole bg-papir px-3 text-sm font-semibold text-inkoust hover:bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`h-4 w-4 ${vysunuto ? "rotate-180" : ""}`}>
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+      {vysunuto ? "Zobrazit méně" : `Zobrazit další (${skrytych})`}
+    </button>
+  );
+}
+
 export default function ExpeditionModal({
   expedice,
   onZavrit,
@@ -166,6 +337,7 @@ export default function ExpeditionModal({
   onSmazana,
   neprectenaDiskuze = false,
   startNaDiskuzi = false,
+  hlaseni = null,
   denik = false,
 }: ExpeditionModalProps): JSX.Element {
   const { user, isAdmin, muzeSpravovatVypravy } = useAuth();
@@ -177,7 +349,7 @@ export default function ExpeditionModal({
   const vyberUzivateleId: string = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const krizekRef = useRef<HTMLButtonElement>(null);
-  const vyberUzivateleRef = useRef<HTMLSelectElement>(null);
+  const vyberUzivateleRef = useRef<HTMLButtonElement>(null);
   /* Step 3 — cíl deep-linku (sekce Diskuze). Mount-only: modal se pro každou
      výpravu montuje znovu (`key={vybrana.id}`), pozdější aktualizace rodiče
      (účast, pairing) scroll ani focus znovu nehýbou. */
@@ -214,6 +386,8 @@ export default function ExpeditionModal({
   onAktualizaceRef.current = onAktualizace;
 
   const [rezim, setRezim] = useState<Rezim>("prehled");
+  const [cestaTam, setCestaTam] = useState<ApiCestaSnimek[]>([]);
+  const [cestaZpet, setCestaZpet] = useState<ApiCestaSnimek[]>([]);
   const [ucastStav, setUcastStav] = useState<UcastStav>("nacitani");
   const [ucastnici, setUcastnici] = useState<ApiUcastnik[]>([]);
   const [ucastChyba, setUcastChyba] = useState<string | null>(null);
@@ -227,7 +401,6 @@ export default function ExpeditionModal({
   const [mazeSe, setMazeSe] = useState<boolean>(false);
   const [smazChyba, setSmazChyba] = useState<string | null>(null);
 
-  const [dochazka, setDochazka] = useState<Set<string>>(new Set());
   const [uzaviraSe, setUzaviraSe] = useState<boolean>(false);
   const [uzavriChyba, setUzavriChyba] = useState<string | null>(null);
 
@@ -238,11 +411,14 @@ export default function ExpeditionModal({
   const [uzivateleChyba, setUzivateleChyba] = useState<string | null>(null);
   const [filtrUzivatelu, setFiltrUzivatelu] = useState<string>("");
   const [vybranyUzivatelId, setVybranyUzivatelId] = useState<string>("");
-  const [pridavaSe, setPridavaSe] = useState<boolean>(false);
   const [spravaZprava, setSpravaZprava] = useState<string | null>(null);
   const [spravaChyba, setSpravaChyba] = useState<string | null>(null);
   const [potvrzOdebraniId, setPotvrzOdebraniId] = useState<string | null>(null);
   const [odebiraId, setOdebiraId] = useState<string | null>(null);
+  const [ucastVysunuto, setUcastVysunuto] = useState(false);
+  const [kronikaVysunuto, setKronikaVysunuto] = useState(false);
+  const pridatTlacitkoRef = useRef<HTMLButtonElement>(null);
+  const kotvaPridani = useRef<number | null>(null);
 
   const [nahledZGalerie, setNahledZGalerie] = useState<string | null | undefined>(
     undefined,
@@ -278,7 +454,6 @@ export default function ExpeditionModal({
       return;
     }
     setUcastnici(vysledek.data.ucastnici);
-    setDochazka(new Set(vysledek.data.ucastnici.map((u) => u.id)));
     setUcastStav("hotovo");
     onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
   }, []);
@@ -295,6 +470,19 @@ export default function ExpeditionModal({
     setUzivatele(vysledek.data);
     setUzivateleStav("hotovo");
   }, []);
+
+  useEffect(() => {
+    let zive = true;
+    void (async (): Promise<void> => {
+      const vysledek = await nactiDetailVypravy(expedice.id);
+      if (!zive || !vysledek.ok) return;
+      setCestaTam(vysledek.data.cestaTam);
+      setCestaZpet(vysledek.data.cestaZpet);
+    })();
+    return () => {
+      zive = false;
+    };
+  }, [expedice.id]);
 
   /* Thin bar stays hidden until the dialog or a nested list is scrolling. */
   useEffect(() => {
@@ -363,6 +551,8 @@ export default function ExpeditionModal({
     setPotvrzOdebraniId(null);
     setFiltrUzivatelu("");
     setVybranyUzivatelId("");
+    setUcastVysunuto(false);
+    setKronikaVysunuto(false);
     setUzivateleStav("neaktivni");
     setUzivatele([]);
     setUzivateleChyba(null);
@@ -381,6 +571,7 @@ export default function ExpeditionModal({
     }
     const puvodniOverflow: string = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
 
     function naStiskKlavesy(udalost: KeyboardEvent): void {
       if (jeFotkyLightboxOtevreny() || jeClenProfilOtevreny()) return;
@@ -411,6 +602,7 @@ export default function ExpeditionModal({
     return () => {
       document.removeEventListener("keydown", naStiskKlavesy, true);
       document.body.style.overflow = puvodniOverflow;
+      document.documentElement.style.overflow = puvodniOverflow;
       if (zavriCasovacRef.current !== null) window.clearTimeout(zavriCasovacRef.current);
       if (predchoziFocus instanceof HTMLElement) predchoziFocus.focus();
     };
@@ -515,33 +707,78 @@ export default function ExpeditionModal({
     return true;
   });
 
+  function pripravKotvuPridani(): void {
+    const tlacitko = pridatTlacitkoRef.current;
+    if (tlacitko === null) return;
+    kotvaPridani.current = tlacitko.getBoundingClientRect().top;
+  }
+
+  useLayoutEffect(() => {
+    const cil = kotvaPridani.current;
+    const dialog = dialogRef.current;
+    const tlacitko = pridatTlacitkoRef.current;
+    if (cil === null || dialog === null || tlacitko === null) return;
+    const posun = tlacitko.getBoundingClientRect().top - cil;
+    if (posun !== 0) dialog.scrollTop += posun;
+    kotvaPridani.current = null;
+  });
+
   async function naPridatUcastnika(): Promise<void> {
-    if (vybranyUzivatelId.trim().length === 0) {
+    const userId = vybranyUzivatelId.trim();
+    if (userId.length === 0) {
       setSpravaChyba("Vyber uživatele ze seznamu.");
       return;
     }
-    const dialog: HTMLDivElement | null = dialogRef.current;
-    const pozice: number = dialog?.scrollTop ?? 0;
-    setPridavaSe(true);
-    setSpravaChyba(null);
-    setSpravaZprava(null);
-    const vysledek = await pridejUcastnikaPoUzavreni(expedice.id, {
-      userId: vybranyUzivatelId as UserId,
-    });
-    setPridavaSe(false);
-    if (!vysledek.ok) {
-      setSpravaChyba(vysledek.chyba);
-      obnovScrollPoPrekresleni(pozice);
+    const vybrany = uzivatele.find((uzivatel) => uzivatel.id === userId);
+    if (vybrany === undefined) {
+      setSpravaChyba("Vyber uživatele ze seznamu.");
       return;
     }
-    onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
-    setSpravaZprava(`„${vysledek.data.ucastnik.jmeno}“ je zapsán v kronice.`);
+    const docasneId = `docasne:${userId}:${Date.now()}`;
+    const optimisticky: ApiUcastnik = {
+      id: docasneId,
+      expeditionId: expedice.id,
+      userId: userId as UserId,
+      clenId: null,
+      jmeno: vybrany.jmeno,
+      status: "ucastnil_se",
+      createdAt: new Date().toISOString(),
+      avatarUrl: null,
+    };
+    const predchoziExpedice = expedice;
+    pripravKotvuPridani();
+    setSpravaChyba(null);
+    setSpravaZprava(null);
+    setUcastnici((prev) =>
+      prev.some((u) => u.userId === userId) ? prev : [...prev, optimisticky],
+    );
     setVybranyUzivatelId("");
     setFiltrUzivatelu("");
-    await nacistiUcastniky(expedice.id);
-    obnovScrollPoPrekresleni(pozice);
-    /* Fokus zpět k selektoru bez scrollu — uživatel pokračuje v přidávání
-       tam, kde skončil. */
+    onAktualizaceRef.current({
+      ...expedice,
+      kapacita: {
+        ...expedice.kapacita,
+        prihlaseno: expedice.kapacita.prihlaseno + 1,
+      },
+    });
+    const vysledek = await pridejUcastnikaPoUzavreni(expedice.id, {
+      userId: userId as UserId,
+    });
+    if (!vysledek.ok) {
+      pripravKotvuPridani();
+      setUcastnici((prev) => prev.filter((u) => u.id !== docasneId));
+      setVybranyUzivatelId(userId);
+      setSpravaChyba(vysledek.chyba);
+      onAktualizaceRef.current(predchoziExpedice);
+      return;
+    }
+    const ulozeny = vysledek.data.ucastnik;
+    pripravKotvuPridani();
+    setUcastnici((prev) => prev.map((u) => (u.id === docasneId ? ulozeny : u)));
+    onAktualizaceRef.current(
+      prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId),
+    );
+    setSpravaZprava(`„${ulozeny.jmeno}“ je zapsán v kronice.`);
     requestAnimationFrame(() => {
       vyberUzivateleRef.current?.focus({ preventScroll: true });
     });
@@ -576,20 +813,44 @@ export default function ExpeditionModal({
 
   function naOdeslatUpravu(
     payload: VytvoritExpediciRequest | UpravitExpediciRequest,
+    snimky: SnimkyCestyVyber,
   ): void {
     setOdesilaSe(true);
     setServerChyba(null);
     void (async (): Promise<void> => {
       const vysledek = await upravVypravu(expedice.id, payload);
-      setOdesilaSe(false);
       if (!vysledek.ok) {
+        setOdesilaSe(false);
         if (vysledek.chybyPoli !== undefined) setServerChybyPoli(vysledek.chybyPoli);
         else setServerChyba(vysledek.chyba);
         return;
       }
+      const tam = await nahrajCestaSnimky(expedice.id, "tam", snimky.tam);
+      const zpet = await nahrajCestaSnimky(expedice.id, "zpet", snimky.zpet);
+      setOdesilaSe(false);
+      if (!tam.ok) {
+        setServerChyba(tam.chyba);
+        return;
+      }
+      if (!zpet.ok) {
+        setServerChyba(zpet.chyba);
+        return;
+      }
+      if (tam.data.snimky.length > 0) setCestaTam(tam.data.snimky);
+      if (zpet.data.snimky.length > 0) setCestaZpet(zpet.data.snimky);
       onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
       setRezim("prehled");
     })();
+  }
+
+  async function naSmazatSnimek(snimekId: string): Promise<void> {
+    const vysledek = await smazCestaSnimek(expedice.id, snimekId);
+    if (!vysledek.ok) {
+      setServerChyba(vysledek.chyba);
+      return;
+    }
+    setCestaTam((prev) => prev.filter((snimek) => snimek.id !== snimekId));
+    setCestaZpet((prev) => prev.filter((snimek) => snimek.id !== snimekId));
   }
 
   function naSmazat(): void {
@@ -607,21 +868,14 @@ export default function ExpeditionModal({
     })();
   }
 
-  function prepniDochazku(idUcastnika: string): void {
-    setDochazka((prev) => {
-      const next = new Set(prev);
-      if (next.has(idUcastnika)) next.delete(idUcastnika);
-      else next.add(idUcastnika);
-      return next;
-    });
-  }
-
   function naUzavrit(): void {
     setUzaviraSe(true);
     setUzavriChyba(null);
+    // Closing no longer asks who showed up. Signed-up people count as present;
+    // anyone already excused stays excused.
     const zaznamy = ucastnici.map((u) => ({
       ucastnikId: u.id,
-      status: (dochazka.has(u.id) ? "ucastnil_se" : "omluven") as "ucastnil_se" | "omluven",
+      status: (u.status === "omluven" ? "omluven" : "ucastnil_se") as "ucastnil_se" | "omluven",
     }));
     void (async (): Promise<void> => {
       const vysledek = await uzavriVypravu(expedice.id, zaznamy);
@@ -646,6 +900,8 @@ export default function ExpeditionModal({
     kapacitaCelkem: expedice.kapacita.celkem,
   };
 
+  const kronikaUcasti = viditelniUcastnici(ucastnici);
+
   const nadpisRezim: string =
     rezim === "upravy"
       ? "Upravit výpravu"
@@ -661,12 +917,17 @@ export default function ExpeditionModal({
                 ? "Právě probíhá"
                 : "Detail výpravy";
 
+  const akcentVypravy: string = paletaVypravy(expedice.id, expedice.datum).akcent;
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 p-4 sm:items-center ${
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 lg:items-center lg:p-4 ${
         denik ? `nocturne nahled-modal${zavira ? " nahled-zavira" : ""}` : ""
       }`}
       onMouseDown={naKlikBackdropu}
+      onWheel={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      touch-action="none"
     >
       <div
         ref={dialogRef}
@@ -678,131 +939,193 @@ export default function ExpeditionModal({
            Diskuze (DiskuzeBox `data-vlakno-scroll`) má vlastní vnitřní
            scroll-kartu max-h-80 — scroll detailu celým vláknem jen odjede,
            chat nikoho nenásleduje. `overscroll-contain` brání propadu. */
-        className={`max-h-[90vh] w-full overflow-y-auto overscroll-contain bg-papir ${
-          denik
-            ? "max-w-xl rounded-none border border-[hsl(var(--foreground))] shadow-none"
-            : "max-w-lg rounded-lg border-2 border-inkoust shadow-denik"
+        className={`max-h-[100dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-papir shadow-denik lg:max-h-[92vh] lg:rounded-3xl ${
+          rezim === "prehled" ? "lg:max-w-5xl" : "lg:max-w-3xl"
         }`}
       >
-        <div
-          className={
-            denik
-              ? "relative aspect-[4/3] w-full overflow-hidden border-b border-[hsl(var(--foreground))] bg-[hsl(var(--card))]"
-              : "relative border-b-2 border-inkoust bg-linka/70"
-          }
-        >
-          <div className={denik ? "absolute inset-0" : "relative h-36 w-full overflow-hidden"}>
-            <VypravaNahled
-              expeditionId={expedice.id}
-              fotkaId={fotkaId}
-              probehla={probehla}
-            />
-          </div>
-          <div className="absolute left-4 top-4 z-10">
-            <span
-              className={
-                denik
-                  ? "inline-flex items-center border border-[hsl(var(--foreground))] bg-[hsl(var(--background))] px-2 py-1 font-condensed text-[11px] font-semibold uppercase tracking-[0.18em]"
-                  : "inline-flex items-center gap-1.5 rounded-full border border-inkoust/25 bg-papir/90 px-3 py-1 text-[11px] font-bold backdrop-blur"
-              }
-            >
-              {denik ? null : (
-                <span
-                  aria-hidden="true"
-                  className={`h-2 w-2 rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
-                />
-              )}
-              {poTerminu ? "neuzavřeno" : expedice.stav}
-            </span>
+        <div className="relative">
+          <div className="relative h-48 w-full overflow-hidden sm:h-56 lg:h-64">
+            {probehla && fotkaId !== null ? (
+              <VypravaNahled
+                expeditionId={expedice.id}
+                fotkaId={fotkaId}
+                probehla={probehla}
+              />
+            ) : (
+              <ZastupnySnimek
+                id={expedice.id}
+                datum={expedice.datum}
+                povolit={!probehla && !poTerminu}
+              />
+            )}
           </div>
           <button
             ref={krizekRef}
             type="button"
             onClick={() => zavriRef.current()}
             aria-label="Zavřít detail výpravy"
-            className={
-              denik
-                ? "absolute right-4 top-4 z-10 flex min-h-[44px] min-w-[44px] items-center justify-center border border-[hsl(var(--foreground))] bg-[hsl(var(--background))] font-condensed text-xl leading-none"
-                : "absolute right-4 top-4 z-10 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir text-xl font-extrabold leading-none shadow-razitko motion-safe:transition-colors motion-safe:hover:bg-linka"
-            }
+            className="bez-prejeti absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-papir/90 text-2xl font-semibold leading-none text-inkoust shadow-razitko [touch-action:manipulation] motion-safe:transition-colors motion-safe:hover:bg-papir"
           >
             <span aria-hidden="true">×</span>
           </button>
         </div>
-        <div className="p-5 sm:p-6">
-          <p
-            className={
-              denik
-                ? "font-condensed text-[11px] font-semibold uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]"
-                : "text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55"
-            }
-          >
+        <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
+          <p className="text-sm font-semibold" style={{ color: akcentVypravy }}>
             {nadpisRezim}
           </p>
           <h2
             id={nadpisId}
-            className={
-              denik
-                ? "mt-1 break-words font-expanded text-2xl font-extrabold leading-tight tracking-tight"
-                : "mt-1 break-words text-xl font-bold tracking-tight"
-            }
+            className="mt-1 break-words text-3xl font-bold leading-tight text-inkoust sm:text-4xl"
           >
             {expedice.nazev}
           </h2>
-          <p id={popisId} className="mt-1 break-words text-sm text-inkoust/70">
-            <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
-            {" · "}
-            {expedice.sraz}
-          </p>
+          <dl
+            id={popisId}
+            className={
+              rezim === "prehled"
+                ? "mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-base"
+                : "sr-only"
+            }
+          >
+            <dt className="text-mech">Termín</dt>
+            <dd className="m-0 font-medium text-inkoust">
+              <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
+            </dd>
+            <dt className="text-mech">Sraz</dt>
+            <dd className="m-0 break-words font-medium text-inkoust">{expedice.sraz}</dd>
+          </dl>
+
+          {rezim === "prehled" && !archiv && ucastStav === "hotovo" && akceChyba !== null ? (
+            <p role="alert" className="mt-3 text-sm font-semibold text-red-800">
+              {akceChyba}
+            </p>
+          ) : null}
+
+          {rezim === "prehled" && !archiv && ucastStav === "hotovo" && user !== null ? (
+            <div className="mt-4">
+              {jsemPrihlasen ? (
+                <button
+                  type="button"
+                  onClick={() => void naOdhlasit()}
+                  disabled={akceBezi}
+                  title={akceBezi ? "Odhlašování probíhá…" : "Odhlásit se z výpravy"}
+                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:w-auto"
+                >
+                  {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void naPrihlasit()}
+                  disabled={akceBezi || plno}
+                  title={plno ? "Výprava je plná" : "Přihlásit se na výpravu"}
+                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {akceBezi ? "Přihlašuji…" : plno ? "Plně obsazeno" : "Přihlásit se"}
+                </button>
+              )}
+            </div>
+          ) : null}
+
+          {rezim === "prehled" && !archiv && ucastStav === "hotovo" && user === null ? (
+            <p className="mt-4 text-sm text-inkoust/70">
+              Pro přihlášení se nejdřív přihlas ke svému účtu.
+            </p>
+          ) : null}
 
           {rezim === "prehled" && (
             <>
+              <div className={probehla ? "mt-2" : "lg:mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-10"}>
+              <div className="min-w-0">
               {expedice.popis.trim().length > 0 && (
-                <p className="mt-3 break-words border-t border-dashed border-linka pt-3 text-[15px] leading-relaxed">
+                <p className="mt-3 break-words border-t border-linka pt-3 text-base leading-relaxed">
                   {expedice.popis}
                 </p>
               )}
+              {hlaseni !== null && hlaseni.length > 0 && (
+                <p role="alert" className="mt-3 text-sm font-semibold text-red-800">
+                  {hlaseni}
+                </p>
+              )}
+              <MrizkaSnimku nadpis="Cesta tam" snimky={cestaTam} />
+              <MrizkaSnimku nadpis="Cesta zpátky" snimky={cestaZpet} />
               {expedice.trasaOdkaz.trim().length > 0 && (
                 <p className="mt-3">
                   <a
                     href={expedice.trasaOdkaz}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex min-h-[44px] items-center gap-2 rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+                    className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-mlha px-6 text-base font-semibold motion-safe:transition-colors motion-safe:hover:bg-linka"
                   >
-                    <span aria-hidden="true">🗺</span> Zobrazit naplánovanou
-                    trasu
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z" /><path d="M9 4v14" /><path d="M15 6v14" /></svg>
+                    Zobrazit naplánovanou trasu
                   </a>
                 </p>
               )}
 
-              <div className="mt-4 rounded-2xl border border-inkoust/15 bg-papir/60 p-3">
-                <div className="flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="font-semibold tabular-nums">
-                    {bezOmezeni ? (
-                      <>
-                        {expedice.kapacita.prihlaseno}
-                        <span className="font-normal text-inkoust/60"> přihlášeno · bez omezení</span>
-                      </>
-                    ) : (
-                      <>
-                        {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
-                        <span className="font-normal text-inkoust/60"> přihlášeno</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-[12px] text-inkoust/60">
+              {archiv ? (
+                <div
+                  className={`mt-5 rounded-2xl p-4 sm:p-5 ${probehla ? "bg-mlha" : "bg-okr/15"}`}
+                >
+                  <p className="font-display text-lg font-bold text-inkoust">
+                    {probehla ? "Výprava proběhla" : "Čeká na uzavření"}
+                  </p>
+                  <p className="mt-1 text-base leading-relaxed text-mech">
                     {probehla
-                      ? "výprava proběhla"
-                      : poTerminu
-                        ? "čeká na uzavření"
-                        : bezOmezeni
-                        ? "místa dost"
-                        : volna === 0
-                          ? "plně obsazeno"
-                          : `zbývá ${volna} ${volna === 1 ? "místo" : volna >= 2 && volna <= 4 ? "místa" : "míst"}`}
-                  </span>
+                      ? ucastStav === "hotovo" && ucastnici.length > 0
+                        ? `Dorazilo ${ucastnici.filter((u) => u.status === "ucastnil_se").length} z ${ucastnici.length} přihlášených. Fotky a kilometry jdou dál doplňovat.`
+                        : "Přihlašování je uzavřené. Fotky a kilometry jdou dál doplňovat."
+                      : "Termín skončil. Uzavřením se výprava přesune mezi proběhlé. Fotky a kilometry jdou doplnit i potom."}
+                  </p>
+                  {muzeSpravovatVypravy ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {!probehla ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUzavriChyba(null);
+                            setRezim("uzavirani");
+                          }}
+                          className={TLACITKO_UZAVRIT}
+                        >
+                          Uzavřít výpravu
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServerChyba(null);
+                          setServerChybyPoli({});
+                          setRezim("upravy");
+                        }}
+                        className={`${TLACITKO_NA_MLZE} gap-2`}
+                        aria-label="Upravit výpravu"
+                        title="Upravit výpravu"
+                      >
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                        Upravit výpravu
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
+              ) : (
+              <div className="mt-5 rounded-lg border border-pole bg-papir p-4">
+                <p className="text-base font-semibold tabular-nums">
+                  {bezOmezeni ? (
+                    <>
+                      {expedice.kapacita.prihlaseno}
+                      <span className="font-normal text-inkoust/60"> přihlášeno · bez omezení</span>
+                    </>
+                  ) : (
+                    <>
+                      {expedice.kapacita.prihlaseno} / {expedice.kapacita.celkem}
+                      <span className="font-normal text-inkoust/60"> přihlášeno</span>
+                    </>
+                  )}
+                </p>
                 {!bezOmezeni ? (
                   <div
                     role="progressbar"
@@ -810,7 +1133,7 @@ export default function ExpeditionModal({
                     aria-valuenow={expedice.kapacita.prihlaseno}
                     aria-valuemin={0}
                     aria-valuemax={expedice.kapacita.celkem}
-                    className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
+                    className="mt-3 h-1.5 overflow-hidden rounded-full bg-linka"
                   >
                     <div
                       aria-hidden="true"
@@ -822,36 +1145,38 @@ export default function ExpeditionModal({
                   <div
                     role="status"
                     aria-label={`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
-                    className="mt-2 h-1 overflow-hidden rounded-full bg-inkoust/15"
+                    className="mt-3 h-1.5 overflow-hidden rounded-full bg-linka"
                   >
                     <span className="sr-only">
                       {`Počet přihlášených: ${expedice.kapacita.prihlaseno} (bez omezení)`}
                     </span>
                     <div
                       aria-hidden="true"
-                      className="h-full w-full rounded-full"
-                      style={{
-                        backgroundImage:
-                          "repeating-linear-gradient(45deg, rgba(26,46,34,0.28) 0 6px, transparent 6px 12px)",
-                      }}
+                      className={`h-full w-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
                     />
                   </div>
                 )}
               </div>
+              )}
 
-              {/* Účast — USER akce */}
+              {/* Kdo jede / kdo byl vidí každý, i bez správy výpravy. */}
               <section aria-labelledby={ucastNadpisId} className="mt-5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 id={ucastNadpisId} className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60">
-                    Přihlášení ({ucastStav === "hotovo" ? ucastnici.length : "…"})
+                <div className="flex items-center justify-between gap-3">
+                  <h3 id={ucastNadpisId} className="font-display text-xl font-bold text-inkoust">
+                    {probehla ? "Kdo byl" : poTerminu ? "Přihlášení" : "Kdo jede"}
                   </h3>
                   {ucastStav === "hotovo" && (
                     <button
                       type="button"
                       onClick={() => void nacistiUcastniky(expedice.id)}
-                      className="min-h-[44px] min-w-[44px] rounded-full px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
+                      aria-label="Obnovit seznam přihlášených"
+                      title="Obnovit seznam"
+                      className="bez-prejeti flex h-11 w-11 items-center justify-center rounded-full text-mech hover:bg-mlha hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
                     >
-                      Obnovit
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
+                        <path d="M21 3v5h-5" />
+                      </svg>
                     </button>
                   )}
                 </div>
@@ -865,14 +1190,14 @@ export default function ExpeditionModal({
                 )}
 
                 {ucastStav === "chyba" && (
-                  <div className="mt-2 rounded-2xl border-2 border-inkoust/20 bg-papir p-4 text-center">
+                  <div className="mt-2 rounded-2xl border border-linka bg-papir p-4 text-center">
                     <p role="alert" className="text-sm font-semibold">
                       {ucastChyba ?? "Seznam se nepodařilo načíst."}
                     </p>
                     <button
                       type="button"
                       onClick={() => void nacistiUcastniky(expedice.id)}
-                      className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir"
+                      className="mt-3 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-mlha px-6 text-base font-semibold text-inkoust hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
                     >
                       Zkusit znovu
                     </button>
@@ -882,78 +1207,42 @@ export default function ExpeditionModal({
                 {ucastStav === "hotovo" && (
                   <>
                     {ucastnici.length === 0 ? (
-                      <p role="status" className="mt-2 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70">
-                        Zatím se nikdo nepřihlásil — buď první, kdo zapíše své jméno do kroniky.
+                      <p role="status" className="mt-3 rounded-2xl bg-mlha/60 p-4 text-base text-mech">
+                        {archiv
+                          ? "Na výpravu se nikdo nepřihlásil."
+                          : "Zatím se nikdo nepřihlásil. Buď první."}
                       </p>
                     ) : (
-                      <ul role="list" className="mt-2 divide-y divide-inkoust/10 rounded-2xl border border-inkoust/15 bg-papir/60">
-                        {ucastnici.map((u) => (
-                          <li key={u.id} className="flex min-h-[44px] items-center justify-between gap-3 px-3 py-2 text-sm">
-                            <JmenoUcastnika
-                              ucastnik={u}
-                              doplnek={
-                                user !== null && u.userId === user.id ? (
-                                  <span className="ml-2 rounded-full bg-smrk/10 px-2 py-0.5 text-[11px] font-bold text-smrk">
-                                    ty
-                                  </span>
-                                ) : undefined
-                              }
-                            />
-                            <span className="shrink-0 text-[12px] text-inkoust/60">
-                              {statusUcastiPopisek(u.status)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                      <PrehledPrihlasenych
+                        ucastnici={ucastnici}
+                        jede={!poTerminu && !probehla}
+                      />
                     )}
 
-                    {akceChyba !== null && (
-                      <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-                        {akceChyba}
-                      </p>
-                    )}
-
-                    {!archiv && user !== null && (
-                      <div className="mt-3">
-                        {jsemPrihlasen ? (
-                          <button
-                            type="button"
-                            onClick={() => void naOdhlasit()}
-                            disabled={akceBezi}
-                            title={akceBezi ? "Odhlašování probíhá…" : "Odhlásit se z výpravy"}
-                            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50 disabled:opacity-60"
-                          >
-                            {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void naPrihlasit()}
-                            disabled={akceBezi || plno}
-                            title={plno ? "Výprava je plná" : "Přihlásit se na výpravu"}
-                            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {akceBezi ? "Přihlašuji…" : plno ? "Plně obsazeno" : "Přihlásit se"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {!archiv && user === null && (
-                      <p className="mt-3 text-center text-sm text-inkoust/70">
-                        Pro přihlášení se nejdřív přihlas ke svému účtu.
-                      </p>
-                    )}
-                    {archiv && (
-                      <p className="mt-3 rounded-2xl bg-mech/10 p-3 text-center text-sm text-inkoust/70">
-                        {poTerminu
-                          ? "Termín už skončil. Přihlašování je zavřené — fotky, docházku i kilometry doplníš stejně jako u uzavřené výpravy."
-                          : "Tahle výprava už proběhla — přihlašování je uzavřené, níže je archivní docházka."}
-                      </p>
-                    )}
                   </>
                 )}
               </section>
 
+              {archiv && (
+                <div className="mt-8 grid w-full items-stretch gap-8 sm:grid-cols-2 sm:gap-10 [&>section]:mt-0 [&>section]:h-full">
+                  <ExpeditionTrasaPrehled
+                    expeditionId={expedice.id}
+                    probehla={archiv}
+                  />
+                  <ExpeditionPhotos
+                    expeditionId={expedice.id}
+                    probehla={archiv}
+                    prihlasen={user !== null}
+                    isAdmin={isAdmin}
+                    onZmenaNahledu={onZmenaNahledu}
+                    denik={denik}
+                    obalClassName="h-full min-h-48 w-full flex-1"
+                  />
+                </div>
+              )}
+
+              </div>
+              <div className={probehla ? "mt-8 min-w-0" : "min-w-0 lg:border-l lg:border-linka lg:pl-8"}>
               {/* Diskuze — živé vlákno (GET PUBLIC čte i anonym,
                   POST USER píše přihlášený). Vlastní sekce s nadpisem
                   uvnitř DiskuzeBoxu (role=log + aria-live, composer
@@ -965,10 +1254,10 @@ export default function ExpeditionModal({
                 tabIndex={-1}
                 aria-label={`Diskuze k výpravě ${expedice.nazev}`}
                 data-deep-link-cil="diskuze"
-                className="mt-5 scroll-mt-4 border-t border-dashed border-linka pt-4 focus-visible:outline-3 focus-visible:outline-smrk focus-visible:outline-offset-2"
+                className="mt-5 scroll-mt-4 focus-visible:outline-3 lg:mt-0 focus-visible:outline-smrk focus-visible:outline-offset-2"
               >
                 {diskuzeNeprectena && (
-                  <p className="mb-2 flex min-h-[24px] items-center gap-2 text-[13px] font-bold text-red-800">
+                  <p className="mb-2 flex min-h-[24px] items-center gap-2 text-base font-bold text-red-800">
                     <NeprectenaTecka
                       viditelna={diskuzeNeprectena}
                       velikost="nadpis"
@@ -980,67 +1269,42 @@ export default function ExpeditionModal({
                 <DiskuzeBox
                   idVypravy={expedice.id}
                   nazevVypravy={expedice.nazev}
+                  organizatorId={expedice.organizatorId ?? null}
+                  klidna={probehla}
                 />
               </section>
 
-              {/* Ušlé — jen proběhlá (Krok 17: stavová brána dle kontraktu
-                  volno/skoro plno/proběhlá); u neproběhlé vůbec nerenderuj. */}
-              {archiv && (
-                <ExpeditionTrasaPrehled
-                  expeditionId={expedice.id}
-                  probehla={archiv}
-                  pocetUcastniku={
-                    ucastStav === "hotovo" ? ucastnici.length : expedice.kapacita.prihlaseno
-                  }
-                />
-              )}
-
-              {/* Fotky — jen proběhlá; přidat smí každý přihlášený,
-                  mazat jen admin (Krok 19: POST převeden z admina na USER). */}
-              {archiv && (
-                <ExpeditionPhotos
-                  expeditionId={expedice.id}
-                  probehla={archiv}
-                  prihlasen={user !== null}
-                  isAdmin={isAdmin}
-                  onZmenaNahledu={onZmenaNahledu}
-                  obalClassName={denik ? "aspect-[4/3] w-full" : undefined}
-                  denik={denik}
-                />
-              )}
-
-              {/* Prohlížecí režim: jen read-only výše. Kronika i trasa/Strava je v Upravit. */}
-              {archiv && muzeSpravovatVypravy && (
-                <p role="status" className="mt-5 rounded-2xl border border-dashed border-inkoust/25 bg-papir/60 p-3 text-center text-[13px] text-inkoust/70">
-                  Kroniku i trasu upravíš v režimu Upravit — přidání ze seznamu uživatelů, odebrání i párování je jen tam.
-                </p>
-              )}
-              {/* Správa výpravy (dual-guard): aktivní člen i bez admin příznaku */}
+              </div>
+              </div>
+              {/* Trip admin stays at the end of the sheet, without a section title. */}
               {muzeSpravovatVypravy && (
-                <div className="mt-5 border-t-2 border-inkoust pt-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
-                    Správa výpravy
-                  </p>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setServerChyba(null);
-                        setServerChybyPoli({});
-                        setRezim("upravy");
-                      }}
-                      className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
-                    >
-                      Upravit
-                    </button>
-                    {!probehla && (
+                <div className="mt-8 flex flex-wrap items-center justify-end gap-2">
+                    {!archiv && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServerChyba(null);
+                          setServerChybyPoli({});
+                          setRezim("upravy");
+                        }}
+                        aria-label="Upravit výpravu"
+                        title="Upravit výpravu"
+                        className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-lg text-inkoust hover:bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+                      >
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                    )}
+                    {probiha && (
                       <button
                         type="button"
                         onClick={() => {
                           setUzavriChyba(null);
                           setRezim("uzavirani");
                         }}
-                        className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-jantar px-4 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:brightness-95"
+                        className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-jantar px-6 text-base font-semibold text-papir motion-safe:transition-colors motion-safe:hover:brightness-95"
                       >
                         Uzavřít
                       </button>
@@ -1052,28 +1316,23 @@ export default function ExpeditionModal({
                         setRezim("ruseni");
                       }}
                       aria-label={`Odstranit výpravu ${expedice.nazev}`}
-                      className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-red-800 bg-papir px-4 text-sm font-bold text-red-800 motion-safe:transition-colors motion-safe:hover:bg-red-800 motion-safe:hover:text-papir"
+                      title="Odstranit výpravu"
+                      className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-lg text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
                     >
-                      Odstranit
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                        <path d="M4 7h16" />
+                        <path d="M9 7V5h6v2" />
+                        <path d="M6 7l1 13h10l1-13" />
+                      </svg>
                     </button>
-                  </div>
                 </div>
               )}
 
-              <div className="mt-5 flex justify-end border-t border-dashed border-linka pt-4">
-                <button
-                  type="button"
-                  onClick={() => zavriRef.current()}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-inkoust px-6 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk"
-                >
-                  Zavřít
-                </button>
-              </div>
             </>
           )}
 
           {rezim === "upravy" && (
-            <div className="mt-4 space-y-5">
+            <div className="mt-6 space-y-8">
               <ExpeditionForm
                 id="upravit-expedici-form"
                 nadpis="Upravit výpravu"
@@ -1083,6 +1342,11 @@ export default function ExpeditionModal({
                 serverChyba={serverChyba}
                 serverChybyPoli={serverChybyPoli}
                 onSubmit={naOdeslatUpravu}
+                ulozeneTam={cestaTam}
+                ulozeneZpet={cestaZpet}
+                onSmazatSnimek={(snimekId) => {
+                  void naSmazatSnimek(snimekId);
+                }}
                 onZrusit={() => setRezim("prehled")}
                 povolitMinulost
                 skrytAkce
@@ -1091,6 +1355,7 @@ export default function ExpeditionModal({
                   Step 4: popisky se nesmí plést — Strava aktivita „Odpojit aktivitu",
                   ruční km „Smazat ruční zápis" s confirmem, účet „Odpojit účet" jen v profilu. */}
               {archiv && muzeSpravovatVypravy && (
+                <div className="border-t border-linka pt-6">
                 <StravaParovani
                   expeditionId={expedice.id}
                   jeSparovano={expedice.jeSparovano ?? false}
@@ -1102,48 +1367,35 @@ export default function ExpeditionModal({
                     void nacistiUcastniky(expedice.id);
                   }}
                 />
+                </div>
               )}
               {/* Správa docházky POUZE v editačním režimu — proběhlá + správa výprav, zdroj GET /api/users. */}
               {archiv && muzeSpravovatVypravy && (
                 <section
                   aria-labelledby={spravaNadpisId}
-                  className="rounded-2xl border-2 border-inkoust bg-papir/60 p-4"
+                  className="border-t border-linka pt-6"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h3
                       id={spravaNadpisId}
-                      className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/60"
+                      className="font-display text-xl font-bold text-inkoust"
                     >
-                      Správa docházky
+                      Docházka
                     </h3>
                     {uzivateleStav === "hotovo" && (
                       <button
                         type="button"
                         onClick={() => void nacistiUzivatele()}
-                        className="min-h-[44px] min-w-[44px] rounded-full px-2 text-[13px] font-bold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
+                        className="min-h-[48px] min-w-[44px] rounded-xl px-2 text-base font-semibold text-smrk underline underline-offset-2 motion-safe:hover:text-inkoust"
                       >
                         Obnovit seznam
                       </button>
                     )}
                   </div>
-                  <p className="mt-1 text-[13px] leading-relaxed text-inkoust/70">
+                  <p className="mt-1 text-base leading-relaxed text-inkoust/70">
                     Kronika po uzavření — odeber omylem zapsané a dopiš ty, kdo
                     dorazili bez přihlášky. Změna se hned propíše do seznamu.
                   </p>
-
-                  {spravaZprava !== null && (
-                    <p
-                      role="status"
-                      className="mt-2 rounded-xl border border-smrk/30 bg-smrk/10 p-3 text-sm font-semibold text-inkoust"
-                    >
-                      {spravaZprava}
-                    </p>
-                  )}
-                  {spravaChyba !== null && (
-                    <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-                      {spravaChyba}
-                    </p>
-                  )}
 
                   {ucastStav === "nacitani" && (
                     <p role="status" className="mt-3 text-sm text-inkoust/70">
@@ -1158,15 +1410,19 @@ export default function ExpeditionModal({
                   {ucastStav === "hotovo" && ucastnici.length === 0 && (
                     <p
                       role="status"
-                      className="mt-3 rounded-xl border border-dashed border-inkoust/25 p-3 text-center text-sm text-inkoust/70"
+                      className="mt-3 rounded-xl border border-linka p-3 text-center text-sm text-inkoust/70"
                     >
                       V kronice zatím nikdo není — prvního dopište níže, prázdný
                       stav přidání nebrání.
                     </p>
                   )}
                   {ucastStav === "hotovo" && ucastnici.length > 0 && (
-                    <ul role="list" className="mt-3 divide-y divide-inkoust/10 rounded-xl border border-inkoust/15">
-                      {ucastnici.map((u) => {
+                    <div className="mt-3 overflow-hidden rounded-xl border border-inkoust/15">
+                    <ul role="list" className="divide-y divide-linka">
+                      {(kronikaVysunuto
+                        ? [...kronikaUcasti.nahore, ...kronikaUcasti.dole]
+                        : kronikaUcasti.nahore
+                      ).map((u) => {
                         const potvrzuje: boolean = potvrzOdebraniId === u.id;
                         const odebirani: boolean = odebiraId === u.id;
                         return (
@@ -1174,8 +1430,11 @@ export default function ExpeditionModal({
                             <div className="flex min-h-[44px] items-center justify-between gap-3">
                               <JmenoUcastnika
                                 ucastnik={u}
+                                jeOrganizator={
+                                  u.userId !== null && u.userId === expedice.organizatorId
+                                }
                                 doplnek={
-                                  <span className="ml-2 text-[12px] font-normal text-inkoust/60">
+                                  <span className="ml-2 text-base font-normal text-inkoust/70 lg:text-[12px] lg:text-inkoust/60">
                                     {statusUcastiPopisek(u.status)}
                                   </span>
                                 }
@@ -1189,7 +1448,7 @@ export default function ExpeditionModal({
                                     setPotvrzOdebraniId(u.id);
                                   }}
                                   aria-label={`Odebrat účastníka ${u.jmeno}`}
-                                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-inkoust/25 px-4 text-[13px] font-bold text-red-800 motion-safe:transition-colors motion-safe:hover:bg-red-800 motion-safe:hover:text-papir"
+                                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-linka px-6 text-base font-semibold text-red-800 motion-safe:transition-colors motion-safe:hover:bg-red-800 motion-safe:hover:text-papir"
                                 >
                                   Odebrat
                                 </button>
@@ -1197,7 +1456,7 @@ export default function ExpeditionModal({
                             </div>
                             {potvrzuje && (
                               <div className="mt-2 rounded-xl bg-red-800/5 p-2">
-                                <p className="text-[13px] font-semibold">
+                                <p className="text-base font-semibold">
                                   Odebrat „{u.jmeno}“ z kroniky?
                                 </p>
                                 <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -1206,7 +1465,7 @@ export default function ExpeditionModal({
                                     onClick={() => void naOdebratUcastnika(u.id)}
                                     disabled={odebirani}
                                     title={odebirani ? "Odebírání probíhá…" : `Odebrat „${u.jmeno}“ z kroniky`}
-                                    className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-4 text-sm font-bold text-papir disabled:opacity-60"
+                                    className="inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl border-2 border-red-800 bg-red-800 px-6 text-base font-semibold text-papir disabled:opacity-60"
                                   >
                                     {odebirani ? "Odebírám…" : "Ano, odebrat"}
                                   </button>
@@ -1215,7 +1474,7 @@ export default function ExpeditionModal({
                                     onClick={() => setPotvrzOdebraniId(null)}
                                     disabled={odebirani}
                                     title={odebirani ? "Odebírání probíhá…" : "Ponechat účastníka v kronice"}
-                                    className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border-2 border-inkoust bg-papir px-4 text-sm font-bold disabled:opacity-60"
+                                    className="inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl bg-mlha hover:bg-linka px-6 text-base font-semibold disabled:opacity-60"
                                   >
                                     Ponechat
                                   </button>
@@ -1226,9 +1485,15 @@ export default function ExpeditionModal({
                         );
                       })}
                     </ul>
+                    <TlacitkoDalsichUcastniku
+                      skrytych={kronikaUcasti.skrytych}
+                      vysunuto={kronikaVysunuto}
+                      onPrepnout={() => setKronikaVysunuto((pred) => !pred)}
+                    />
+                    </div>
                   )}
 
-                  <div className="mt-4 border-t border-dashed border-linka pt-3">
+                  <div className="mt-4 border-t border-linka pt-3">
                     <h4 className="text-sm font-bold">Přidat účastníka</h4>
                     {uzivateleStav === "neaktivni" && (
                       <p role="status" className="mt-2 text-sm text-inkoust/70">
@@ -1253,7 +1518,7 @@ export default function ExpeditionModal({
                         <button
                           type="button"
                           onClick={() => void nacistiUzivatele()}
-                          className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold"
+                          className="mt-2 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-mlha hover:bg-linka px-6 text-base font-semibold"
                         >
                           Zkusit znovu
                         </button>
@@ -1264,7 +1529,7 @@ export default function ExpeditionModal({
                         <div>
                           <label
                             htmlFor={filtrUzivateluId}
-                            className="mb-1 block text-[13px] font-semibold text-inkoust/70"
+                            className="mb-1 block text-base font-semibold text-inkoust/70"
                           >
                             Hledat uživatele
                           </label>
@@ -1275,37 +1540,37 @@ export default function ExpeditionModal({
                             onChange={(e) => setFiltrUzivatelu(e.target.value)}
                             placeholder="Začni psát jméno…"
                             autoComplete="off"
-                            className="block min-h-[44px] w-full rounded-xl border-2 border-inkoust/25 bg-papir px-3 text-sm placeholder:text-inkoust/40"
+                            className="block min-h-[48px] w-full rounded-xl border border-pole bg-papir px-3 text-base text-inkoust placeholder:text-mech"
                           />
                         </div>
                         <div>
                           <label
                             htmlFor={vyberUzivateleId}
-                            className="mb-1 block text-[13px] font-semibold text-inkoust/70"
+                            className="mb-1 block text-base font-semibold text-inkoust/70"
                           >
                             Uživatel k přidání
                           </label>
-                          <select
-                            id={vyberUzivateleId}
+                          <VyberPole
                             ref={vyberUzivateleRef}
+                            id={vyberUzivateleId}
                             value={vybranyUzivatelId}
-                            onChange={(e) => setVybranyUzivatelId(e.target.value)}
-                            className="block min-h-[44px] w-full rounded-xl border-2 border-inkoust bg-papir px-3 text-sm font-semibold"
-                          >
-                            <option value="">— Vyber uživatele —</option>
-                            {dostupniUzivatele.map((uzivatel) => (
-                              <option key={uzivatel.id} value={uzivatel.id}>
-                                {uzivatel.jmeno}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setVybranyUzivatelId}
+                            className="block min-h-[48px] w-full rounded-xl border border-pole bg-papir px-3 text-base font-semibold text-inkoust"
+                            volby={[
+                              { value: "", popisek: "— Vyber uživatele —" },
+                              ...dostupniUzivatele.map((uzivatel) => ({
+                                value: uzivatel.id,
+                                popisek: uzivatel.jmeno,
+                              })),
+                            ]}
+                          />
                         </div>
                         {dostupniUzivatele.length === 0 ? (
-                          <p role="status" className="text-[13px] text-inkoust/70">
+                          <p role="status" className="text-base text-inkoust/70">
                             Žádný další uživatel k přidání — všichni už jsou v kronice.
                           </p>
                         ) : (
-                          <p role="status" className="text-[13px] text-inkoust/60">
+                          <p role="status" className="text-base text-inkoust/60">
                             K přidání: {dostupniUzivatele.length}{" "}
                             {dostupniUzivatele.length === 1
                               ? "uživatel"
@@ -1314,18 +1579,32 @@ export default function ExpeditionModal({
                                 : "uživatelů"}.
                           </p>
                         )}
+                        {spravaZprava !== null && (
+                          <p
+                            role="status"
+                            className="rounded-xl border border-smrk/30 bg-smrk/10 p-3 text-sm font-semibold text-inkoust"
+                          >
+                            {spravaZprava}
+                          </p>
+                        )}
+                        {spravaChyba !== null && (
+                          <p role="alert" className="text-sm font-semibold text-red-800">
+                            {spravaChyba}
+                          </p>
+                        )}
                         <button
                           type="button"
+                          ref={pridatTlacitkoRef}
                           onClick={() => void naPridatUcastnika()}
-                          disabled={pridavaSe || vybranyUzivatelId === ""}
+                          disabled={vybranyUzivatelId === ""}
                           title={
                             vybranyUzivatelId === ""
                               ? "Nejdřív vyber uživatele"
                               : "Přidat uživatele do kroniky"
                           }
-                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {pridavaSe ? "Zapisuji…" : "Přidat do kroniky"}
+                          Přidat do kroniky
                         </button>
                       </div>
                     )}
@@ -1334,22 +1613,20 @@ export default function ExpeditionModal({
               )}
               {/* Krok 16: Zrušit/Uložit až na úplném spodku (za Strava + docházkou),
                   sticky pro dlouhý formulář. Submit míří na form id výše. */}
-              <div className="sticky bottom-0 -mx-1 flex flex-col-reverse gap-2 border-t-2 border-inkoust bg-papir px-1 py-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
+              <div className="sticky bottom-0 z-10 -mx-5 flex flex-col-reverse gap-2 border-t border-linka bg-papir px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:flex-row sm:justify-end sm:px-6 lg:-mx-8 lg:px-8">
+                <TlacitkoPapir
                   onClick={() => setRezim("prehled")}
                   disabled={odesilaSe}
                   title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                 >
                   Zrušit
-                </button>
+                </TlacitkoPapir>
                 <button
                   type="submit"
                   form="upravit-expedici-form"
                   disabled={odesilaSe}
                   title={odesilaSe ? "Ukládání probíhá…" : "Uložit změny"}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir disabled:opacity-60"
+                  className={TLACITKO_HLAVNI}
                 >
                   {odesilaSe ? "Ukládám…" : "Uložit změny"}
                 </button>
@@ -1358,8 +1635,8 @@ export default function ExpeditionModal({
           )}
 
           {rezim === "ruseni" && (
-            <div className="mt-4 rounded-2xl border-2 border-red-800/40 bg-red-800/5 p-4">
-              <h3 className="break-words font-bold">Opravdu odstranit „{expedice.nazev}"?</h3>
+            <div className="mt-6 rounded-2xl border border-red-800/30 bg-red-50 p-5">
+              <h3 className="font-display break-words text-xl font-bold text-inkoust">Opravdu odstranit „{expedice.nazev}"?</h3>
               <p className="mt-1 text-sm text-inkoust/70">
                 Smaže se i seznam {ucastnici.length}{" "}
                 {ucastnici.length === 1 ? "přihlášeného" : ucastnici.length >= 2 && ucastnici.length <= 4 ? "přihlášených" : "přihlášených"}.
@@ -1370,22 +1647,20 @@ export default function ExpeditionModal({
                   {smazChyba}
                 </p>
               )}
-              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
+              <div className={LISTA_AKCI}>
+                <TlacitkoPapir
                   onClick={() => setRezim("prehled")}
                   disabled={mazeSe}
                   title={mazeSe ? "Mazání probíhá…" : "Ponechat výpravu"}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                 >
                   Ponechat
-                </button>
+                </TlacitkoPapir>
                 <button
                   type="button"
                   onClick={naSmazat}
                   disabled={mazeSe}
                   title={mazeSe ? "Mazání probíhá…" : "Odstranit výpravu nevratně"}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-red-800 bg-red-800 px-5 text-sm font-bold text-papir disabled:opacity-60"
+                  className={TLACITKO_NEBEZPECI}
                 >
                   {mazeSe ? "Mažu…" : "Ano, odstranit"}
                 </button>
@@ -1394,10 +1669,10 @@ export default function ExpeditionModal({
           )}
 
           {rezim === "uzavirani" && (
-            <div className="mt-4">
-              <h3 className="font-bold">Docházka — kdo doopravdy dorazil?</h3>
+            <div className="mt-6">
+              <h3 className="font-display text-xl font-bold text-inkoust">Uzavřít výpravu</h3>
               <p className="mt-1 text-sm text-inkoust/70">
-                Zatržený = zúčastnil se, nezatržený = omluven. Uzavřením se výprava přesune do historie.
+                Výprava se přesune mezi proběhlé. Přihlášení se zapíšou jako účastníci.
               </p>
               {ucastStav === "nacitani" && (
                 <p role="status" className="mt-3 text-sm text-inkoust/70">
@@ -1410,65 +1685,31 @@ export default function ExpeditionModal({
                 </p>
               )}
               {ucastStav === "hotovo" && ucastnici.length === 0 && (
-                <p role="alert" className="mt-3 rounded-2xl border border-dashed border-inkoust/25 bg-papir p-3 text-sm font-semibold">
-                  Bez přihlášených nelze uzavřít — docházka by byla prázdná.
+                <p role="alert" className="mt-3 rounded-2xl border border-linka bg-papir p-3 text-sm font-semibold">
+                  Bez přihlášených nelze uzavřít.
                 </p>
-              )}
-              {ucastStav === "hotovo" && ucastnici.length > 0 && (
-                <fieldset className="mt-3">
-                  <legend className="sr-only">Docházka účastníků</legend>
-                  <ul role="list" className="space-y-2">
-                    {ucastnici.map((u) => {
-                      const zaskrtnuto: boolean = dochazka.has(u.id);
-                      return (
-                        <li
-                          key={u.id}
-                          className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-inkoust/15 bg-papir/70 px-3 py-2"
-                        >
-                          <input
-                            id={`dochazka-${u.id}`}
-                            type="checkbox"
-                            checked={zaskrtnuto}
-                            onChange={() => prepniDochazku(u.id)}
-                            aria-label={u.jmeno}
-                            className="h-5 w-5 shrink-0 accent-smrk"
-                          />
-                          <JmenoUcastnika ucastnik={u} />
-                          <label
-                            htmlFor={`dochazka-${u.id}`}
-                            className="shrink-0 cursor-pointer text-[12px] text-inkoust/60"
-                          >
-                            {zaskrtnuto ? "dorazil" : "omluven"}
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </fieldset>
               )}
               {uzavriChyba !== null && (
                 <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
                   {uzavriChyba}
                 </p>
               )}
-              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
+              <div className={LISTA_AKCI}>
+                <TlacitkoPapir
                   onClick={() => setRezim("prehled")}
                   disabled={uzaviraSe}
                   title={uzaviraSe ? "Uzavírání probíhá…" : "Zpět na přehled"}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
                 >
                   Zpět
-                </button>
+                </TlacitkoPapir>
                 <button
                   type="button"
                   onClick={naUzavrit}
-                  disabled={uzaviraSe || ucastnici.length === 0}
-                  title={ucastnici.length === 0 ? "Bez přihlášených nelze uzavřít" : `Uzavřít s docházkou (${dochazka.size} dorazilo)`}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-inkoust bg-jantar px-5 text-sm font-bold text-papir disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={uzaviraSe || ucastnici.length === 0 || ucastStav !== "hotovo"}
+                  title={ucastnici.length === 0 ? "Bez přihlášených nelze uzavřít" : "Uzavřít výpravu"}
+                  className={TLACITKO_UZAVRIT}
                 >
-                  {uzaviraSe ? "Uzavírám…" : `Uzavřít (${dochazka.size} dorazilo)`}
+                  {uzaviraSe ? "Uzavírám…" : "Uzavřít výpravu"}
                 </button>
               </div>
             </div>

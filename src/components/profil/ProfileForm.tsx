@@ -11,16 +11,29 @@
  * maxlength, Conta­iner max-w-2xl.
  */
 
-import { useMemo, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
 import {
+  OBLIBENE_BARVY,
   VALIDACE,
   VALIDACNI_ZPRAVY,
+  jeOblibenaBarva,
   type ApiUser,
   type UpravitProfilRequest,
 } from "../../shared/api-types";
 import { nahratAvatar, ulozProfil } from "../../hooks/useProfile";
 import { vychoziStorage } from "../../config/storage";
+import { meniEmail, potrebujeSoucasneHeslo } from "../../lib/profil-heslo";
+import { nactiSkolyTridy } from "../../lib/skoly-tridy";
+import VstupSNabidkou from "../VstupSNabidkou";
 import AvatarUpload from "./AvatarUpload";
+import DatumVstup from "../DatumVstup";
+import TelefonPole from "./TelefonPole";
+import {
+  kodZemeZTelefonu,
+  narodniCastTelefonu,
+  normalizujTelefon,
+  type KodZeme,
+} from "../../shared/telefon";
 
 interface ProfileFormProps {
   pocatecni: ApiUser;
@@ -36,10 +49,11 @@ interface FormHodnoty {
   skola: string;
   trida: string;
   avatarUrl: string;
-  bio: string;
+  oblibenaBarva: string;
   narozeniny: string;
   noveHeslo: string;
   potvrzeniHesla: string;
+  soucasneHeslo: string;
 }
 
 type FormPole = keyof FormHodnoty;
@@ -57,15 +71,16 @@ function zApi(p: ApiUser): FormHodnoty {
     jmeno: p.jmeno ?? "",
     prijmeni: p.prijmeni ?? "",
     email: p.email ?? "",
-    telefon: p.telefon ?? "",
+    telefon: narodniCastTelefonu(p.telefon),
     discordNick: p.discordNick ?? "",
     skola: p.skola ?? "",
     trida: p.trida ?? "",
     avatarUrl: p.avatarUrl ?? "",
-    bio: p.bio ?? "",
+    oblibenaBarva: jeOblibenaBarva(p.oblibenaBarva ?? "") ? (p.oblibenaBarva ?? "") : "",
     narozeniny: p.narozeniny ?? "",
     noveHeslo: "",
     potvrzeniHesla: "",
+    soucasneHeslo: "",
   };
 }
 
@@ -81,14 +96,68 @@ function dnesISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function kanonickyTelefon(text: string, kod: KodZeme, zaloha: string): string {
+  const vysledek = normalizujTelefon(text, kod);
+  if (vysledek.ok) return vysledek.e164 ?? "";
+  return zaloha.trim();
+}
+
+function telefonSeLisi(narodni: string, kod: KodZeme, ulozeny: string | null): boolean {
+  const puvodni = (ulozeny ?? "").trim();
+  const ulozenyKod = kodZemeZTelefonu(ulozeny);
+  const vlevo = kanonickyTelefon(narodni, kod, narodni);
+  const vpravo = kanonickyTelefon(narodniCastTelefonu(ulozeny), ulozenyKod, puvodni);
+  return vlevo !== vpravo;
+}
+
 export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps): JSX.Element {
   const [form, setForm] = useState<FormHodnoty>(() => zApi(pocatecni));
+  const [kodZeme, setKodZeme] = useState<KodZeme>(() => kodZemeZTelefonu(pocatecni.telefon));
   const [chyby, setChyby] = useState<Partial<Record<FormPole | "avatar", string>>>({});
   const [oznameni, setOznameni] = useState<StavOznameni | null>(null);
   const [uklada, setUklada] = useState<boolean>(false);
   const [souborAvatar, setSouborAvatar] = useState<File | null>(null);
+  const [barvaOtevrena, setBarvaOtevrena] = useState(false);
+  const [skolySeznam, setSkolySeznam] = useState<string[]>([]);
+  const [tridySeznam, setTridySeznam] = useState<string[]>([]);
+  const barvaObal = useRef<HTMLDivElement>(null);
+  const soucasneHesloVstup = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let zive = true;
+    void (async (): Promise<void> => {
+      const vysledek = await nactiSkolyTridy();
+      if (!zive || !vysledek.ok) return;
+      setSkolySeznam(vysledek.data.skoly);
+      setTridySeznam(vysledek.data.tridy);
+    })();
+    return () => {
+      zive = false;
+    };
+  }, []);
 
   const puvodni = useMemo<FormHodnoty>(() => zApi(pocatecni), [pocatecni]);
+
+  // Pole je na mobilu daleko od e-mailu, chyba by zůstala mimo obrazovku.
+  useEffect(() => {
+    if (chyby.soucasneHeslo !== undefined && !uklada) soucasneHesloVstup.current?.focus();
+  }, [chyby.soucasneHeslo, uklada]);
+
+  useEffect(() => {
+    if (!barvaOtevrena) return;
+    function zavriVen(udalost: MouseEvent): void {
+      if (!barvaObal.current?.contains(udalost.target as Node)) setBarvaOtevrena(false);
+    }
+    function zavriEsc(udalost: KeyboardEvent): void {
+      if (udalost.key === "Escape") setBarvaOtevrena(false);
+    }
+    document.addEventListener("mousedown", zavriVen);
+    document.addEventListener("keydown", zavriEsc);
+    return () => {
+      document.removeEventListener("mousedown", zavriVen);
+      document.removeEventListener("keydown", zavriEsc);
+    };
+  }, [barvaOtevrena]);
 
   function nastav(pole: FormPole, hodnota: string): void {
     setForm((prev) => ({ ...prev, [pole]: hodnota }));
@@ -111,16 +180,20 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       "skola",
       "trida",
       "avatarUrl",
-      "bio",
+      "oblibenaBarva",
       "narozeniny",
     ];
     for (const k of klice) {
+      if (k === "telefon") {
+        if (telefonSeLisi(form.telefon, kodZeme, pocatecni.telefon ?? null)) return true;
+        continue;
+      }
       const a = k === "email" ? form[k].trim().toLowerCase() : form[k].trim();
       const b = k === "email" ? puvodni[k].trim().toLowerCase() : puvodni[k].trim();
       if (a !== b) return true;
     }
     return form.noveHeslo.length > 0 || form.potvrzeniHesla.length > 0;
-  }, [form, puvodni]);
+  }, [form, puvodni, kodZeme, pocatecni.telefon]);
   const maZmeny: boolean = spinavy || souborAvatar !== null;
 
   function validuj(): Partial<Record<FormPole | "avatar", string>> {
@@ -141,10 +214,11 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
     else if (!EMAIL_REGEX.test(email)) vysledek.email = VALIDACNI_ZPRAVY.emailNeplatny;
 
     const telefon = form.telefon.trim();
-    if (telefon.length > 0) {
-      if (telefon.length > VALIDACE.telefonMaxDelka) vysledek.telefon = VALIDACNI_ZPRAVY.telefonDlouhy;
-      else if (telefon.length < 6 || !/^[+0-9][+0-9 /().-]*$/.test(telefon))
-        vysledek.telefon = VALIDACNI_ZPRAVY.telefonNeplatny;
+    if (telefon.length > VALIDACE.telefonMaxDelka) {
+      vysledek.telefon = VALIDACNI_ZPRAVY.telefonDlouhy;
+    } else if (telefon.length > 0 && !normalizujTelefon(telefon, kodZeme).ok) {
+      const puvodniText = (pocatecni.telefon ?? "").trim();
+      if (telefon !== puvodniText) vysledek.telefon = VALIDACNI_ZPRAVY.telefonNeplatny;
     }
 
     if (form.discordNick.trim().length > VALIDACE.discordNickMaxDelka)
@@ -153,8 +227,8 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       vysledek.skola = VALIDACNI_ZPRAVY.skolaDlouha;
     if (form.trida.trim().length > VALIDACE.tridaMaxDelka)
       vysledek.trida = VALIDACNI_ZPRAVY.tridaDlouha;
-    if (form.bio.length > VALIDACE.bioMaxDelka)
-      vysledek.bio = VALIDACNI_ZPRAVY.bioDlouhe;
+    if (form.oblibenaBarva.length > 0 && !jeOblibenaBarva(form.oblibenaBarva))
+      vysledek.oblibenaBarva = VALIDACNI_ZPRAVY.oblibenaBarvaNeplatna;
 
     const narozeniny = form.narozeniny.trim();
     if (narozeniny.length > 0) {
@@ -186,6 +260,17 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       else if (heslo.length > VALIDACE.hesloMaxDelka) vysledek.noveHeslo = VALIDACNI_ZPRAVY.hesloDlouhe;
       else if (heslo !== potvrz) vysledek.potvrzeniHesla = "Hesla se neshodují.";
     }
+    if (
+      form.soucasneHeslo.length === 0 &&
+      potrebujeSoucasneHeslo({
+        email: form.email,
+        puvodniEmail: puvodni.email,
+        noveHeslo: heslo,
+        potvrzeniHesla: potvrz,
+      })
+    ) {
+      vysledek.soucasneHeslo = "Napiš současné heslo.";
+    }
     return vysledek;
   }
 
@@ -197,10 +282,14 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       const v = norm(form.prijmeni);
       if (v.length > 0) patch.prijmeni = v;
     }
-    if (norm(form.email).toLowerCase() !== norm(puvodni.email).toLowerCase())
+    if (meniEmail(form.email, puvodni.email)) {
       patch.email = norm(form.email).toLowerCase();
-    if (norm(form.telefon) !== norm(puvodni.telefon))
-      patch.telefon = norm(form.telefon).length === 0 ? null : norm(form.telefon);
+      patch.soucasneHeslo = form.soucasneHeslo;
+    }
+    if (telefonSeLisi(form.telefon, kodZeme, pocatecni.telefon ?? null)) {
+      const ulozeny = normalizujTelefon(form.telefon, kodZeme);
+      if (ulozeny.ok) patch.telefon = ulozeny.e164;
+    }
     if (norm(form.discordNick) !== norm(puvodni.discordNick))
       patch.discordNick = norm(form.discordNick).length === 0 ? null : norm(form.discordNick);
     if (norm(form.skola) !== norm(puvodni.skola)) patch.skola = norm(form.skola);
@@ -209,10 +298,14 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       const v = norm(form.avatarUrl);
       patch.avatarUrl = v.length === 0 ? null : v;
     }
-    if (form.bio !== puvodni.bio) patch.bio = form.bio;
+    if (norm(form.oblibenaBarva) !== norm(puvodni.oblibenaBarva))
+      patch.oblibenaBarva = norm(form.oblibenaBarva);
     if (norm(form.narozeniny) !== norm(puvodni.narozeniny))
       patch.narozeniny = norm(form.narozeniny).length === 0 ? null : norm(form.narozeniny);
-    if (form.noveHeslo.length > 0) patch.heslo = form.noveHeslo;
+    if (form.noveHeslo.length > 0) {
+      patch.heslo = form.noveHeslo;
+      patch.soucasneHeslo = form.soucasneHeslo;
+    }
     return patch;
   }
 
@@ -269,7 +362,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
         const mapovane: Partial<Record<FormPole | "avatar", string>> = {};
         const pole = vysledek.chybyPoli ?? {};
         for (const [k, v] of Object.entries(pole)) {
-          if (k === "jmeno" || k === "prijmeni" || k === "email" || k === "telefon" || k === "discordNick" || k === "skola" || k === "trida" || k === "bio" || k === "narozeniny" || k === "heslo" || k === "noveHeslo") {
+          if (k === "jmeno" || k === "prijmeni" || k === "email" || k === "telefon" || k === "discordNick" || k === "skola" || k === "trida" || k === "oblibenaBarva" || k === "narozeniny" || k === "heslo" || k === "noveHeslo" || k === "soucasneHeslo") {
             const cil: FormPole = k === "heslo" ? "noveHeslo" : (k as FormPole);
             mapovane[cil] = v;
           } else if (k === "avatarUrl" || k === "avatar") {
@@ -287,7 +380,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
         return;
       }
       setChyby({});
-      setForm((prev) => ({ ...prev, noveHeslo: "", potvrzeniHesla: "" }));
+      setForm((prev) => ({ ...prev, noveHeslo: "", potvrzeniHesla: "", soucasneHeslo: "" }));
       setOznameni({ typ: "uspech", text: "Profil uložen." });
       onUlozeno(hotovo);
     } finally {
@@ -325,7 +418,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       onSubmit={(e) => void onSubmit(e)}
       aria-busy={uklada}
       aria-label="Osobní údaje"
-      className="mx-auto w-full max-w-2xl text-left"
+      className="mx-auto w-full max-w-2xl text-left lg:mx-0 lg:max-w-none"
     >
       <div className="flex flex-col gap-4">
         <AvatarUpload
@@ -400,18 +493,18 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             "Telefon",
             "profil-telefon",
             chyby.telefon,
-            <input
+            <TelefonPole
               id="profil-telefon"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={form.telefon}
+              hodnota={form.telefon}
+              kodZeme={kodZeme}
               disabled={uklada}
-              onChange={onInput("telefon")}
-              maxLength={VALIDACE.telefonMaxDelka}
-              aria-invalid={chyby.telefon !== undefined}
-              aria-describedby={chyby.telefon !== undefined ? "profil-telefon-chyba" : undefined}
-              className={vstupTrida}
+              neplatny={chyby.telefon !== undefined}
+              popisChybyId={chyby.telefon !== undefined ? "profil-telefon-chyba" : undefined}
+              vstupTrida={vstupTrida}
+              onZmena={(dalsi, zeme) => {
+                nastav("telefon", dalsi);
+                setKodZeme(zeme);
+              }}
             />,
           )}
           {pole(
@@ -440,16 +533,16 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             "Škola",
             "profil-skola",
             chyby.skola,
-            <input
+            <VstupSNabidkou
               id="profil-skola"
-              type="text"
-              autoComplete="organization"
               value={form.skola}
               disabled={uklada}
-              onChange={onInput("skola")}
+              onChange={(hodnota) => nastav("skola", hodnota)}
+              nabidky={skolySeznam}
+              placeholder="Např. ZŠ Lesní"
               maxLength={VALIDACE.skolaMaxDelka}
-              aria-invalid={chyby.skola !== undefined}
-              aria-describedby={chyby.skola !== undefined ? "profil-skola-chyba" : undefined}
+              neplatny={chyby.skola !== undefined}
+              popisId={chyby.skola !== undefined ? "profil-skola-chyba" : undefined}
               className={`${vstupTrida} break-words overflow-wrap-anywhere`}
             />,
           )}
@@ -457,55 +550,145 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             "Třída / klubovna",
             "profil-trida",
             chyby.trida,
-            <input
+            <VstupSNabidkou
               id="profil-trida"
-              type="text"
               value={form.trida}
               disabled={uklada}
-              onChange={onInput("trida")}
+              onChange={(hodnota) => nastav("trida", hodnota)}
+              nabidky={tridySeznam}
+              placeholder="Např. 5.A"
               maxLength={VALIDACE.tridaMaxDelka}
-              aria-invalid={chyby.trida !== undefined}
-              aria-describedby={chyby.trida !== undefined ? "profil-trida-chyba" : undefined}
+              neplatny={chyby.trida !== undefined}
+              popisId={chyby.trida !== undefined ? "profil-trida-chyba" : undefined}
               className={`${vstupTrida} break-words overflow-wrap-anywhere`}
             />,
           )}
         </div>
 
-        {pole(
-          "Představení (bio)",
-          "profil-bio",
-          chyby.bio,
-          <textarea
-            id="profil-bio"
-            rows={4}
-            value={form.bio}
-            disabled={uklada}
-            onChange={onInput("bio")}
-            maxLength={VALIDACE.bioMaxDelka}
-            placeholder="Pár vět o sobě…"
-            aria-invalid={chyby.bio !== undefined}
-            aria-describedby={chyby.bio !== undefined ? "profil-bio-chyba" : undefined}
-            className={`${vstupTrida} break-words overflow-wrap-anywhere resize-y`}
-          />,
-        )}
+        <div className="flex flex-col gap-1.5">
+          <span id="profil-oblibena-barva-popisek" className="text-sm font-bold">
+            Oblíbená barva
+          </span>
+          <div ref={barvaObal} className={barvaOtevrena ? "relative z-20" : "relative"}>
+            <button
+              type="button"
+              id="profil-oblibena-barva"
+              disabled={uklada}
+              aria-haspopup="listbox"
+              aria-expanded={barvaOtevrena}
+              aria-controls="profil-oblibena-barva-nabidka"
+              aria-labelledby="profil-oblibena-barva-popisek"
+              aria-invalid={chyby.oblibenaBarva !== undefined}
+              aria-describedby={
+                chyby.oblibenaBarva !== undefined ? "profil-oblibena-barva-chyba" : undefined
+              }
+              onClick={() => setBarvaOtevrena((otevreno) => !otevreno)}
+              className={`bez-prejeti ${vstupTrida} flex items-center gap-2 text-left`}
+            >
+              {jeOblibenaBarva(form.oblibenaBarva) ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="h-6 w-6 shrink-0 rounded-full border-2 border-inkoust"
+                    style={{
+                      backgroundColor: OBLIBENE_BARVY.find(
+                        (barva) => barva.nazev === form.oblibenaBarva,
+                      )?.hex,
+                    }}
+                  />
+                  {form.oblibenaBarva.charAt(0).toLocaleUpperCase("cs-CZ") +
+                    form.oblibenaBarva.slice(1)}
+                </>
+              ) : (
+                <span className="text-inkoust/40">Vyber barvu</span>
+              )}
+            </button>
+            {barvaOtevrena ? (
+              <ul
+                id="profil-oblibena-barva-nabidka"
+                role="listbox"
+                aria-labelledby="profil-oblibena-barva-popisek"
+                className="registrace-nabidka absolute top-[calc(100%+4px)] right-0 left-0 z-20 max-h-60 overflow-y-auto rounded-md border-2 border-inkoust bg-papir py-1 shadow-denik"
+              >
+                {OBLIBENE_BARVY.map((barva) => {
+                  const vybrana = form.oblibenaBarva === barva.nazev;
+                  return (
+                    <li key={barva.nazev} role="option" aria-selected={vybrana}>
+                      <button
+                        type="button"
+                        className={`bez-prejeti flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-base text-inkoust ${
+                          vybrana ? "bg-linka" : ""
+                        }`}
+                        onMouseDown={(udalost) => udalost.preventDefault()}
+                        onClick={() => {
+                          nastav("oblibenaBarva", vybrana ? "" : barva.nazev);
+                          setBarvaOtevrena(false);
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="h-6 w-6 shrink-0 rounded-full border-2 border-inkoust"
+                          style={{ backgroundColor: barva.hex }}
+                        />
+                        {barva.nazev.charAt(0).toLocaleUpperCase("cs-CZ") + barva.nazev.slice(1)}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
+          {chyby.oblibenaBarva !== undefined && (
+            <p id="profil-oblibena-barva-chyba" role="alert" className="text-sm font-bold text-red-800">
+              {chyby.oblibenaBarva}
+            </p>
+          )}
+        </div>
 
         {pole(
           "Datum narození",
           "profil-narozeniny",
           chyby.narozeniny,
-          <input
+          <DatumVstup
             id="profil-narozeniny"
-            type="date"
             value={form.narozeniny}
             disabled={uklada}
             min="1900-01-01"
             max={dnesISO()}
-            onChange={onInput("narozeniny")}
-            aria-invalid={chyby.narozeniny !== undefined}
-            aria-describedby={chyby.narozeniny !== undefined ? "profil-narozeniny-chyba" : undefined}
+            onChange={(iso) => nastav("narozeniny", iso)}
+            ariaInvalid={chyby.narozeniny !== undefined}
+            ariaDescribedBy={chyby.narozeniny !== undefined ? "profil-narozeniny-chyba" : undefined}
             className={vstupTrida}
           />,
         )}
+
+        <div className="flex flex-col gap-1.5">
+          {pole(
+            "Současné heslo",
+            "profil-soucasne-heslo",
+            chyby.soucasneHeslo,
+            <input
+              ref={soucasneHesloVstup}
+              id="profil-soucasne-heslo"
+              type="password"
+              autoComplete="current-password"
+              value={form.soucasneHeslo}
+              disabled={uklada}
+              onChange={onInput("soucasneHeslo")}
+              maxLength={VALIDACE.hesloMaxDelka}
+              aria-invalid={chyby.soucasneHeslo !== undefined}
+              aria-describedby={
+                chyby.soucasneHeslo !== undefined
+                  ? "profil-soucasne-heslo-napoveda profil-soucasne-heslo-chyba"
+                  : "profil-soucasne-heslo-napoveda"
+              }
+              className={vstupTrida}
+            />,
+          )}
+          <p id="profil-soucasne-heslo-napoveda" className="text-sm text-mech">
+            Vyplň jen při změně e-mailu nebo hesla.
+          </p>
+        </div>
 
         <fieldset className="rounded-lg border-2 border-dashed border-inkoust/30 bg-papir px-4 py-3">
           <legend className="px-1 text-sm font-bold">Nové heslo (prázdné = neměnit)</legend>
@@ -577,7 +760,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             type="submit"
             disabled={uklada || !maZmeny}
             aria-busy={uklada}
-            className="min-h-[44px] min-w-[44px] touch-manipulation rounded bg-inkoust px-6 py-2.5 text-base font-bold text-papir select-none transition-opacity disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
+            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border-2 border-inkoust bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
           >
             {uklada ? "Ukládám…" : "Uložit změny"}
           </button>

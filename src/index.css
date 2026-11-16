@@ -1,27 +1,49 @@
-@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 
 @theme {
-  /* ——— ExApp tokeny (jediný zdroj pravdy pro karty) ——— */
-  --color-papir: #fbf8f1;
-  --color-inkoust: #1a2e22;
-  --color-smrk: #2d6a4f;
-  --color-linka: #dce7de;
-  --color-jantar: #a05e0c;
-  --color-mech: #5c6b60;
+  /* ——— ExApp tokeny, paleta 12f „Bílá s olivou“ (redesign C2) ———
+     Názvy tokenů zůstávají kvůli zpětné kompatibilitě, mění se hodnoty:
+     papir = bílé pozadí, inkoust = tmavě olivový text, smrk = olivová
+     značka, jantar = okrová pro text, okr = okrová pro plochy (CTA). */
+  --color-papir: #ffffff;
+  --color-inkoust: #26301a;
+  --color-smrk: #556b2f;
+  --color-linka: #e7e9df;
+  --color-jantar: #8f5f0a;
+  --color-mech: #5e6b4e;
+  /* Okrová výplň hlavních tlačítek. Text na ní vždy text-inkoust:
+     bílý text na #d99b26 má jen ~2,4:1. */
+  --color-okr: #d99b26;
+  --color-okr-tmavy: #c4861a;
+  /* Jemný olivový podklad (schůzky, vybraný řádek, segmenty). */
+  --color-mlha: #eef1e4;
+  /* Okraj polí formulářů: ≥3:1 proti bílé (WCAG 1.4.11). Linka je na to moc světlá. */
+  --color-pole: #8c937b;
 
-  /* stíny: plochý „papírový“ offset — karta / razítko */
-  --shadow-denik: 3px 3px 0 rgba(26, 46, 34, 0.12);
-  --shadow-razitko: 2px 2px 0 rgba(26, 46, 34, 0.9);
+  /* Zaoblení o stupeň střídmější než výchozí Tailwind (24/16/12 → 18/12/10 px). */
+  --radius-3xl: 1.125rem;
+  --radius-2xl: 0.75rem;
+  --radius-xl: 0.625rem;
 
-  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
-    sans-serif;
+  /* Měkké stíny místo tvrdého papírového offsetu. */
+  --shadow-denik: 0 1px 2px rgba(38, 48, 26, 0.06),
+    0 4px 16px rgba(38, 48, 26, 0.06);
+  --shadow-razitko: 0 1px 2px rgba(38, 48, 26, 0.12),
+    0 2px 8px rgba(38, 48, 26, 0.1);
+
+  --font-sans: "Onest Variable", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Onest Variable",
+    "Segoe UI", system-ui, sans-serif;
 }
 
 @layer base {
   html {
     /* mobile-native §2+§6: žádný šedý flash po tapu, žádný pull-to-refresh přes aplikaci */
     -webkit-tap-highlight-color: transparent;
+    /* mobile-native §3+baseline: žádná inflace fontu při rotaci na iOS */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     overscroll-behavior: none;
   }
 
@@ -32,11 +54,35 @@
     touch-action: manipulation;
   }
 
+  button,
+  [role="button"] {
+    /* mobile-native §8: dlouhý podrž nevybírá popisek ovládacího prvku */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
   body {
     background-color: var(--color-papir);
     color: var(--color-inkoust);
     font-family: var(--font-sans);
+    /* Scale the fallback to the web font's x-height so the swap does not shift lines. */
+    font-size-adjust: from-font;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Nadpisy v display písmu. :where() drží nulovou specificitu,
+     takže utility třídy i deníkové styly (.nocturne) mají přednost.
+     Own font-size-adjust: the inherited value would follow Onest, not Bricolage. */
+  :where(h1, h2, h3) {
+    font-family: var(--font-display);
+    font-size-adjust: from-font;
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-okr) 35%, transparent);
+    color: var(--color-inkoust);
   }
 
   :focus-visible {
@@ -60,6 +106,13 @@
   .heatmapa-plocha {
     /* mobile-native §9: mapa si bere obě osy gest, zbytek appky manipulation */
     touch-action: pan-x pan-y;
+    /* Leaflet panes use z-index 200–700. Without a local stacking context
+       they paint over the sticky header and the bottom nav (z-40) whenever
+       the map sits under them. */
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+    overflow: hidden;
   }
 
   .heatmapa-plocha .leaflet-control-zoom a {
@@ -75,7 +128,7 @@
 
   .heatmapa-plocha .leaflet-control-attribution {
     font-size: 11px;
-    background: rgba(251, 248, 241, 0.9) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
     color: var(--color-inkoust);
     padding: 2px 6px;
   }
@@ -84,18 +137,31 @@
     color: var(--color-smrk);
   }
 
-  /* break-ui: dlouhý tooltip nesmí roztáhnout mapu */
+  /* One horizontal line. Long names ellipsize; short ones stay whole.
+     Width is fixed in JS too, because an absolute Leaflet tip otherwise
+     shrinks to the space beside the cursor and stacks the letters. */
   .heatmapa-plocha .leaflet-tooltip {
-    max-width: 220px;
-    overflow-wrap: anywhere;
+    width: max-content !important;
+    max-width: min(28rem, calc(100vw - 2.5rem)) !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
     font-family: var(--font-sans);
     font-size: 12px;
     font-weight: 700;
+    line-height: 1.35;
     color: var(--color-inkoust);
     background: var(--color-papir);
     border: 2px solid var(--color-inkoust);
     border-radius: 6px;
     box-shadow: var(--shadow-denik);
+  }
+
+  .heatmapa-plocha .leaflet-tooltip > div {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -117,6 +183,212 @@
   }
 
   .fotky-disclosure-enter {
-    animation: fotky-disclosure-enter 160ms ease-out both;
+    /* backwards, not both: a leftover transform on an ancestor makes
+       Chromium open the native <select> list and then ignore the click. */
+    animation: fotky-disclosure-enter 160ms ease-out backwards;
+  }
+}
+
+button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):not(.nahled-prejeti):not(:disabled) {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):not(:disabled):active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):active {
+    transform: none;
+  }
+}
+
+/* Album picker: ink wash sits on the wrapper. A transform on the select
+   or any ancestor drops clicks on the native option list in Chromium. */
+.fotky-album-vyber {
+  position: relative;
+  isolation: isolate;
+}
+
+.fotky-album-vyber::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  height: 3px;
+  background: var(--color-inkoust);
+  transform: scaleX(0);
+  transform-origin: left center;
+  pointer-events: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.fotky-album-vyber select {
+  position: relative;
+  z-index: 1;
+  background-color: var(--color-papir);
+  color: var(--color-inkoust);
+}
+
+/* The native list inherits the select color. Keep names dark on paper. */
+.fotky-album-vyber select option {
+  background-color: var(--color-papir);
+  color: var(--color-inkoust);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fotky-album-vyber:hover::before {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fotky-album-vyber::before {
+    transition: none;
+  }
+
+  .fotky-album-vyber:hover::before {
+    transform: none;
+  }
+}
+
+/* File picker: the native button is the pressable control. */
+input[type="file"] {
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+input[type="file"]::file-selector-button,
+input[type="file"]::-webkit-file-upload-button {
+  cursor: pointer;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+input[type="file"]:active::file-selector-button,
+input[type="file"]:active::-webkit-file-upload-button {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  input[type="file"]:hover {
+    border-color: var(--color-inkoust);
+  }
+
+  input[type="file"]:hover::file-selector-button,
+  input[type="file"]:hover::-webkit-file-upload-button {
+    background-color: color-mix(in oklab, var(--color-linka) 60%, transparent);
+  }
+}
+
+/* Suggestion list under a registration field. No fill-mode: a leftover
+   transform on an ancestor makes Chromium drop clicks in native popups. */
+@keyframes registrace-nabidka-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.registrace-nabidka,
+.nabidka-seznam {
+  animation: registrace-nabidka-enter 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .registrace-nabidka,
+  .nabidka-seznam {
+    animation: none;
+  }
+}
+
+/* Trash manage mode: the status line stays one row. The action buttons
+   wrap underneath instead of squeezing the label into a vertical strip. */
+[data-fotky-album-toolbar][data-kos-sprava] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+[data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-toolbar-nadpis] {
+  flex: none;
+  width: 100%;
+}
+
+[data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-akce-row] {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+/* Upload/download status sits above the mobile tab bar (z-40) and is
+   portaled to the body, so a transformed disclosure cannot clip it. */
+.fotky-stav-panel {
+  position: fixed;
+  z-index: 50;
+  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  bottom: max(5.25rem, calc(env(safe-area-inset-bottom, 0px) + 4.5rem));
+}
+
+@media (min-width: 1024px) {
+  .fotky-stav-panel {
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="file"]:active::file-selector-button,
+  input[type="file"]:active::-webkit-file-upload-button {
+    transform: none;
+  }
+}
+
+/* Chat lists: a slim pill, always faintly there, a little stronger while moving. */
+@property --seznam-palec {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgb(38 48 26 / 0.24);
+}
+
+.seznam-scroll {
+  scrollbar-width: thin;
+  --seznam-palec: rgb(38 48 26 / 0.24);
+  scrollbar-color: var(--seznam-palec) transparent;
+  transition: --seznam-palec 480ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.seznam-scroll:hover,
+.seznam-scroll.seznam-scrolluje {
+  --seznam-palec: rgb(85 107 47 / 0.55);
+}
+
+/* Standard scrollbar-color wins where it exists. WebKit rules only fill the gap. */
+@supports not (scrollbar-color: auto) {
+  .seznam-scroll::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .seznam-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .seznam-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--seznam-palec);
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seznam-scroll {
+    transition: none;
   }
 }

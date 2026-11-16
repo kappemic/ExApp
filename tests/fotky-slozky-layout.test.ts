@@ -16,6 +16,16 @@ describe("Fotky master–detail layout", () => {
     expect(slozky).toContain('aria-label="Složky"');
   });
 
+  it("výběr alba v nahrávání drží zvolenou hodnotu a nenechává transform", () => {
+    const page = cti("src/pages/FotkyPage.tsx");
+    expect(page).toContain("vybraneId={vybraneId}");
+    expect(page).not.toContain("albumId ?? vybraneId");
+    const css = cti("src/index.css");
+    expect(css).toContain("fotky-disclosure-enter 160ms ease-out backwards");
+    expect(css).not.toContain("fotky-disclosure-enter 160ms ease-out both");
+    expect(cti("src/components/fotky/NahratFotky.tsx")).toContain("fotky-album-vyber");
+  });
+
   it("AlbumFotky má horní lištu s mazáním a stahováním", () => {
     const album = cti("src/components/fotky/AlbumFotky.tsx");
     expect(album).toContain("data-fotky-album-toolbar");
@@ -41,10 +51,21 @@ describe("Fotky master–detail layout", () => {
     const album = cti("src/components/fotky/AlbumFotky.tsx");
     const ui = cti("src/components/fotky/fotky-ui.ts");
     expect(album).toContain("fotkyMrizkaDlazdice");
+    expect(album).toContain("FotkyRadkovaMrizka");
+    const dlazdice = ui
+      .split("\n")
+      .find((radek) => radek.includes("export const fotkyMrizkaDlazdice"));
+    expect(dlazdice).toBeDefined();
+    expect(dlazdice).not.toContain("aspect-square");
+    expect(dlazdice).not.toContain("rounded-lg");
+    expect(dlazdice).not.toContain("border-2");
+    expect(dlazdice).not.toContain("shadow-denik");
+    expect(dlazdice).not.toContain("fotkyHoverScaleJemna");
     expect(ui).toContain("min-h-[44px]");
     expect(album).toContain("aria-label={popisek}");
     expect(ui).toContain("focus-visible:outline-smrk");
-    expect(album).toContain("motion-reduce:animate-none");
+    expect(album).toContain("KostraFotky");
+    expect(cti("src/components/StrankaKostra.tsx")).toContain("motion-reduce:animate-none");
     expect(album).toContain("aria-pressed={vybrana}");
   });
 

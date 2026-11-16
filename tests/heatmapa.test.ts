@@ -116,14 +116,16 @@ describe("kontrakt souborů Kroku 4 (statický, bez DOM)", () => {
   it("Heatmapa.tsx: deníkové barvy smrk + jantar, žádný secret", () => {
     const obsah = cti("src/components/profil/Heatmapa.tsx");
     expect(obsah).toContain("#2d6a4f");
-    expect(obsah).toContain("#a05e0c");
+    expect(obsah).toContain("#ff7a1a");
     expect(obsah.toLowerCase()).not.toContain("access_token");
     expect(obsah.toLowerCase()).not.toContain("client_secret");
   });
 
-  it("index.css: leaflet CSS + 44px zoom + touch-action pro mapu", () => {
+  it("index.css: 44px zoom + touch-action pro mapu, leaflet CSS až s mapou", () => {
     const obsah = cti("src/index.css");
-    expect(obsah).toContain("leaflet/dist/leaflet.css");
+    const mapa = cti("src/components/profil/Heatmapa.tsx");
+    expect(obsah).not.toContain("leaflet/dist/leaflet.css");
+    expect(mapa).toContain('import("leaflet/dist/leaflet.css")');
     expect(obsah).toContain("heatmapa-plocha");
     expect(obsah).toContain("pan-x pan-y");
     expect(obsah).toContain("44px");

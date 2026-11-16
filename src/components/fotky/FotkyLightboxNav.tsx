@@ -18,14 +18,14 @@ export default function FotkyLightboxNav({
   onMouseDownZastav,
 }: FotkyLightboxNavProps): JSX.Element {
   return (
-    <>
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
       <button
         type="button"
         aria-label="Předchozí fotka"
         disabled={!maPredchozi}
         onMouseDown={onMouseDownZastav}
         onClick={onPredchozi}
-        className={`${fotkyLightboxNavTlacitko} left-[max(0.75rem,env(safe-area-inset-left))]`}
+        className={fotkyLightboxNavTlacitko}
       >
         <IkonaSipkaVlevo />
       </button>
@@ -35,11 +35,11 @@ export default function FotkyLightboxNav({
         disabled={!maDalsi}
         onMouseDown={onMouseDownZastav}
         onClick={onDalsi}
-        className={`${fotkyLightboxNavTlacitko} right-[max(0.75rem,env(safe-area-inset-right))]`}
+        className={fotkyLightboxNavTlacitko}
       >
         <IkonaSipkaVpravo />
       </button>
-    </>
+    </div>
   );
 }
 

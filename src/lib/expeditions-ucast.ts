@@ -6,6 +6,8 @@
  */
 
 import { isKnownRole } from "../config/roles";
+import { apiBase } from "./api-base";
+import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 import {
   jeApiChyba,
   odhlasitPath,
@@ -33,6 +35,8 @@ import {
   type UserListItem,
   type UsersListResponse,
   type UzavritVypravuResponse,
+  type ApiCestaSnimek,
+  type ExpediceDetailResponse,
   type VytvoritExpediciRequest,
   type VytvoritExpediciResponse,
 } from "../shared/api-types";
@@ -44,32 +48,6 @@ export type { ApiUcastnik };
 export type UcastVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string; kod?: ApiErrorCode; chybyPoli?: ChybyExpedice };
-
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-/** Bezpečné čtení JSON — prázdné / ne-JSON tělo → null. */
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
-
-function chybaZTela(telo: unknown, status: number): UcastVysledek<never> {
-  if (jeApiChyba(telo)) {
-    const kod: ApiErrorCode = telo.error.code;
-    void status;
-    return { ok: false, chyba: telo.error.message, kod };
-  }
-  return { ok: false, chyba: OBECNA_CHYBA };
-}
 
 /** První česká hláška pro dané pole z `details` (VALIDATION_ERROR). */
 function prvniHlaska(detaily: Record<string, string[]>, pole: string): string | undefined {
@@ -128,7 +106,7 @@ async function volej(
           : { "Content-Type": "application/json", Accept: "application/json" },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
-    return { status: odpoved.status, telo: await ctiTelo(odpoved) };
+    return { status: odpoved.status, telo: await ctiJsonTelo(odpoved) };
   } catch {
     return null;
   }
@@ -151,7 +129,7 @@ export async function nactiUcastniky(
   if (vysledek.status === 200 && jeUcastniciOdpoved(vysledek.telo)) {
     return { ok: true, data: { ucastnici: vysledek.telo.ucastnici, expedice: vysledek.telo.expedice } };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jePrihlasitOdpoved(telo: unknown): telo is PrihlasitNaVypravuResponse {
@@ -171,7 +149,7 @@ export async function prihlasNaVypravu(
   if ((vysledek.status === 201 || vysledek.status === 200) && jePrihlasitOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeOdhlasitOdpoved(telo: unknown): telo is OdhlasitResponse {
@@ -191,7 +169,7 @@ export async function odhlasZVypravy(
   if (vysledek.status === 200 && jeOdhlasitOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeUpravitOdpoved(telo: unknown): telo is UpravitExpediciResponse {
@@ -216,12 +194,86 @@ export async function vytvorVypravu(
     return { ok: true, data: vysledek.telo };
   }
   if (vysledek.status === 422) {
-    const zaklad = chybaZTela(vysledek.telo, vysledek.status);
+    const zaklad = chybaZApiTela(vysledek.telo);
     if (!zaklad.ok) {
       return { ...zaklad, chybyPoli: mapujChybyPoli(vysledek.telo) };
     }
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
+}
+
+function jeDetail(telo: unknown): telo is ExpediceDetailResponse {
+  if (typeof telo !== "object" || telo === null) return false;
+  const kandidat = telo as Record<string, unknown>;
+  return typeof kandidat["expedice"] === "object" && Array.isArray(kandidat["cestaTam"]) && Array.isArray(kandidat["cestaZpet"]);
+}
+
+/** Detail including journey screenshots. Public. */
+export async function nactiDetailVypravy(
+  idVypravy: string,
+): Promise<UcastVysledek<ExpediceDetailResponse>> {
+  const vysledek: FetchVysledek | null = await volej(expediceDetailPath(idVypravy), "GET");
+  if (vysledek === null) {
+    return { ok: false, chyba: "Bez připojení detail nejde načíst. Zkus to později." };
+  }
+  if (vysledek.status === 200 && jeDetail(vysledek.telo)) {
+    return { ok: true, data: vysledek.telo };
+  }
+  return chybaZApiTela(vysledek.telo);
+}
+
+function jeSnimky(telo: unknown): telo is { snimky: ApiCestaSnimek[] } {
+  if (typeof telo !== "object" || telo === null) return false;
+  return Array.isArray((telo as { snimky?: unknown }).snimky);
+}
+
+/** Upload screenshots for one direction. Empty list is a no-op success. */
+export async function nahrajCestaSnimky(
+  idVypravy: string,
+  smer: "tam" | "zpet",
+  soubory: readonly File[],
+): Promise<UcastVysledek<{ snimky: ApiCestaSnimek[] }>> {
+  if (soubory.length === 0) return { ok: true, data: { snimky: [] } };
+  const zaklad: string = apiBase();
+  if (zaklad.length === 0) {
+    return { ok: false, chyba: "Bez připojení snímky nahrát nejde. Zkus to později." };
+  }
+  const form = new FormData();
+  form.append("smer", smer);
+  for (const soubor of soubory) form.append("soubor", soubor, soubor.name);
+  try {
+    const odpoved = await fetch(`${zaklad}/api/expeditions/${encodeURIComponent(idVypravy)}/cesta-snimky`, {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      body: form,
+    });
+    const telo = await ctiJsonTelo(odpoved);
+    if (odpoved.status === 201 && jeSnimky(telo)) return { ok: true, data: telo };
+    return chybaZApiTela(telo);
+  } catch {
+    return { ok: false, chyba: "Bez připojení snímky nahrát nejde. Zkus to později." };
+  }
+}
+
+export async function smazCestaSnimek(
+  idVypravy: string,
+  snimekId: string,
+): Promise<UcastVysledek<{ ok: true }>> {
+  const zaklad: string = apiBase();
+  if (zaklad.length === 0) {
+    return { ok: false, chyba: "Bez připojení snímek smazat nejde. Zkus to později." };
+  }
+  try {
+    const odpoved = await fetch(
+      `${zaklad}/api/expeditions/${encodeURIComponent(idVypravy)}/cesta-snimky/${encodeURIComponent(snimekId)}`,
+      { method: "DELETE", credentials: "include", headers: { Accept: "application/json" } },
+    );
+    if (odpoved.status === 200) return { ok: true, data: { ok: true } };
+    return chybaZApiTela(await ctiJsonTelo(odpoved));
+  } catch {
+    return { ok: false, chyba: "Bez připojení snímek smazat nejde. Zkus to později." };
+  }
 }
 
 /** Úprava výpravy (jen ADMIN, PATCH sémantika). */
@@ -237,12 +289,12 @@ export async function upravVypravu(
     return { ok: true, data: vysledek.telo };
   }
   if (vysledek.status === 422) {
-    const zaklad = chybaZTela(vysledek.telo, vysledek.status);
+    const zaklad = chybaZApiTela(vysledek.telo);
     if (!zaklad.ok) {
       return { ...zaklad, chybyPoli: mapujChybyPoli(vysledek.telo) };
     }
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeSmazatOdpoved(telo: unknown): telo is SmazatExpediciResponse {
@@ -259,7 +311,7 @@ export async function smazVypravu(idVypravy: string): Promise<UcastVysledek<Smaz
   if (vysledek.status === 200 && jeSmazatOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeUzavritOdpoved(telo: unknown): telo is UzavritVypravuResponse {
@@ -280,7 +332,7 @@ export async function uzavriVypravu(
   if (vysledek.status === 200 && jeUzavritOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeUsersOdpoved(telo: unknown): telo is UsersListResponse {
@@ -293,7 +345,8 @@ function jeUsersOdpoved(telo: unknown): telo is UsersListResponse {
     if (
       typeof uzivatel["id"] !== "string" ||
       typeof uzivatel["jmeno"] !== "string" ||
-      typeof uzivatel["email"] !== "string"
+      typeof uzivatel["email"] !== "string" ||
+      typeof uzivatel["isSuperadmin"] !== "boolean"
     ) {
       return false;
     }
@@ -323,7 +376,7 @@ export async function nactiUzivateleProSelektor(): Promise<
   if (vysledek.status === 200 && jeUsersOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo.users };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jePridatUcastnikaOdpoved(telo: unknown): telo is PridatUcastnikaPoUzavreniResponse {
@@ -353,7 +406,7 @@ export async function pridejUcastnikaPoUzavreni(
   if ((vysledek.status === 201 || vysledek.status === 200) && jePridatUcastnikaOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }
 
 function jeOdebratUcastnikaOdpoved(telo: unknown): telo is OdebratUcastnikaResponse {
@@ -381,5 +434,5 @@ export async function odeberUcastnika(
   if (vysledek.status === 200 && jeOdebratUcastnikaOdpoved(vysledek.telo)) {
     return { ok: true, data: vysledek.telo };
   }
-  return chybaZTela(vysledek.telo, vysledek.status);
+  return chybaZApiTela(vysledek.telo);
 }

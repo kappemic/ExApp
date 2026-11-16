@@ -8,7 +8,7 @@
  *   jen z veřejného CLIENT_ID (SECRET se do URL nikdy nedostane).
  * - Mock výměna `code → tokens` (STRAVA_MOCK=1) — fixture bez reálného
  *   CLIENT_ID / SECRETu pro testy a localhost.
- * - `jeTokenExpirovany` — rozhodnutí o auto-refreshi (rezerva 5 minut).
+ * - `jeTokenExpirovany` — auto-refresh v poslední hodině (pravidlo Stravy).
  * - Klientský bundle (`src/lib/strava-api.ts`, `src/pages/ProfilPage.tsx`)
  *   nesmí obsahovat SECRET (klíč i hodnotu hlídá grep v závěru kroku).
  * Strict TS, žádný `any`.
@@ -228,14 +228,16 @@ describe("ctiStravaClientId priorita (Krok 7b)", () => {
 });
 
 describe("jeTokenExpirovany (auto-refresh před každým voláním Stravy)", () => {
-  it("expirace za hodinu není expirovaná", () => {
-    const expirace = new Date(Date.now() + 60 * 60 * 1000);
+  it("expirace za 61 minut ještě nespouští výměnu", () => {
+    const expirace = new Date(Date.now() + 61 * 60 * 1000);
     expect(jeTokenExpirovany(expirace, new Date())).toBe(false);
   });
 
-  it("expirace za 2 minuty je expirovaná (rezerva 5 minut)", () => {
-    const expirace = new Date(Date.now() + 2 * 60 * 1000);
-    expect(jeTokenExpirovany(expirace, new Date())).toBe(true);
+  it("expirace za hodinu i za 2 minuty už výměnu spouští", () => {
+    const hodina = new Date(Date.now() + 60 * 60 * 1000);
+    const dveMinuty = new Date(Date.now() + 2 * 60 * 1000);
+    expect(jeTokenExpirovany(hodina, new Date())).toBe(true);
+    expect(jeTokenExpirovany(dveMinuty, new Date())).toBe(true);
   });
 
   it("prošlá expirace je expirovaná", () => {

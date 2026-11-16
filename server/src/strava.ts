@@ -1,9 +1,9 @@
 /**
  * server/src/strava.ts — Strava OAuth + správa tokenů (Fáze 4, Krok 1, server-only).
  *
- * Flow (localhost): ProfilPage → GET /api/strava/auth-url (PUBLIC, jen
- * veřejné CLIENT_ID) → redirect na Strava authorize → Strava redirectne
- * na GET /api/strava/callback?code= (USER, session) → výměna code→tokens
+ * Flow (localhost): ProfilPage → GET /api/strava/auth-url (USER, session)
+ * → redirect na Strava authorize → Strava redirectne
+ * na GET /api/strava/callback?code= (USER, session + state cookie) → výměna
  * POUZE na serveru → upsert `strava_tokens` + `users.strava_id` → 302 zpět
  * na profil. Odpojení: DELETE /api/strava/odpojit (USER).
  *
@@ -22,6 +22,8 @@ import { stravaTokens } from "../../drizzle/schema/strava_tokens";
 import { users } from "../../drizzle/schema/users";
 import type { Db } from "./db";
 import { lzeDoplnitArchiv } from "./vyprava-termin";
+import { ctiEnv } from "./prostredi";
+
 
 /** Udělený OAuth scope (čtení + čtení aktivit pro párování k výpravám). */
 export const STRAVA_SCOPE_DEFAULT = "read,activity:read" as const;
@@ -39,8 +41,11 @@ const STRAVA_TOKEN_URL = "https://www.strava.com/api/v3/oauth/token" as const;
  */
 export const STRAVA_FETCH_TIMEOUT_MS = 10_000;
 
-/** Rezerva auto-refreshe: token s expirací blíž než 5 minut se obnoví. */
-const REFRESH_REZERVA_MS = 5 * 60 * 1000;
+/**
+ * Strava vrací nový klíč, jen když současnému zbývá hodina nebo méně.
+ * Dřív vrátí stejný access token i stejné expires_at.
+ */
+const REFRESH_REZERVA_MS = 60 * 60 * 1000;
 
 /** Mock tokeny platí 6 hodin (stejně jako reálné Strava expirace řádově). */
 const MOCK_PLATNOST_MS = 6 * 60 * 60 * 1000;
@@ -93,7 +98,7 @@ export interface StravaObnoveniVysledek {
 }
 
 function jeMock(): boolean {
-  return process.env["STRAVA_MOCK"] === "1";
+  return ctiEnv("STRAVA_MOCK") === "1";
 }
 
 /**
@@ -106,7 +111,7 @@ function jeMock(): boolean {
  */
 export function ctiStravaClientId(): string {
   const kandidat =
-    process.env["STRAVA_CLIENT_ID"] ?? process.env["VITE_STRAVA_CLIENT_ID"] ?? "";
+    ctiEnv("STRAVA_CLIENT_ID") ?? ctiEnv("VITE_STRAVA_CLIENT_ID") ?? "";
   const ciste = kandidat.trim();
   if (ciste.length > 0) return ciste;
   return jeMock() ? "mock-client-id" : "";
@@ -125,7 +130,7 @@ export function jeRealneClientId(hodnota: string): boolean {
 
 /** Server-only secret — nikdy VITE_, nikdy do bundlu, nikdy do odpovědi. */
 function ctiStravaSecret(): string {
-  return (process.env["STRAVA_CLIENT_SECRET"] ?? "").trim();
+  return (ctiEnv("STRAVA_CLIENT_SECRET") ?? "").trim();
 }
 
 /**
@@ -133,16 +138,16 @@ function ctiStravaSecret(): string {
  * Default pro localhost: `http://localhost:{PORT}/api/strava/callback`.
  */
 export function ctiStravaRedirectUri(): string {
-  const kandidat = (process.env["STRAVA_REDIRECT_URI"] ?? "").trim();
+  const kandidat = (ctiEnv("STRAVA_REDIRECT_URI") ?? "").trim();
   if (kandidat.length > 0) return kandidat;
-  const port = Number.parseInt(process.env["PORT"] ?? "3001", 10);
+  const port = Number.parseInt(ctiEnv("PORT") ?? "3001", 10);
   const cislo = Number.isFinite(port) && port > 0 ? port : 3001;
   return `http://localhost:${String(cislo)}/api/strava/callback`;
 }
 
 /** První povolený původ klienta (cíl 302 po callbacku — profil). */
 export function ctiKlientskyPuvod(): string {
-  const raw = (process.env["CLIENT_URL"] ?? "").trim();
+  const raw = (ctiEnv("CLIENT_URL") ?? "").trim();
   if (raw.length === 0) return "http://localhost:5173";
   const prvni = raw
     .split(",")
@@ -178,9 +183,16 @@ export function sestavStravaAuthUrl(vstup: StravaAuthUrlVstup): string {
   return `${STRAVA_AUTH_URL_ZAKLAD}?${params.toString()}`;
 }
 
-/** True, když token expiruje dřív než za rezervu (typicky 5 minut). */
+/** True, když do expirace zbývá nejvýš hodina, nebo už vypršela. */
 export function jeTokenExpirovany(expirace: Date, ted: Date = new Date()): boolean {
-  return expirace.getTime() - ted.getTime() < REFRESH_REZERVA_MS;
+  return expirace.getTime() - ted.getTime() <= REFRESH_REZERVA_MS;
+}
+
+/** Query `?obnovit=1` na stavu propojení — vyměň klíč hned, i když ještě platí. */
+export function chceVynutitObnoveni(query: unknown): boolean {
+  if (typeof query !== "object" || query === null) return false;
+  const hodnota = (query as Record<string, unknown>)["obnovit"];
+  return hodnota === "1" || hodnota === "true";
 }
 
 /** Deterministické mock athlete id z kódu (DB `strava_id` je UNIQUE). */
@@ -410,6 +422,15 @@ export async function ulozStravaTokeny(
   await db
     .update(users)
     .set({ stravaId: vysledek.athleteId, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+/** Drops Strava tokens and clears `users.strava_id`. Both disconnect routes call this. */
+export async function odpojStravu(db: Db, userId: string): Promise<void> {
+  await db.delete(stravaTokens).where(eq(stravaTokens.userId, userId));
+  await db
+    .update(users)
+    .set({ stravaId: null, updatedAt: new Date() })
     .where(eq(users.id, userId));
 }
 
@@ -853,6 +874,7 @@ export function rozhodniOdpojeni(
 export async function zajistiPlatnyAccessToken(
   db: Db,
   userId: string,
+  moznosti?: { vynutit?: boolean },
 ): Promise<string | null> {
   const radky = await db
     .select()
@@ -861,7 +883,10 @@ export async function zajistiPlatnyAccessToken(
     .limit(1);
   const radek = radky[0];
   if (radek === undefined) return null;
-  if (!jeTokenExpirovany(radek.expirace, new Date())) return radek.accessToken;
+  const vynutit = moznosti?.vynutit === true;
+  if (!vynutit && !jeTokenExpirovany(radek.expirace, new Date())) {
+    return radek.accessToken;
+  }
   try {
     const obnovene = await obnovStravaToken(radek.refreshToken);
     await db

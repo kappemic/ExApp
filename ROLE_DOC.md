@@ -3,7 +3,7 @@
 > Single-source pravidlo: jediným zdrojem pravdy pro role je
 > `src/config/roles.ts` (`Role` union + `ROLE_LIST` + `getRoleStyle`
 > + helpery `je*()` + `chybaKombinaceRole` / `jeValidniKombinaceRole`).
-> `src/data/mockClenove.ts`, `src/pages/AdminClenovePage.tsx`,
+> `src/pages/AdminClenovePage.tsx`,
 > `src/components/Admin/ClenoveTable.tsx` a `RoleBadge` role jen konzumují —
 > nedefinují vlastní seznam rolí ani vlastní význam rolí.
 
@@ -34,7 +34,7 @@
 
 Pouze dvě věci, nic jiného:
 
-1. **Pole `role: Role[]`** u člena (`src/data/mockClenove.ts`, typ `RoleSet`).
+1. **Pole `role: Role[]`** u člena (typ `RoleSet` v `src/config/roles.ts`).
    Žádná booleovská pole `aktivni` / `rada` / `vedeni` na datovém modelu
    neexistují — stav a zařazení se vždy odvozují z `role[]`.
 2. **Badge v UI** — barva badge přes helper `getRoleStyle(role)`
@@ -49,24 +49,19 @@ chyby česky z `chybaKombinaceRole`, boolean z `jeValidniKombinaceRole`.
 
 ## Taby a tabulka (5 pohledů)
 
-`AdminClenovePage` má 5 tabů, každý filtruje **pouze podle `role[]`**
+`AdminClenovePage` má 5 tabů, každý filtruje **přes 3D trio (viz dodatek)**
 stejným predikátem pro počet i pro výpis:
 
 | Tab | Predikát |
 |-----|----------|
-| Všichni | bez filtru (`MOCK_CLENOVE.length`) |
-| Aktivní | `jeAktivniClen(role)` |
-| Rada | `jeVRade(role)` |
-| Vedení | `jeVeVedeni(role)` |
-| Členové | `jeClen(role)` (= základní neaktivní členové) |
+| Všichni | bez filtru |
+| Aktivní | `clenstvi` je `aktivni_clen` |
+| Rada | `funkce` je `rada` |
+| Vedení | `funkce` je `vedeni` |
+| Členové | `clenstvi` je `clen` (= základní neaktivní členové) |
 
-Tabulka `ClenoveTable` nemá žádné booleany v datech. Sloupce:
-Jméno · Role / Hodnost (`RoleBadge` za každou roli z `role[]`) ·
-Stav (`jeAktivniClen` → „Aktivní člen“ / „Člen“) ·
-Zařazení (`jeVRade` → „Rada“, `jeVeVedeni` → „Vedení“, jinak „—“).
-
-Mock: 14 členů v `MOCK_CLENOVE`, pouze `role[]`, všechny kombinace validní
-dle `jeValidniKombinaceRole` (admin výjimka `c01` viz výše).
+Tabulka `ClenoveTable` zobrazuje mimo jiné sloupce Stav (podle `clenstvi`)
+a Zařazení (podle `funkce`).
 
 ## Jak přidat vlastní roli (jako nadstavbu)
 
@@ -78,19 +73,25 @@ Aditivně, nemazat existující ID:
    (`role.includes("moje-role")`) — stejný vzor jako `jeVRade`.
 4. Rozšiř `chybaKombinaceRole`: nová role je nadstavba → vyžaduje
    `aktivni-clen` (stejně jako `clen-rady` / `vedeni`).
-5. Volitelně: mock data, tab / filtr, badge text. Validaci nech na hranici.
+5. Volitelně: tab / filtr, badge text. Validaci nech na hranici.
 6. Výhledově: správa rolí v admin UI bez zásahu do kódu.
 
-## Mapování na auth (binární `USER` / `ADMIN`)
+## Mapování na auth (`USER` / `ADMIN` / `SUPERADMIN`)
 
-Auth je binární (dle `AGENTS.md:15`): `jeAdmin(role)` → `ADMIN`, jinak `USER`.
+Auth role čte čerstvé bity z DB (`authRoleZRadku` v `server/src/auth.ts`):
+`is_superadmin` → `SUPERADMIN`, jinak `is_admin` → `ADMIN`, jinak `USER`.
 Hodnostní model (`role[]`) se tím nemění — zůstává zdrojem pravdy pro UI.
+Hlavní admin (`is_superadmin`) je vždy zároveň admin. Běžný admin spravuje
+výpravy, kódy, schůzky a fotky; cizí profily neupravuje a admina neuděluje.
+Hlavní admin to smí a může povýšit člena na admina i na hlavního admina
+(`vyzadujSuperadmina` na `PATCH /api/users/:id`, `PATCH /api/clenove/:id`,
+`DELETE /api/users/:id`).
 
 | Hodnost (`Role`) | Auth role | Poznámka |
 |------------------|-----------|----------|
 | `admin` | `ADMIN` | Přístup k rozšiřujícím ovládacím prvkům napříč aplikací. |
 | `clen` | `USER` | Čtení (výpravy, kalendář, statistiky); bez správy výprav. |
-| `aktivni-clen` | `USER` | Čtení + dle `PRD.md:32-33` může vytvářet a upravovat výpravy. |
+| `aktivni-clen` | `USER` | Čtení + dle `PRD.md` §2.1 může vytvářet a upravovat výpravy. |
 | `clen-rady` | `USER` | Čtení + podíl na rozhodování oddílu; auth se nemění. |
 | `vedeni` | `USER` | Nejvyšší hodnost v UI; v auth stále `USER` (není `ADMIN`). |
 
@@ -98,7 +99,6 @@ Pravidla:
 
 - Kombinace s `admin` (např. `["aktivni-clen", "vedeni", "admin"]`) → `ADMIN`.
 - Vše ostatní (jakákoliv validní kombinace bez `admin`) → `USER`.
-- Demo flag `?admin=1` zůstává do `Fáze1-auth` (pouze pro lokální demo, nenahrazuje auth).
 ---
 ## Dodatek — 3D model clenstvi + skola/trida (Krok 9, vlna 3D role)
 
@@ -115,6 +115,8 @@ Zdroj pravdy: `src/config/roles.ts` (`Clenstvi`, `Funkce`, `ClenskyProfil`
 - `clenstvi: "clen" | "aktivni_clen"` — zakladni prislusnost (baze).
 - `funkce: "vedeni" | "rada" | null` — nadstavba (`null` = bez funkce).
 - `isAdmin: boolean` — ortogonalni technicky priznak (neni hodnost).
+- `isSuperadmin: boolean` — dalsi ortogonalni bit (`users.is_superadmin`).
+  Implikuje `isAdmin`. Auth hranice pro cizí profily a udělení admina.
 
 Server: `server/src/auth.ts` (`SessionUzivatel` nese trio ctene vzdy cerstve
 z DB, nikdy z tokenu; `trioNaRoli` = normativni dual-write mirror trio -> stara
@@ -158,7 +160,7 @@ Klient zrcadli: `ClenDetailModal` hlida `chybaKombinace3D` na hranici formulare.
 
 Guardy nectou `role === 'admin'` ani token — jen cerstve `is_admin` z DB
 (`vyzadujPrihlaseni` ho vzdy nacte z radku; `toApiUser.authRole` =
-`isAdmin ? ADMIN : USER`; `jeSystemBezAdmina` = `is_admin = TRUE`).
+`authRoleZRadku`: `SUPERADMIN` / `ADMIN` / `USER`; `jeSystemBezAdmina` = `is_admin = TRUE`).
 Stara `role` je jen mirror pro zpetnou kompatibilitu
 (`ZastaralaRole` alias, `UpravitUzivateleRequest { role }` deprecated).
 
@@ -172,16 +174,20 @@ Stara `role` je jen mirror pro zpetnou kompatibilitu
   `POST /api/expeditions/:id/ucastnici`,
   `DELETE /api/expeditions/:id/ucastnici/:ucastnikId`.
   Klient: `useAuth.mu­zeSpravovatVypravy` (stejny predikat).
-- **Kody + clenove (jen ADMIN):** `POST /api/admin/codes`
-  (vc. bootstrap bez session), `GET /api/users`, `PATCH /api/users/:id`,
-  `GET /api/clenove`, `PATCH /api/clenove/:id` = `vyzadujAdmina`
-  (`is_admin = TRUE`). `PATCH /api/users/:id` bere parcialni trio
-  (`clenstvi?/funkce?/isAdmin?/skola?/trida?`) NEBO samotne stare `{ role }`
+- **Kody (jen ADMIN):** `POST /api/admin/codes`
+  = `vyzadujAdmina` (`is_admin = TRUE`). Bez admina v DB kod nevznikne; prvniho superadmina zalozi `npm run seed:superadmin`.
+  `GET /api/clenove` = `vyzadujAdmina`, `GET /api/users` = prihlaseny.
+  Upravy profilu a udeleni admina jsou jen hlavni admin:
+  `PATCH /api/users/:id`, `PATCH /api/clenove/:id` a `DELETE /api/users/:id`
+  = `vyzadujSuperadmina`. `PATCH /api/users/:id` bere parcialni trio
+  (`clenstvi?/funkce?/isAdmin?/isSuperadmin?/skola?/trida?`) NEBO samotne stare `{ role }`
   (pres `mapujRoliNaProfil`); oboji najednou -> 422.
-- **Fotky (jen ADMIN, zamerne mimo dual-guard):**
-  `POST /api/expeditions/:id/fotky` a
-  `DELETE /api/expeditions/:id/fotky/:fotkaId` = `vyzadujAdmina`.
-  `GET /api/expeditions/:id/fotky` = verejne (jen proběhlá logika v route).
+  `isSuperadmin: true` zaroven nastavi `isAdmin`.
+- **Fotky (mimo dual-guard):**
+  `GET /api/expeditions/:id/fotky` a `POST /api/expeditions/:id/fotky`
+  = `vyzadujPrihlaseni` (nahrat lze jen k probehle vyprave).
+  `DELETE /api/expeditions/:id/fotky/:fotkaId` a
+  `POST /api/expeditions/:id/fotky/:fotkaId/nahled` = `vyzadujAdmina`.
 - **Verejne / USER:** `GET /api/expeditions`, `GET /api/expeditions/:id`,
   ucast (`GET /:id/ucastnici`, `POST /:id/prihlasit`, `DELETE /:id/odhlasit`)
   = PUBLIC / prihlaseny USER (beze zmen).
@@ -209,8 +215,9 @@ Stara `role` je jen mirror pro zpetnou kompatibilitu
 ### 7. Rozhodnuti vlny (zaznam)
 
 1. **vedeni/rada = prava aktivniho.** `smiNaVypravy` cte jen `clenstvi`;
-   funkce prava nerozsiruje (ani `vedeni`). Dual-guard na 6 expedition routach,
-   fotky zustavaji jen ADMIN.
+   funkce prava nerozsiruje (ani `vedeni`). Dual-guard na 6 expedition routach.
+   Puvodne byly fotky jen ADMIN, nahravani je dnes pro kazdeho prihlaseneho
+   (viz bod 5 vyse).
 2. **Tridy globalne.** Zadny ciselnik s vazbou skola->trida; obe datalistu
    jsou globalni distinct (viz meta endpoint vyse).
 3. **Backfill pravidla (migrace `0005_3d_role_skola_trida.sql`, APLIKOVANA):**

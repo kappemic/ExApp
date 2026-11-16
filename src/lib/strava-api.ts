@@ -2,9 +2,8 @@
  * Tenká vrstva pro Strava propojení (Fáze 4, Krok 1).
  *
  * Kontrakt (`src/shared/api-types.ts` §15):
- * - `GET {VITE_API_BASE_URL}/api/strava/auth-url` (PUBLIC) → `{ url }`
- *   na Strava authorize; lokální fallback staví stejnou URL z veřejného
- *   `VITE_STRAVA_CLIENT_ID` (prohlížeč → Strava → serverový callback).
+ * - `GET {VITE_API_BASE_URL}/api/strava/auth-url` (USER, credentials) → `{ url }`
+ *   na Strava authorize. `state` a httpOnly cookie vydá server.
  * - `DELETE {VITE_API_BASE_URL}/api/strava/odpojit` (USER, credentials)
  *   → `{ ok: true }` (idempotentní).
  * - Stav propojení čte `GET /api/me` (`ApiUser.stravaId`) — žádný nový
@@ -13,6 +12,8 @@
  * serveru sem nikdy nepatří — výměna code→tokens běží jen na serveru.
  */
 
+import { apiBaseUrl } from "./api-base";
+import { OBECNA_CHYBA, ctiJsonTelo, jeRecord } from "./api-odpoved";
 import {
   ME_PATH,
   STRAVA_CALLBACK_DUVOD_ZPRAVY,
@@ -81,6 +82,7 @@ export function druhStravaChyby(kod?: ApiErrorCode): StravaChybaDruh {
     case "KAPACITA_PLNA":
     case "VYPRAVA_UZAVRENA":
     case "EMAIL_OBSAZEN":
+    case "PISEN_UZ_JE":
       return "konflikt";
     default:
       return "obecna";
@@ -122,21 +124,22 @@ export type { StravaStavResponse };
  * Nese `stravaId` (atlet), `scope` a `expirace` (ISO) — nikdy tokeny.
  * Backend mimo / bez session → `{ ok: false }` (tab ukáže chybu).
  */
-export async function nactiStravaStavRozsireny(): Promise<
-  StravaVysledek<StravaStavResponse>
-> {
+export async function nactiStravaStavRozsireny(moznosti?: {
+  obnovit?: boolean;
+}): Promise<StravaVysledek<StravaStavResponse>> {
   const zaklad = apiBaseUrl();
   if (zaklad.length === 0) return { ok: false, chyba: OBECNA_CHYBA };
+  const obnovit = moznosti?.obnovit === true ? "?obnovit=1" : "";
   let odpoved: Response;
   try {
-    odpoved = await fetch(`${zaklad}/api/strava/stav`, {
+    odpoved = await fetch(`${zaklad}/api/strava/stav${obnovit}`, {
       headers: { Accept: "application/json" },
       credentials: "include",
     });
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };
@@ -147,34 +150,11 @@ export async function nactiStravaStavRozsireny(): Promise<
   return { ok: true, data: telo };
 }
 
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-const STRAVA_AUTHORIZE_ZAKLAD = "https://www.strava.com/oauth/authorize";
-const STRAVA_SCOPE = "read,activity:read";
-
-function jeRecord(hodnota: unknown): hodnota is Record<string, unknown> {
-  return typeof hodnota === "object" && hodnota !== null && !Array.isArray(hodnota);
-}
-
-/** Základ BFF (`VITE_API_BASE_URL`), bez koncového lomítka. "" = není. */
-export function apiBaseUrl(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
 /** Veřejné Strava CLIENT_ID pro OAuth redirect (není tajné). "" = není. */
 export function verejneStravaClientId(): string {
   const raw: unknown = import.meta.env.VITE_STRAVA_CLIENT_ID;
   if (typeof raw !== "string") return "";
   return raw.trim();
-}
-
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
 }
 
 function jeUrlOdpoved(hodnota: unknown): hodnota is { url: string } {
@@ -197,26 +177,6 @@ export function jeRealneStravaClientId(hodnota: string): boolean {
 }
 
 /**
- * Lokální authorize URL bez volání backendu (redirect_uri míří na
- * serverový callback `{apiBase}/api/strava/callback`). Null = chybí
- * reálné číselné CLIENT_ID nebo apiBase (mock URL se nikdy nestaví).
- */
-export function sestavLokalniStravaUrl(state = ""): string | null {
-  const clientId = verejneStravaClientId();
-  const zaklad = apiBaseUrl();
-  if (!jeRealneStravaClientId(clientId) || zaklad.length === 0) return null;
-  const params = new URLSearchParams();
-  params.set("client_id", clientId);
-  params.set("response_type", "code");
-  params.set("redirect_uri", `${zaklad}/api/strava/callback`);
-  params.set("approval_prompt", "force");
-  params.set("scope", STRAVA_SCOPE);
-  const cistyState = state.trim();
-  if (cistyState.length > 0) params.set("state", cistyState.slice(0, 256));
-  return `${STRAVA_AUTHORIZE_ZAKLAD}?${params.toString()}`;
-}
-
-/**
  * Podrobný výsledek authorize URL (Krok 7b).
  * `nenastavena=true` = backend vrátil 503 STRAVA_NENI_NASTAVENA, nebo
  * lokální CLIENT_ID není reálné číselné — UI místo redirectu ukáže
@@ -228,29 +188,28 @@ export type StravaAuthUrlVysledek =
 
 /**
  * Authorize URL pro tlačítko Připojit: nejdřív backend
- * (`GET /api/strava/auth-url`, PUBLIC), při selhání lokální fallback
- * (jen s reálným číselným CLIENT_ID — mock URL se nikdy nevrací).
+ * (`GET /api/strava/auth-url`, session cookie). The server issues `state`
+ * and the matching httpOnly cookie — a client-built authorize URL is not used.
  * Rozpozná 503 STRAVA_NENI_NASTAVENA a nese `nenastavena` pro UI.
  */
 export async function getStravaAuthUrlPodrobne(
   state = "",
 ): Promise<StravaAuthUrlVysledek> {
+  // The server binds state to the session. A caller-supplied value is ignored.
+  void state;
   const zaklad = apiBaseUrl();
   if (zaklad.length > 0) {
     try {
-      const params = new URLSearchParams();
-      if (state.trim().length > 0) params.set("state", state.trim().slice(0, 256));
-      const qs = params.toString();
-      const url =
-        qs.length > 0
-          ? `${zaklad}/api/strava/auth-url?${qs}`
-          : `${zaklad}/api/strava/auth-url`;
-      const odpoved = await fetch(url, { headers: { Accept: "application/json" } });
+      const url = `${zaklad}/api/strava/auth-url`;
+      const odpoved = await fetch(url, {
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
       if (odpoved.ok) {
-        const telo = await ctiTelo(odpoved);
+        const telo = await ctiJsonTelo(odpoved);
         if (jeUrlOdpoved(telo)) return { ok: true, url: telo.url };
       } else {
-        const telo = await ctiTelo(odpoved);
+        const telo = await ctiJsonTelo(odpoved);
         if (
           odpoved.status === 503 &&
           jeApiChyba(telo) &&
@@ -273,12 +232,9 @@ export async function getStravaAuthUrlPodrobne(
         }
       }
     } catch {
-      // Fallback níže — backend mimo.
+      // The OAuth cookie is only set by the server, so there is no local URL.
     }
   }
-  const lokalni = sestavLokalniStravaUrl(state);
-  if (lokalni !== null) return { ok: true, url: lokalni };
-  // Fallback taky nejde sestavit — rozliš příčinu pro návod v UI.
   const verejneId = verejneStravaClientId();
   if (!jeRealneStravaClientId(verejneId)) {
     return { ok: false, nenastavena: true, zprava: STRAVA_NENI_NASTAVENA_ZPRAVA };
@@ -341,7 +297,7 @@ export async function nactiStravaStav(): Promise<
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };
@@ -372,7 +328,7 @@ export async function odpojStravu(): Promise<StravaVysledek<{ ok: true }>> {
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };
@@ -402,7 +358,7 @@ export async function nactiNeparovaneAktivity(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };
@@ -440,7 +396,7 @@ export async function sparujAktivitu(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };
@@ -474,7 +430,7 @@ export async function odpojAktivitu(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return { ok: false, chyba: telo.error.message, kod: telo.error.code };

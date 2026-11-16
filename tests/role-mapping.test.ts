@@ -12,6 +12,7 @@ import {
   jeAdmin,
   mapujRoliNaProfil,
   smiNaVypravy,
+  vidiTelefonyClenu,
 } from "../src/config/roles";
 import type {
   ClenskyProfil,
@@ -239,6 +240,23 @@ describe("smiNaVypravy — jen aktivni_clen", () => {
 
   it("admin bez aktivni_clen NESMÍ (isAdmin se nečte)", () => {
     expect(smiNaVypravy(profil3D("clen", null, true))).toBe(false);
+  });
+});
+
+describe("vidiTelefonyClenu — běžný člen telefon nevidí", () => {
+  it("aktivní člen, rada a vedení vidí", () => {
+    expect(vidiTelefonyClenu(profil3D("aktivni_clen", null, false))).toBe(true);
+    expect(vidiTelefonyClenu(profil3D("aktivni_clen", "rada", false))).toBe(true);
+    expect(vidiTelefonyClenu(profil3D("aktivni_clen", "vedeni", false))).toBe(true);
+  });
+
+  it("admin a superadmin vidí i bez aktivního členství", () => {
+    expect(vidiTelefonyClenu(profil3D("clen", null, true))).toBe(true);
+    expect(vidiTelefonyClenu({ ...profil3D("clen", null, false), isSuperadmin: true })).toBe(true);
+  });
+
+  it("běžný člen nevidí", () => {
+    expect(vidiTelefonyClenu(profil3D("clen", null, false))).toBe(false);
   });
 });
 

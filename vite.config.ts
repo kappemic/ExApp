@@ -11,15 +11,17 @@ export default defineConfig({
       // PWA minimum: registrace SW, bez plné offline cache.
       // Manifest se servíruje staticky z public/manifest.webmanifest.
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "manifest.webmanifest", "icons/*.svg"],
+      includeAssets: ["favicon.png", "logo-klubu.png", "manifest.webmanifest", "icons/*.png"],
       manifest: false,
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2,webmanifest}"],
         cleanupOutdatedCaches: true,
         // SPA fallback: navigace (/, /vypravy, ...) servíruj index.html.
         // index.html MUSÍ být v precache, jinak workbox padá na
         // "Resource was not cached" / "Content unavailable".
         navigateFallback: "index.html",
+        navigateFallbackDenylist: [/^\/api\//],
+        importScripts: ["/push-sw.js"],
       },
       devOptions: { enabled: false },
     }),

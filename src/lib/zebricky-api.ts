@@ -1,9 +1,11 @@
+import { apiBase } from "./api-base";
+import { ctiJsonTelo } from "./api-odpoved";
 /**
- * Tenká read vrstva pro veřejný žebříček (Fáze 4, Krok 5).
+ * Tenká read vrstva pro žebříček přihlášených (Fáze 4, Krok 5).
  *
  * Kontrakt (`src/shared/api-types.ts` §15c + `ZEBRICKY_PATH`):
  * - `getZebricek(obdobi?)` — `GET {VITE_API_BASE_URL}/api/zebricky?obdobi=…`
- *   (PUBLIC, bez credentials); řazení účast DESC > km DESC + tie-break
+ *   (USER, `credentials: "include"`); řazení účast DESC > km DESC + tie-break
  *   jmeno řeší server v SQL (`LIMIT 50`, bez PII kromě `jmeno`).
  * - Při jakémkoliv selhání (bez base, offline, nevalidní tvar)
  *   vrací fallback prázdný žebříček + `[]` (stejný vzor jako
@@ -14,8 +16,11 @@
 
 import {
   jeZebrickyOdpoved,
+  jeZebrickyTrasyOdpoved,
+  ZEBRICKY_TRASY_PATH,
   zebrickyListUrl,
   type ZebrickyResponse,
+  type ZebrickyTrasyResponse,
 } from "../shared/api-types";
 
 export type { ZebrickyResponse };
@@ -28,19 +33,7 @@ export interface ZebrickyResult {
   errorCode?: ZebrickyErrorCode;
 }
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
 
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
 
 /** Prázdný žebříček pro fallback (nikdy nevyhazuje). */
 export function prazdnyZebricek(obdobi: string): ZebrickyResponse {
@@ -48,7 +41,7 @@ export function prazdnyZebricek(obdobi: string): ZebrickyResponse {
 }
 
 /**
- * Veřejný žebříček. Nikdy nevyhazuje — při selhání BFF
+ * Žebříček přihlášeného. Nikdy nevyhazuje — při selhání BFF
  * vrací prázdný žebříček (stránka ukazuje prázdný stav).
  */
 export async function getZebricek(
@@ -62,6 +55,7 @@ export async function getZebricek(
   let odpoved: Response;
   try {
     odpoved = await fetch(cesta, {
+      credentials: "include",
       headers: { Accept: "application/json" },
     });
   } catch {
@@ -78,10 +72,60 @@ export async function getZebricek(
       errorCode: "BACKEND_CHYBA",
     };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!jeZebrickyOdpoved(telo)) {
     return {
       data: prazdnyZebricek(obdobi),
+      source: "fallback",
+      errorCode: "BACKEND_CHYBA",
+    };
+  }
+  return { data: telo, source: "db" };
+}
+
+export interface ZebrickyTrasyResult {
+  data: ZebrickyTrasyResponse;
+  source: "db" | "fallback";
+  errorCode?: ZebrickyErrorCode;
+}
+
+function prazdneTrasy(obdobi: string): ZebrickyTrasyResponse {
+  return { obdobi, trasy: [] };
+}
+
+/** Uskutečněné výpravy klubu (ne jen docházka přihlášeného). */
+export async function getTrasyZebricku(
+  obdobi: string = "celkem",
+): Promise<ZebrickyTrasyResult> {
+  const zaklad = apiBase();
+  if (zaklad.length === 0) {
+    return { data: prazdneTrasy(obdobi), source: "fallback" };
+  }
+  const param = new URLSearchParams({ obdobi });
+  let odpoved: Response;
+  try {
+    odpoved = await fetch(`${zaklad}${ZEBRICKY_TRASY_PATH}?${param.toString()}`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    return {
+      data: prazdneTrasy(obdobi),
+      source: "fallback",
+      errorCode: "BACKEND_NEDOSTUPNY",
+    };
+  }
+  if (!odpoved.ok) {
+    return {
+      data: prazdneTrasy(obdobi),
+      source: "fallback",
+      errorCode: "BACKEND_CHYBA",
+    };
+  }
+  const telo = await ctiJsonTelo(odpoved);
+  if (!jeZebrickyTrasyOdpoved(telo)) {
+    return {
+      data: prazdneTrasy(obdobi),
       source: "fallback",
       errorCode: "BACKEND_CHYBA",
     };

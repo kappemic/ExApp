@@ -30,7 +30,7 @@ export default function NahledHistorieStranky({
   onDalsi: () => void;
 }): JSX.Element {
   const tlacitko =
-    "nahled-press nahled-invert inline-flex min-h-[44px] items-center gap-2 rounded-none border border-[hsl(var(--foreground))] bg-transparent px-4 font-condensed text-sm disabled:opacity-40";
+    "nahled-press nahled-invert inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-lg border border-pole bg-papir text-inkoust disabled:opacity-40";
   return (
     <nav
       aria-label="Stránkování historie"
@@ -41,9 +41,10 @@ export default function NahledHistorieStranky({
         className={tlacitko}
         disabled={stranka <= 1}
         onClick={onPredchozi}
+        aria-label="Novější"
+        title="Novější"
       >
         <Sipka smer="vlevo" />
-        Novější
       </button>
       <p className="min-h-[44px] px-1 py-2 text-sm tabular-nums">
         Stránka {stranka} z {stranek}
@@ -53,8 +54,9 @@ export default function NahledHistorieStranky({
         className={tlacitko}
         disabled={stranka >= stranek}
         onClick={onDalsi}
+        aria-label="Starší"
+        title="Starší"
       >
-        Starší
         <Sipka smer="vpravo" />
       </button>
     </nav>

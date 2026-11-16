@@ -3,8 +3,9 @@
  * Extra albums read and write `alba` / `alba_fotky`.
  * Migration 0013 is not applied from here.
  */
+import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type {
   AlbaListResponse,
   AlbumFotkyResponse,
@@ -21,9 +22,8 @@ import {
   albumKos,
   jeVypravaSViditelnymAlbem,
   rozhodniSmazaniAlba,
-  sestavSeznamAlb,
+  sestavSeznamAlbZeShrnuti,
   validujNazevAlba,
-  type AlbumFotkaZdroj,
 } from "./alba";
 import {
   ctiVolitelnehoUzivatele,
@@ -33,7 +33,8 @@ import {
 } from "./auth";
 import { posliChybu } from "./chyby";
 import { lzeDoplnitArchiv } from "./vyprava-termin";
-import { getDb } from "./db";
+import { getDb, type Db } from "./db";
+import { chceNahled, maBezpecneRozmery, OBRAZEK_PRILIS_VELKY, rozmeryUlozenychBajtu } from "./obrazek-nahled";
 import { jeAlbumKos } from "../../src/shared/fotky-kos";
 import {
   fotkaVlastniApi,
@@ -53,15 +54,19 @@ import {
   klicAlbaFotky,
   klicFotky,
   klicZVerejneUrl,
-  nactiObjektR2,
+  posliObrazekZKlice,
+  pripravObrazekKUlozeni,
   rozpoznajObrazek,
   rozdelMultipartSoubory,
-  smazObjektR2,
-  ulozFotkuDoR2,
+  smazObrazekR2,
+  smazObrazekR2Tise,
+  ulozPripravenyObrazek,
   type ChybaSouboru,
   type ChybaSouboruAlba,
   type R2Nastaveni,
 } from "./r2-fotky";
+import { prostredi } from "./prostredi";
+
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -86,7 +91,7 @@ const FOTKA_V_KOSI_NENALEZENA = "Fotka v koši není.";
 /** Retention purge must not break album or trash listing. */
 async function purgeKosBestEffort(db: ReturnType<typeof getDb>): Promise<void> {
   try {
-    await purgeExpiredTrashPhotos(db, ctiR2Nastaveni(process.env));
+    await purgeExpiredTrashPhotos(db, ctiR2Nastaveni(prostredi()));
   } catch {
     // R2 or DB errors during lazy purge should not block reads.
   }
@@ -136,40 +141,80 @@ function ctiSuroveTelo(req: Request, maxBajtu: number): Promise<Buffer> {
   });
 }
 
-function jeVnejsiHttps(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.username.length === 0 && parsed.password.length === 0;
-  } catch {
-    return false;
+function pocetZBunky(hodnota: unknown): number {
+  if (typeof hodnota === "number" && Number.isFinite(hodnota)) return hodnota;
+  if (typeof hodnota === "bigint") return Number(hodnota);
+  if (typeof hodnota === "string") {
+    const cislo = Number(hodnota);
+    if (Number.isFinite(cislo)) return cislo;
   }
+  return 0;
 }
 
-function zdrojVypravy(radek: {
-  id: string;
-  expeditionId: string;
-  jeNahled: boolean;
-  createdAt: Date;
-}): AlbumFotkaZdroj {
-  return {
-    id: radek.id,
-    parentId: radek.expeditionId,
-    jeNahled: radek.jeNahled,
-    createdAt: radek.createdAt,
-  };
+function datumZBunky(hodnota: unknown): Date | null {
+  if (hodnota instanceof Date && !Number.isNaN(hodnota.getTime())) return hodnota;
+  if (typeof hodnota === "string") {
+    const datum = new Date(hodnota);
+    if (!Number.isNaN(datum.getTime())) return datum;
+  }
+  return null;
 }
 
-function zdrojVlastni(radek: {
-  id: string;
-  albumId: string;
-  jeNahled: boolean;
-  createdAt: Date;
-}): AlbumFotkaZdroj {
+/** Counts and cover ids. Cover matches `sestavMapuNahledu`: flagged, else oldest, else smaller id. */
+async function nactiShrnutiFotek(
+  db: Db,
+  tabulka: "photos" | "alba_fotky",
+): Promise<{ pocty: Map<string, number>; nahledy: Map<string, string> }> {
+  const parent = tabulka === "photos" ? "expedition_id" : "album_id";
+  const poctyVysledek = await db.execute(sql`
+    SELECT ${sql.raw(parent)} AS parent_id, count(*)::int AS pocet
+    FROM ${sql.raw(tabulka)}
+    WHERE smazano_at IS NULL
+    GROUP BY ${sql.raw(parent)}
+  `);
+  const nahledyVysledek = await db.execute(sql`
+    SELECT DISTINCT ON (${sql.raw(parent)})
+      ${sql.raw(parent)} AS parent_id,
+      id::text AS id
+    FROM ${sql.raw(tabulka)}
+    WHERE smazano_at IS NULL
+    ORDER BY ${sql.raw(parent)}, je_nahled DESC, created_at ASC, id ASC
+  `);
+  const pocty = new Map<string, number>();
+  for (const surovy of poctyVysledek.rows) {
+    const bunka = surovy as { parent_id?: unknown; pocet?: unknown };
+    if (typeof bunka.parent_id !== "string") continue;
+    pocty.set(bunka.parent_id, pocetZBunky(bunka.pocet));
+  }
+  const nahledy = new Map<string, string>();
+  for (const surovy of nahledyVysledek.rows) {
+    const bunka = surovy as { parent_id?: unknown; id?: unknown };
+    if (typeof bunka.parent_id !== "string" || typeof bunka.id !== "string") continue;
+    nahledy.set(bunka.parent_id, bunka.id);
+  }
+  return { pocty, nahledy };
+}
+
+async function nactiHlavuKose(
+  db: Db,
+  tabulka: "photos" | "alba_fotky",
+): Promise<{ pocet: number; id: string | null; smazanoAt: Date | null }> {
+  const zdroj = tabulka === "photos" ? photos : albaFotky;
+  const pocetRadku = await db
+    .select({ hodnota: count() })
+    .from(zdroj)
+    .where(isNotNull(zdroj.smazanoAt));
+  const hlava = await db
+    .select({ id: zdroj.id, smazanoAt: zdroj.smazanoAt })
+    .from(zdroj)
+    .where(isNotNull(zdroj.smazanoAt))
+    .orderBy(desc(zdroj.smazanoAt))
+    .limit(1);
+  const radek = hlava[0];
   return {
-    id: radek.id,
-    parentId: radek.albumId,
-    jeNahled: radek.jeNahled,
-    createdAt: radek.createdAt,
+    pocet: pocetZBunky(pocetRadku[0]?.hodnota),
+    id: radek === undefined ? null : radek.id,
+    smazanoAt: radek === undefined ? null : datumZBunky(radek.smazanoAt),
   };
 }
 
@@ -179,17 +224,15 @@ type CilNahrani =
 
 async function uklidR2(nastaveni: R2Nastaveni, klice: readonly string[]): Promise<void> {
   for (const klic of klice) {
-    try {
-      await smazObjektR2(nastaveni, klic);
-    } catch {
-      // A leftover object is preferable to hiding the original failure.
-    }
+    await smazObrazekR2Tise(nastaveni, klic);
   }
 }
 
 export function registrujAlba(app: Express): void {
   app.get("/api/alba", (req: Request, res: Response) => {
     void (async (): Promise<void> => {
+      await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
       try {
         const db = getDb();
         const session = await ctiVolitelnehoUzivatele(req);
@@ -205,62 +248,39 @@ export function registrujAlba(app: Express): void {
         const vlastni = await db
           .select({ id: alba.id, nazev: alba.nazev, createdAt: alba.createdAt })
           .from(alba);
-        const fotkyVyprav = await db
-          .select({
-            id: photos.id,
-            expeditionId: photos.expeditionId,
-            jeNahled: photos.jeNahled,
-            createdAt: photos.createdAt,
-          })
-          .from(photos)
-          .where(isNull(photos.smazanoAt));
-        const fotkyVlastnich = await db
-          .select({
-            id: albaFotky.id,
-            albumId: albaFotky.albumId,
-            jeNahled: albaFotky.jeNahled,
-            createdAt: albaFotky.createdAt,
-          })
-          .from(albaFotky)
-          .where(isNull(albaFotky.smazanoAt));
-        let seznam = sestavSeznamAlb(
+        const [vypravyShrnuti, vlastniShrnuti] = await Promise.all([
+          nactiShrnutiFotek(db, "photos"),
+          nactiShrnutiFotek(db, "alba_fotky"),
+        ]);
+        let seznam = sestavSeznamAlbZeShrnuti(
           vypravy,
           vlastni,
-          fotkyVyprav.map(zdrojVypravy),
-          fotkyVlastnich.map(zdrojVlastni),
+          vypravyShrnuti.pocty,
+          vypravyShrnuti.nahledy,
+          vlastniShrnuti.pocty,
+          vlastniShrnuti.nahledy,
         );
         if (session?.isAdmin === true) {
           await purgeKosBestEffort(db);
-          const vKosiVypravy = await db
-            .select({
-              id: photos.id,
-              createdAt: photos.createdAt,
-              smazanoAt: photos.smazanoAt,
-            })
-            .from(photos)
-            .where(isNotNull(photos.smazanoAt))
-            .orderBy(desc(photos.smazanoAt));
-          const vKosiVlastni = await db
-            .select({
-              id: albaFotky.id,
-              createdAt: albaFotky.createdAt,
-              smazanoAt: albaFotky.smazanoAt,
-            })
-            .from(albaFotky)
-            .where(isNotNull(albaFotky.smazanoAt))
-            .orderBy(desc(albaFotky.smazanoAt));
-          const vseVKosi = [...vKosiVypravy, ...vKosiVlastni].sort((a, b) => {
-            const casA = a.smazanoAt?.getTime() ?? 0;
-            const casB = b.smazanoAt?.getTime() ?? 0;
-            return casB - casA;
-          });
-          seznam = [...seznam, albumKos(vseVKosi.length, vseVKosi[0]?.id ?? null)];
+          const [kosVyprav, kosVlastni] = await Promise.all([
+            nactiHlavuKose(db, "photos"),
+            nactiHlavuKose(db, "alba_fotky"),
+          ]);
+          const nahledKos =
+            kosVlastni.smazanoAt !== null &&
+            (kosVyprav.smazanoAt === null ||
+              kosVlastni.smazanoAt.getTime() > kosVyprav.smazanoAt.getTime())
+              ? kosVlastni.id
+              : kosVyprav.id;
+          seznam = [...seznam, albumKos(kosVyprav.pocet + kosVlastni.pocet, nahledKos)];
         }
         const telo: AlbaListResponse = { alba: seznam };
         res.json(telo);
       } catch {
         vnitrniChyba(res);
       }
+      })();
+      });
     })();
   });
 
@@ -297,11 +317,11 @@ export function registrujAlba(app: Express): void {
             .select({ url: albaFotky.url })
             .from(albaFotky)
             .where(eq(albaFotky.albumId, id));
-          const nastaveniR2 = ctiR2Nastaveni(process.env);
+          const nastaveniR2 = ctiR2Nastaveni(prostredi());
           if (nastaveniR2 !== null) {
             for (const fotka of fotky) {
               const klic = klicZVerejneUrl(fotka.url, nastaveniR2.publicBaseUrl);
-              if (klic !== null) await smazObjektR2(nastaveniR2, klic);
+              if (klic !== null) await smazObrazekR2(nastaveniR2, klic);
             }
           }
           const smazane = await db.delete(alba).where(eq(alba.id, id)).returning({ id: alba.id });
@@ -398,7 +418,7 @@ export function registrujAlba(app: Express): void {
             posliChybu(res, "NENALEZENO", FOTKA_V_KOSI_NENALEZENA);
             return;
           }
-          const nastaveniR2 = ctiR2Nastaveni(process.env);
+          const nastaveniR2 = ctiR2Nastaveni(prostredi());
           const uspech = await trvaleSmazFotku(db, nalezena, nastaveniR2);
           if (!uspech) {
             posliChybu(res, "NENALEZENO", FOTKA_V_KOSI_NENALEZENA);
@@ -458,6 +478,8 @@ export function registrujAlba(app: Express): void {
 
   app.get("/api/alba/:id/fotky/:fotkaId/soubor", (req: Request, res: Response) => {
     void (async (): Promise<void> => {
+      await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
       const id = ctiParam(req, "id");
       const fotkaId = ctiParam(req, "fotkaId");
       if (!jeUuid(id) || !jeUuid(fotkaId)) {
@@ -469,39 +491,33 @@ export function registrujAlba(app: Express): void {
         const nalezene = await db
           .select({ url: albaFotky.url })
           .from(albaFotky)
-          .where(and(eq(albaFotky.id, fotkaId), eq(albaFotky.albumId, id)))
+          .where(and(eq(albaFotky.id, fotkaId), eq(albaFotky.albumId, id), isNull(albaFotky.smazanoAt)))
           .limit(1);
         const radek = nalezene[0];
         if (radek === undefined) {
           posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
           return;
         }
-        const nastaveniR2 = ctiR2Nastaveni(process.env);
+        const nastaveniR2 = ctiR2Nastaveni(prostredi());
         const klic =
           nastaveniR2 === null ? null : klicZVerejneUrl(radek.url, nastaveniR2.publicBaseUrl);
         if (klic === null || nastaveniR2 === null) {
-          if (jeVnejsiHttps(radek.url)) {
-            res.redirect(302, radek.url);
-            return;
-          }
           posliChybu(res, "NENALEZENO", "Fotka nenalezena.");
           return;
         }
-        const objekt = await nactiObjektR2(nastaveniR2, klic);
-        res.status(200);
-        res.setHeader("Content-Type", objekt.contentType);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.setHeader("Content-Length", objekt.bajty.length);
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.end(objekt.bajty);
+        await posliObrazekZKlice(res, nastaveniR2, klic, chceNahled(req));
       } catch {
         vnitrniChyba(res);
       }
+      })();
+      });
     })();
   });
 
   app.get("/api/alba/:id/fotky", (req: Request, res: Response) => {
     void (async (): Promise<void> => {
+      await vyzadujPrihlaseni(req, res, () => {
+      void (async (): Promise<void> => {
       const id = ctiParam(req, "id");
       if (id.length === 0) {
         posliChybu(res, "NENALEZENO", "Album nenalezeno.");
@@ -577,6 +593,8 @@ export function registrujAlba(app: Express): void {
       } catch {
         vnitrniChyba(res);
       }
+      })();
+      });
     })();
   });
 
@@ -633,7 +651,7 @@ export function registrujAlba(app: Express): void {
           posliChybuSouboru(res, "chybi");
           return;
         }
-        const nastaveniR2 = ctiR2Nastaveni(process.env);
+        const nastaveniR2 = ctiR2Nastaveni(prostredi());
         if (nastaveniR2 === null) {
           posliChybu(res, "FOTKY_NEJSOU_NASTAVENE", FOTKY_NEJSOU_NASTAVENE_ZPRAVA);
           return;
@@ -651,34 +669,79 @@ export function registrujAlba(app: Express): void {
           posliChybuSouboru(res, rozdelene.duvod);
           return;
         }
-        const plan: { klic: string; bajty: Buffer; contentType: string; popis: string }[] = [];
+        const plan: {
+          idSouboru: string;
+          pripona: "jpg" | "png" | "webp";
+          bajty: Buffer;
+          contentType: string;
+          popis: string;
+        }[] = [];
         for (const fotka of rozdelene.fotky) {
           const pripona = rozpoznajObrazek(fotka.bajty);
           if (pripona === null) {
             posliChybuSouboru(res, "format");
             return;
           }
+          if (!(await maBezpecneRozmery(fotka.bajty))) {
+            posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", {
+              soubor: [OBRAZEK_PRILIS_VELKY],
+            });
+            return;
+          }
+          const idSouboru = randomUUID();
           const klic =
-            cil.druh === "vyprava" ? klicFotky(id, pripona) : klicAlbaFotky(id, pripona);
+            cil.druh === "vyprava"
+              ? klicFotky(id, pripona, idSouboru)
+              : klicAlbaFotky(id, pripona, idSouboru);
           if (klic === null) {
             posliChybu(res, "NENALEZENO", cil.druh === "vyprava" ? "Výprava nenalezena." : "Album nenalezeno.");
             return;
           }
           plan.push({
-            klic,
+            idSouboru,
+            pripona,
             bajty: fotka.bajty,
             contentType: contentTypeProPriponu(pripona),
             popis: fotka.popis,
           });
         }
-        const nahrane: { klic: string; url: string; popis: string }[] = [];
+        const nahrane: {
+          klic: string;
+          url: string;
+          popis: string;
+          sirka: number | null;
+          vyska: number | null;
+        }[] = [];
         try {
           for (const polozka of plan) {
-            const url = await ulozFotkuDoR2(nastaveniR2, polozka.klic, polozka.bajty, polozka.contentType);
-            nahrane.push({ klic: polozka.klic, url, popis: polozka.popis });
+            const pripraveno = await pripravObrazekKUlozeni(
+              polozka.bajty,
+              polozka.contentType,
+              polozka.pripona,
+              "plna",
+              (ext) => {
+                if (ext !== "jpg" && ext !== "png" && ext !== "webp") return null;
+                return cil.druh === "vyprava"
+                  ? klicFotky(id, ext, polozka.idSouboru)
+                  : klicAlbaFotky(id, ext, polozka.idSouboru);
+              },
+            );
+            if (pripraveno === null) throw new Error("klic");
+            const rozmery = await rozmeryUlozenychBajtu(pripraveno.bajty);
+            const url = await ulozPripravenyObrazek(nastaveniR2, pripraveno);
+            nahrane.push({
+              klic: pripraveno.klic,
+              url,
+              popis: polozka.popis,
+              sirka: rozmery?.sirka ?? null,
+              vyska: rozmery?.vyska ?? null,
+            });
           }
         } catch {
-          await uklidR2(nastaveniR2, plan.map((polozka) => polozka.klic));
+          await uklidR2(
+            nastaveniR2,
+            nahrane.map((polozka) => polozka.klic),
+          );
           vnitrniChyba(res);
           return;
         }
@@ -714,6 +777,8 @@ export function registrujAlba(app: Express): void {
                   url: polozka.url,
                   popis: polozka.popis,
                   uploadedBy: userId,
+                  sirka: polozka.sirka,
+                  vyska: polozka.vyska,
                 })),
               )
               .returning();
@@ -734,6 +799,8 @@ export function registrujAlba(app: Express): void {
                 albumId: id,
                 url: polozka.url,
                 uploadedBy: userId,
+                sirka: polozka.sirka,
+                vyska: polozka.vyska,
               })),
             )
             .returning();

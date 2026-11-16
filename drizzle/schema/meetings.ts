@@ -20,6 +20,8 @@ export const meetings = pgTable("meetings", {
   nazev: text("nazev").notNull(),
   /** První / jednorázový výskyt (YYYY-MM-DD). */
   datum: date("datum").notNull(),
+  /** Clock time HH:MM. Null keeps the meeting in Brzy for the whole day. */
+  cas: text("cas"),
   /** Třída / místnost (PRD 2.4). NULL = venku / neurčeno. */
   mistnost: text("mistnost"),
   popis: text("popis").notNull().default(""),

@@ -1,3 +1,5 @@
+import { apiBase } from "./api-base";
+import { OBECNA_CHYBA, chybaZApiTela, ctiJsonTelo, jeRecord } from "./api-odpoved";
 /**
  * Tenká read + write vrstva pro schůzky (Fáze 3).
  *
@@ -29,7 +31,7 @@ import {
 
 /** Chyby polí formuláře schůzky (podmnožina ChybyExpedice). */
 export type ChybySchuzky = Partial<
-  Record<"nazev" | "datum" | "mistnost" | "popis" | "opakovani", string>
+  Record<"nazev" | "datum" | "cas" | "mistnost" | "popis" | "opakovani", string>
 >;
 
 export type SchuzkyErrorCode = "BACKEND_NEDOSTUPNY" | "BACKEND_CHYBA";
@@ -44,19 +46,10 @@ export type SchuzkaVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string; kod?: ApiErrorCode; chybyPoli?: ChybySchuzky };
 
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
 const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
 const PLATNA_OPAKOVANI: readonly string[] = ["jednorazova", "tydenni"];
 
-function jeRecord(hodnota: unknown): hodnota is Record<string, unknown> {
-  return typeof hodnota === "object" && hodnota !== null && !Array.isArray(hodnota);
-}
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
 
 export function jeSchuzka(hodnota: unknown): hodnota is ApiSchuzka {
   if (!jeRecord(hodnota)) return false;
@@ -66,6 +59,14 @@ export function jeSchuzka(hodnota: unknown): hodnota is ApiSchuzka {
     return false;
   if (typeof hodnota["datum"] !== "string" || !ISO_DATUM.test(hodnota["datum"]))
     return false;
+  const cas = hodnota["cas"];
+  if (
+    cas !== undefined &&
+    cas !== null &&
+    (typeof cas !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(cas))
+  ) {
+    return false;
+  }
   const mistnost = hodnota["mistnost"];
   if (mistnost !== null && mistnost !== undefined && typeof mistnost !== "string")
     return false;
@@ -88,21 +89,6 @@ function jeSchuzkyOdpoved(hodnota: unknown): hodnota is SchuzkyListResponse {
   return true;
 }
 
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
-
-function chybaZTela(telo: unknown): SchuzkaVysledek<never> {
-  if (jeApiChyba(telo)) {
-    return { ok: false, chyba: telo.error.message, kod: telo.error.code };
-  }
-  return { ok: false, chyba: OBECNA_CHYBA };
-}
-
 function mapujChybyPoli(telo: unknown): ChybySchuzky {
   if (!jeApiChyba(telo)) return {};
   if (telo.error.code !== "VALIDATION_ERROR") return {};
@@ -111,6 +97,7 @@ function mapujChybyPoli(telo: unknown): ChybySchuzky {
   const pole: Array<keyof ChybySchuzky> = [
     "nazev",
     "datum",
+    "cas",
     "mistnost",
     "popis",
     "opakovani",
@@ -148,7 +135,7 @@ export async function getSchuzky(
   if (!odpoved.ok) {
     return { data: [], source: "fallback", errorCode: "BACKEND_CHYBA" };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!jeSchuzkyOdpoved(telo)) {
     return { data: [], source: "fallback", errorCode: "BACKEND_CHYBA" };
   }
@@ -171,7 +158,7 @@ export async function vytvorSchuzku(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo) && telo.error.code === "VALIDATION_ERROR") {
       return {
@@ -181,7 +168,7 @@ export async function vytvorSchuzku(
         chybyPoli: mapujChybyPoli(telo),
       };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   }
   if (!jeRecord(telo) || !jeSchuzka(telo["schuzka"])) {
     return { ok: false, chyba: OBECNA_CHYBA };
@@ -210,7 +197,7 @@ export async function upravSchuzku(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo) && telo.error.code === "VALIDATION_ERROR") {
       return {
@@ -220,7 +207,7 @@ export async function upravSchuzku(
         chybyPoli: mapujChybyPoli(telo),
       };
     }
-    return chybaZTela(telo);
+    return chybaZApiTela(telo);
   }
   if (!jeRecord(telo) || !jeSchuzka(telo["schuzka"])) {
     return { ok: false, chyba: OBECNA_CHYBA };
@@ -257,7 +244,7 @@ export async function smazSchuzku(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
-  if (!odpoved.ok) return chybaZTela(telo);
+  const telo = await ctiJsonTelo(odpoved);
+  if (!odpoved.ok) return chybaZApiTela(telo);
   return { ok: true, data: { ok: true } };
 }

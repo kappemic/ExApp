@@ -43,7 +43,7 @@ const PROFILE_FORM = "src/components/profil/ProfileForm.tsx";
 const AVATAR_UPLOAD = "src/components/profil/AvatarUpload.tsx";
 const USE_PROFILE = "src/hooks/useProfile.ts";
 const STRAVA_API = "src/lib/strava-api.ts";
-const SERVER_INDEX = "server/src/index.ts";
+const SERVER_INDEX = "server/src/ucty-routes.ts";
 const SERVER_VALIDACE = "server/src/validace.ts";
 const PROFILE_SERVICE = "server/src/services/profile-service.ts";
 
@@ -93,12 +93,14 @@ describe("PATCH /api/me validace — plný profil projde (vč. skola/trida)", ()
       prijmeni: "Novák",
       email: "jan@example.cz",
       heslo: "tajneheslo123",
+      soucasneHeslo: "puvodniheslo",
       telefon: "+420 777 111 222",
       discordNick: "jan_n",
       skola: "ZŠ Mlýnská",
       trida: "5.B klubovna",
       avatarUrl: "https://cdn.test/avatar.jpg",
       bio: "Vedoucí výprav.",
+      oblibenaBarva: "  Červená  ",
       narozeniny: "2015-04-02",
     });
     expect(vysledek.uspech).toBe(true);
@@ -108,7 +110,20 @@ describe("PATCH /api/me validace — plný profil projde (vč. skola/trida)", ()
     expect(vysledek.data?.trida).toBe("5.B klubovna");
     expect(vysledek.data?.avatarUrl).toContain("https://");
     expect(vysledek.data?.bio).toBe("Vedoucí výprav.");
+    expect(vysledek.data?.oblibenaBarva).toBe("červená");
     expect(vysledek.data?.narozeniny).toBe("2015-04-02");
+  });
+
+  it("oblíbená barva přijme běžnou barvu a odmítne jiný text", () => {
+    const zelena = validujProfilUpdate({ oblibenaBarva: "zelená" });
+    expect(zelena.uspech).toBe(true);
+    expect(zelena.data?.oblibenaBarva).toBe("zelená");
+    const spatne = validujProfilUpdate({ oblibenaBarva: "duhová" });
+    expect(spatne.uspech).toBe(false);
+    expect(spatne.chybyPoli?.["oblibenaBarva"]?.[0]).toBe("Vyber barvu ze seznamu.");
+    const prazdna = validujProfilUpdate({ oblibenaBarva: "  " });
+    expect(prazdna.uspech).toBe(true);
+    expect(prazdna.data?.oblibenaBarva).toBe("");
   });
 
   it("skola/trida round-trip: prázdná → smazat (''), neposlaná → beze změny", () => {
@@ -131,6 +146,7 @@ describe("PATCH /api/me validace — plný profil projde (vč. skola/trida)", ()
       trida: "5.B klubovna",
       avatarUrl: "https://cdn.test/a.jpg",
       bio: "Ahoj",
+      oblibenaBarva: "modrá",
       narozeniny: "2015-04-02",
     });
     expect(patch.jmeno).toBe("Jan");
@@ -138,6 +154,7 @@ describe("PATCH /api/me validace — plný profil projde (vč. skola/trida)", ()
     expect(patch.trida).toBe("5.B klubovna");
     expect(patch.avatarUrl).toBe("https://cdn.test/a.jpg");
     expect(patch.bio).toBe("Ahoj");
+    expect(patch.oblibenaBarva).toBe("modrá");
     expect(patch.narozeniny).toBe("2015-04-02");
     expect(patch.updatedAt).toBeInstanceOf(Date);
   });
@@ -355,7 +372,7 @@ describe("Strava denied → česká chyba bez pádu", () => {
 describe("Mobil 360px — layout bez horizontálního scrollu", () => {
   it("ProfilPage: fluidní kontejner + sticky taby + 44px cíle", () => {
     const obsah = cti(PROFIL_PAGE);
-    expect(obsah).toContain("max-w-6xl");
+    expect(obsah).toContain("lg:px-8");
     expect(obsah).toContain("w-full");
     expect(obsah).toContain("px-4");
     expect(obsah).toContain("sticky top-0");
@@ -386,6 +403,10 @@ describe("Mobil 360px — layout bez horizontálního scrollu", () => {
     expect(obsah).toContain("sticky bottom-0");
     expect(obsah).toContain("safe-area-inset-bottom");
     expect(obsah).toContain("Uložit změny");
+    expect(obsah).toContain("Oblíbená barva");
+    expect(obsah).toContain("aria-expanded");
+    expect(obsah).not.toContain('type="radio"');
+    expect(obsah).not.toContain("Představení (bio)");
     expect(obsah).toContain("max-w-2xl");
     expect(obsah).toContain("w-full");
     expect(obsah).toContain("grid-cols-1");
@@ -398,7 +419,7 @@ describe("Mobil 360px — layout bez horizontálního scrollu", () => {
   it("avatar: vybraný soubor se ukládá přes POST /api/me/avatar", () => {
     const form = cti(PROFILE_FORM);
     const avatar = cti(AVATAR_UPLOAD);
-    const server = cti("server/src/index.ts");
+    const server = cti("server/src/ucty-routes.ts");
     expect(form).toContain("nahratAvatar");
     expect(form).toContain("souborAvatar");
     expect(form).not.toContain("neukládá");
@@ -487,6 +508,30 @@ describe("Obnovit stav — refresh volá stavový endpoint a nezasekne se", () =
     }
   });
 
+  it("nactiStravaStavRozsireny({ obnovit: true }) přidá ?obnovit=1", async () => {
+    let zachyceneUrl = "";
+    vi.stubGlobal(
+      "fetch",
+      ((url: string | URL | Request): Promise<Response> => {
+        zachyceneUrl = String(url);
+        return Promise.resolve(
+          odpovedJson(
+            {
+              propojeno: true,
+              stravaId: "12345",
+              scope: "read,activity:read",
+              expirace: "2026-10-17T16:00:00.000Z",
+            },
+            200,
+          ),
+        );
+      }) as typeof fetch,
+    );
+    const stav = await nactiStravaStavRozsireny({ obnovit: true });
+    expect(zachyceneUrl).toBe(`${API_ZAKLAD}/api/strava/stav?obnovit=1`);
+    expect(stav.ok).toBe(true);
+  });
+
   it("stavový endpoint 401 → ok:false bez vyhození (karta ukáže chybu, nespadne)", async () => {
     vi.stubGlobal(
       "fetch",
@@ -502,42 +547,20 @@ describe("Obnovit stav — refresh volá stavový endpoint a nezasekne se", () =
     if (!stav.ok) expect(stav.chyba.length).toBeGreaterThan(5);
   });
 
-  it("obnovitStav: volá ctiFaziPropojeni, má catch+finally, spinner zháší vlastník", () => {
+  it("karta Stravy nenechává obnovení na uživateli", () => {
     const obsah = cti(PROFIL_PAGE);
-    const zacatek = obsah.indexOf("async function obnovitStav()");
-    expect(zacatek).toBeGreaterThan(-1);
-    const konec = obsah.indexOf("async function pripoj", zacatek);
-    const telo = konec > 0 ? obsah.slice(zacatek, konec) : obsah.slice(zacatek);
-    expect(telo).toContain("ctiFaziPropojeni()");
-    expect(telo).toContain("setFaze(novaFaze)");
-    // Chyba bez pádu: catch složí chybovou fázi (void onClick ji nespolkne).
-    expect(telo).toContain("catch");
-    expect(telo).toContain('stav: "chyba"');
-    // Nezasekne se na „Obnovuji…": finally + vlastnický guard.
-    expect(telo).toContain("finally");
-    expect(telo).toContain("setObnovuje(false)");
-    expect(telo).toContain("pozadavekRef");
+    expect(obsah).not.toContain("Obnovit stav");
+    expect(obsah).not.toContain("obnovitStav");
+    expect(obsah).not.toContain("Platnost propojení");
+    expect(obsah).toContain("ctiFaziPropojeni()");
+    expect(obsah).toContain("Připojit Stravu");
+    expect(obsah).toContain("Odpojit Stravu");
   });
 
-  it("závod s mount efektem: mount i refresh sdílí pozadavekRef", () => {
+  it("načtení karty zahodí starší odpověď", () => {
     const obsah = cti(PROFIL_PAGE);
     expect(obsah).toContain("pozadavekRef");
     expect(obsah).toContain("useRef");
-    // Starší odpověď čerstvější stav nepřepíše (obě větve kontrolují čítač).
-    const vyskyty = obsah.split("pozadavekRef.current !== moje").length - 1;
-    expect(vyskyty).toBeGreaterThanOrEqual(2);
-  });
-
-  it("tlačítko Obnovit stav je i mimo propojeno (retry po chybě bez reloadu)", () => {
-    const obsah = cti(PROFIL_PAGE);
-    const idxTlacitko = obsah.indexOf('{obnovuje ? "Obnovuji…" : "Obnovit stav"}');
-    expect(idxTlacitko).toBeGreaterThan(-1);
-    // Tlačítko předchází propojeno-větvi a hlídá jen prvotní načítání —
-    // není uvnitř `faze.stav === "propojeno" ? (` větve.
-    const idxVetev = obsah.indexOf('faze.stav === "propojeno" ? (', idxTlacitko);
-    expect(idxVetev).toBeGreaterThan(idxTlacitko);
-    expect(obsah).toContain('faze.stav !== "nacitani"');
-    expect(obsah).toContain("onClick={() => void obnovitStav()}");
-    expect(obsah).toContain("disabled={pracuje || obnovuje}");
+    expect(obsah).toContain("pozadavekRef.current !== moje");
   });
 });

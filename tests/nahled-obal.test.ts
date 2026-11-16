@@ -116,14 +116,15 @@ describe("obálka a lightbox — zdroj", () => {
   const fotky = cti("src/components/expeditions/ExpeditionPhotos.tsx");
   const lightbox = cti("src/components/expeditions/FotkyLightbox.tsx");
   const nahled = cti("src/components/expeditions/VypravaNahled.tsx");
-  const seznam = cti("server/src/index.ts");
+  const seznam = cti("server/src/vypravy-routes.ts");
 
   it("karta i hlavička modalu kreslí náhled a nechávají SVG", () => {
     expect(karta).toContain("aspect-[16/9]");
     expect(karta).toContain("VypravaNahled");
     expect(karta).toContain("useNahledFotkaId");
-    expect(modal).toContain("h-36");
+    // Closed trips show their own cover. Others use a stand-in that falls back to the landscape.
     expect(modal).toContain("VypravaNahled");
+    expect(modal).toContain("ZastupnySnimek");
     expect(nahled).toContain('viewBox="0 0 400 180"');
     expect(nahled).toContain("urlSouboruFotky");
     expect(nahled).not.toContain("fotka.url");

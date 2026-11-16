@@ -1,3 +1,5 @@
+import { apiBase } from "../lib/api-base";
+import { OBECNA_CHYBA, ctiJsonTelo, jeRecord } from "../lib/api-odpoved";
 /**
  * useProfile — fetch + mutate vlastního profilu (Fáze 4, Step 4).
  *
@@ -28,26 +30,6 @@ export type ProfilVysledek<T> =
       kod?: ApiErrorCode;
       chybyPoli?: Record<string, string>;
     };
-
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
-
-function jeRecord(hodnota: unknown): hodnota is Record<string, unknown> {
-  return typeof hodnota === "object" && hodnota !== null && !Array.isArray(hodnota);
-}
 
 function jeApiUser(hodnota: unknown): hodnota is ApiUser {
   if (!jeRecord(hodnota)) return false;
@@ -89,7 +71,7 @@ export async function nactiProfil(): Promise<ProfilVysledek<ApiUser>> {
   } catch {
     return { ok: false, chyba: "Bez připojení profil nenačtu. Zkus to později." };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return {
@@ -131,7 +113,7 @@ export async function ulozProfil(
   } catch {
     return { ok: false, chyba: "Bez připojení profil neuložím. Zkus to později." };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       const chybyPoli = chybyPoliZTela(telo);
@@ -178,7 +160,7 @@ export async function nahratAvatar(soubor: File): Promise<ProfilVysledek<ApiUser
   } catch {
     return { ok: false, chyba: "Bez připojení avatar neuložím. Zkus to později." };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
     if (jeApiChyba(telo)) {
       return {

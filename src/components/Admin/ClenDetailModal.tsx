@@ -15,9 +15,12 @@ import {
   type Funkce,
 } from "../../config/roles";
 import type { UserListItem } from "../../shared/api-types";
+import { zobrazeniTelefonu } from "../../shared/telefon";
 import type { UlozitProfilVstup } from "../../lib/admin-clenove";
+import { nactiSkolyTridy } from "../../lib/skoly-tridy";
 import { useAuth } from "../../hooks/useAuth";
 import ConfirmDialog from "../kalendar/ConfirmDialog";
+import VstupSNabidkou from "../VstupSNabidkou";
 import RoleBadge from "./RoleBadge";
 
 interface ClenDetailModalProps {
@@ -157,7 +160,8 @@ export default function ClenDetailModal({
   const skolaText: string = clen.skola.trim();
   const tridaText: string = clen.trida.trim();
   const discordText: string = (clen.discordNick ?? "").trim();
-  const telefonText: string = (clen.telefon ?? "").trim();
+  const telefonZobrazeni = zobrazeniTelefonu(clen.telefon);
+  const telefonText: string = telefonZobrazeni.text;
   const zarazeni: string =
     profil.funkce === "rada"
       ? "Rada"
@@ -176,10 +180,10 @@ export default function ClenDetailModal({
   const vlastniUcet: boolean = user !== null && user.id === clen.id;
 
   async function naPotvrditSmazani(): Promise<void> {
-    if (onOdstranit === undefined || mazu) return;
+    if (onOdstranit === undefined || mazu || clenId === null) return;
     setMazu(true);
     setChybaMazani(null);
-    const chyba: string | null = await onOdstranit(clen.id);
+    const chyba: string | null = await onOdstranit(clenId);
     setMazu(false);
     if (chyba !== null) {
       setChybaMazani(chyba);
@@ -190,7 +194,7 @@ export default function ClenDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 p-4 sm:items-center"
+      className="nahled-modal fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
       onMouseDown={naKlikBackdropu}
     >
       <div
@@ -215,7 +219,11 @@ export default function ClenDetailModal({
             <p id={popisId} className="mt-1 text-sm text-inkoust/70">
               {aktivni ? "Aktivní člen" : "Člen"}
               {zarazeni === "—" ? "" : ` · ${zarazeni}`}
-              {profil.isAdmin ? " · Admin" : ""}
+              {clen.isSuperadmin
+                ? " · Hlavní admin"
+                : profil.isAdmin
+                  ? " · Admin"
+                  : ""}
             </p>
           </div>
           <button
@@ -223,7 +231,7 @@ export default function ClenDetailModal({
             type="button"
             onClick={onZavrit}
             aria-label="Zavřít detail člena"
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border-2 border-inkoust bg-white/70 text-xl font-extrabold leading-none motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+            className="nahled-press nahled-prejeti flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border-2 border-inkoust bg-papir text-xl font-extrabold leading-none text-inkoust"
           >
             <span aria-hidden="true">×</span>
           </button>
@@ -276,12 +284,16 @@ export default function ClenDetailModal({
                   }
                 >
                   {telefonText.length > 0 ? (
-                    <a
-                      href={`tel:${telefonText}`}
-                      className="text-smrk underline underline-offset-2"
-                    >
-                      {telefonText}
-                    </a>
+                    telefonZobrazeni.href !== null ? (
+                      <a
+                        href={telefonZobrazeni.href}
+                        className="text-smrk underline underline-offset-2"
+                      >
+                        {telefonText}
+                      </a>
+                    ) : (
+                      telefonText
+                    )
                   ) : (
                     "—"
                   )}
@@ -318,7 +330,15 @@ export default function ClenDetailModal({
                   Admin
                 </dt>
                 <dd className="font-semibold">
-                  {profil.isAdmin ? "Ano" : "Ne"}
+                  {profil.isAdmin || clen.isSuperadmin ? "Ano" : "Ne"}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt className="w-28 shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+                  Hlavní admin
+                </dt>
+                <dd className="font-semibold">
+                  {clen.isSuperadmin ? "Ano" : "Ne"}
                 </dd>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
@@ -360,7 +380,7 @@ export default function ClenDetailModal({
                     setChybaMazani(null);
                     setPotvrzeni(true);
                   }}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-red-800 bg-white/70 px-5 font-bold text-red-900 motion-safe:transition-colors motion-safe:hover:bg-red-50 [touch-action:manipulation]"
+                  className="nahled-press nahled-prejeti nahled-nebezpeci inline-flex min-h-[44px] items-center justify-center rounded border-2 border-red-800 bg-papir px-5 font-bold text-red-900 [touch-action:manipulation]"
                 >
                   Odstranit účet
                 </button>
@@ -371,7 +391,7 @@ export default function ClenDetailModal({
                 <button
                   type="button"
                   onClick={onZavrit}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+                  className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust"
                 >
                   Zavřít
                 </button>
@@ -380,7 +400,7 @@ export default function ClenDetailModal({
                     type="button"
                     onClick={() => setRezim("upravy")}
                     title="Upravit profil člena"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk [touch-action:manipulation]"
+                    className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust [touch-action:manipulation]"
                   >
                     Upravit
                   </button>
@@ -451,21 +471,42 @@ function ClenProfilForm({
   const puvodni: ClenskyProfil = profilClena(clen);
   const [clenstvi, setClenstvi] = useState<Clenstvi>(puvodni.clenstvi);
   const [funkce, setFunkce] = useState<Funkce>(puvodni.funkce);
-  const [adminPriznak, setAdminPriznak] = useState<boolean>(puvodni.isAdmin);
+  const [adminPriznak, setAdminPriznak] = useState<boolean>(
+    puvodni.isAdmin || clen.isSuperadmin,
+  );
+  const [hlavniAdmin, setHlavniAdmin] = useState<boolean>(clen.isSuperadmin);
   const [skola, setSkola] = useState<string>(clen.skola);
   const [trida, setTrida] = useState<string>(clen.trida);
+  const [skolySeznam, setSkolySeznam] = useState<string[]>([]);
+  const [tridySeznam, setTridySeznam] = useState<string[]>([]);
   const [chyba, setChyba] = useState<string | null>(null);
   const [ukladam, setUkladam] = useState<boolean>(false);
   const profilChybaId: string = useId();
   const skolaId: string = useId();
   const tridaId: string = useId();
   const funkceId: string = useId();
+  const adminId: string = useId();
+  const hlavniAdminId: string = useId();
+
+  useEffect(() => {
+    let zive = true;
+    void (async (): Promise<void> => {
+      const vysledek = await nactiSkolyTridy();
+      if (!zive || !vysledek.ok) return;
+      setSkolySeznam(vysledek.data.skoly);
+      setTridySeznam(vysledek.data.tridy);
+    })();
+    return () => {
+      zive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const aktualni: ClenskyProfil = profilClena(clen);
     setClenstvi(aktualni.clenstvi);
     setFunkce(aktualni.funkce);
-    setAdminPriznak(aktualni.isAdmin);
+    setAdminPriznak(aktualni.isAdmin || clen.isSuperadmin);
+    setHlavniAdmin(clen.isSuperadmin);
     setSkola(clen.skola);
     setTrida(clen.trida);
     setChyba(null);
@@ -499,10 +540,12 @@ function ClenProfilForm({
     const puvodniTrida: string = clen.trida.trim();
     const skolaStejna: boolean = skolaCista === puvodniSkola;
     const tridaStejna: boolean = tridaCista === puvodniTrida;
+    const adminVPayloadu: boolean = hlavniAdmin || adminPriznak;
     const trioStejne: boolean =
       clenstvi === puvodni.clenstvi &&
       funkce === puvodni.funkce &&
-      adminPriznak === puvodni.isAdmin;
+      adminVPayloadu === (puvodni.isAdmin || clen.isSuperadmin) &&
+      hlavniAdmin === clen.isSuperadmin;
     // Bez změny se jen zavře (škola/třída jsou předvyplněné ze seznamu).
     if (trioStejne && skolaStejna && tridaStejna) {
       onHotovo();
@@ -511,7 +554,8 @@ function ClenProfilForm({
     const vstup: UlozitProfilVstup = {
       clenstvi,
       funkce,
-      isAdmin: adminPriznak,
+      isAdmin: adminVPayloadu,
+      isSuperadmin: hlavniAdmin,
     };
     // Škola/třída se posílá jen vyplněná a změněná (prázdná by mazala).
     if (!skolaStejna && skolaCista.length > 0) vstup.skola = skolaCista;
@@ -594,19 +638,46 @@ function ClenProfilForm({
       </div>
 
       <div className="flex min-h-[44px] items-center justify-between gap-3 rounded border border-linka bg-white/60 px-3 py-2">
-        <label htmlFor={`${funkceId}-admin`} className="min-w-0">
+        <label htmlFor={adminId} className="min-w-0">
           <span className="block text-sm font-bold">Admin</span>
           <span className="block text-xs text-inkoust/60">
-            Technický příznak — správa členů a kódů.
+            Správa výprav, kódů a fotek. Cizí profily ne.
           </span>
         </label>
         <input
-          id={`${funkceId}-admin`}
+          id={adminId}
           type="checkbox"
           role="switch"
           aria-checked={adminPriznak}
           checked={adminPriznak}
-          onChange={(e) => setAdminPriznak(e.target.checked)}
+          onChange={(e) => {
+            const zapnuto: boolean = e.target.checked;
+            setAdminPriznak(zapnuto);
+            if (!zapnuto) setHlavniAdmin(false);
+          }}
+          disabled={ukladam}
+          className="h-6 w-6 shrink-0 accent-smrk"
+        />
+      </div>
+
+      <div className="flex min-h-[44px] items-center justify-between gap-3 rounded border border-linka bg-white/60 px-3 py-2">
+        <label htmlFor={hlavniAdminId} className="min-w-0">
+          <span className="block text-sm font-bold">Hlavní admin</span>
+          <span className="block text-xs text-inkoust/60">
+            Smí upravovat a mazat účty. Zapnutím se zapne i Admin.
+          </span>
+        </label>
+        <input
+          id={hlavniAdminId}
+          type="checkbox"
+          role="switch"
+          aria-checked={hlavniAdmin}
+          checked={hlavniAdmin}
+          onChange={(e) => {
+            const zapnuto: boolean = e.target.checked;
+            setHlavniAdmin(zapnuto);
+            if (zapnuto) setAdminPriznak(true);
+          }}
           disabled={ukladam}
           className="h-6 w-6 shrink-0 accent-smrk"
         />
@@ -617,15 +688,16 @@ function ClenProfilForm({
           <label htmlFor={skolaId} className={POPIS_TRIDY}>
             Škola
           </label>
-          <input
+          <VstupSNabidkou
             id={skolaId}
-            type="text"
             value={skola}
-            onChange={(e) => setSkola(e.target.value)}
+            onChange={setSkola}
+            nabidky={skolySeznam}
             disabled={ukladam}
             maxLength={120}
-            autoComplete="off"
             placeholder="Nevyplněno"
+            neplatny={false}
+            popisId={undefined}
             className="block min-h-[44px] w-full rounded border border-linka bg-white/60 px-3 text-base placeholder:text-inkoust/40"
           />
         </div>
@@ -633,15 +705,16 @@ function ClenProfilForm({
           <label htmlFor={tridaId} className={POPIS_TRIDY}>
             Třída
           </label>
-          <input
+          <VstupSNabidkou
             id={tridaId}
-            type="text"
             value={trida}
-            onChange={(e) => setTrida(e.target.value)}
+            onChange={setTrida}
+            nabidky={tridySeznam}
             disabled={ukladam}
             maxLength={120}
-            autoComplete="off"
             placeholder="Nevyplněno"
+            neplatny={false}
+            popisId={undefined}
             className="block min-h-[44px] w-full rounded border border-linka bg-white/60 px-3 text-base placeholder:text-inkoust/40"
           />
         </div>
@@ -666,7 +739,7 @@ function ClenProfilForm({
           type="button"
           onClick={onZrusit}
           disabled={ukladam}
-          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-white/70 px-5 font-bold motion-safe:transition-colors motion-safe:hover:bg-linka/50 disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
+          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           Zrušit
         </button>
@@ -678,7 +751,7 @@ function ClenProfilForm({
               ? chybaKombinace
               : "Uložit profil člena"
           }
-          className="inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-inkoust px-5 font-bold text-papir motion-safe:transition-colors motion-safe:hover:bg-smrk disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
+          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           {ukladam ? "Ukládám…" : "Uložit změny"}
         </button>

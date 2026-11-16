@@ -49,17 +49,17 @@ describe("ExpeditionPhotos delete-mode gallery header", () => {
     expect(vrstva).not.toContain("rounded-full");
   });
 
-  it("mazací hlavička je ve sloupci: Zrušit nahoře", () => {
+  it("mazací hlavička je v řádku: Zrušit, pak vybrané, nakonec vše", () => {
     const hlavicka = cti("src/components/fotky/FotkyMazaciHlavicka.tsx");
     expect(hlavicka).toContain("data-fotky-mazaci-akce");
-    expect(hlavicka).toContain("flex-col");
+    expect(hlavicka).toContain("grid-cols-2");
     const akce = hlavicka.slice(hlavicka.indexOf("data-fotky-mazaci-akce"));
     const zrusIdx = akce.indexOf("Zrušit");
-    const vseIdx = akce.indexOf("Smazat vše");
     const vybraneIdx = akce.indexOf("Smazat vybrané");
+    const vseIdx = akce.indexOf("Smazat vše");
     expect(zrusIdx).toBeGreaterThan(-1);
-    expect(vseIdx).toBeGreaterThan(zrusIdx);
-    expect(vybraneIdx).toBeGreaterThan(vseIdx);
+    expect(vybraneIdx).toBeGreaterThan(zrusIdx);
+    expect(vseIdx).toBeGreaterThan(vybraneIdx);
   });
 
   it("lightbox má navigaci a mazací hlavičku bez Zavřít v mazání", () => {

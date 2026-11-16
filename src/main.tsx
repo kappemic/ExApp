@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { zapniOfflineHistorii } from "./lib/pwa-historie";
+import "./pisma.css";
 import "./index.css";
 
 zapniOfflineHistorii();

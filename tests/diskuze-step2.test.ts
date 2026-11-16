@@ -3,14 +3,15 @@
  *
  * Bez DB, bez HTTP — čistě kontrakt + čistá logika + mock fetch:
  * - GET diskuze JOIN User → authorName (jmeno+prijmeni, fallback
- *   discordNick/email/Bývalý člen; SET NULL drží snapshot autor_jmeno).
+ *   discordNick/Člen/Bývalý člen; SET NULL drží snapshot autor_jmeno).
  * - GET konverzace [{key, expeditionId, channel, lastMessage, unreadCount}].
  * - POST guard channel=dulezite jen vedeni/rada/admin (jinak 403),
  *   general každý přihlášený.
  * - POST read lastReadAt (upsert per-user, čas razí server).
  * Strict TypeScript, žádný `any`, česky.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GLOBALNI_ZPRAVY_PATH,
@@ -103,6 +104,7 @@ function dobraZprava(overrides: Partial<ApiZprava> = {}): ApiZprava {
     authorName: "Jan Novák",
     channel: "expedice",
     text: "Ahoj",
+    prilohy: [],
     createdAt: "2026-10-01T10:00:00.000Z",
     ...overrides,
   };
@@ -146,13 +148,13 @@ describe("slozAuthorName — JOIN User → authorName", () => {
     ).toBe("honza_d");
   });
 
-  it("bez nicku padá na e-mail", () => {
+  it("bez jména i nicku je Člen, ne e-mail", () => {
     expect(
       slozAuthorName(
         profilJmeno({ jmeno: "", prijmeni: "", discordNick: null }),
         "",
       ),
-    ).toBe("jan@example.cz");
+    ).toBe("Člen");
   });
 
   it("SET NULL drží snapshot autor_jmeno", () => {
@@ -259,6 +261,45 @@ describe("seskupKonverzace — GET konverzace", () => {
     expect(vysledek[0]?.unreadCount).toBe(1);
     expect(vysledek[0]?.key).toBe("dulezite");
   });
+
+  it("vlastní zpráva není nepřečtená", () => {
+    const vysledek = seskupKonverzace(
+      [
+        dobraZprava({
+          id: "moje",
+          autorId: "ja",
+          expeditionId: null,
+          channel: "general",
+          createdAt: "2026-10-01T12:00:00.000Z",
+          text: "",
+          prilohy: [
+            {
+              id: "p1",
+              nazev: "poznamka.txt",
+              bajty: 12,
+              contentType: "text/plain",
+              jeObrazek: false,
+            },
+          ],
+        }),
+      ],
+      {},
+      null,
+      "ja",
+    );
+    expect(vysledek[0]?.unreadCount).toBe(0);
+    expect(vysledek[0]?.lastMessage?.prilohy[0]?.nazev).toBe("poznamka.txt");
+  });
+
+  it("zprávy před vznikem účtu nejsou nepřečtené", () => {
+    const zpravy: ApiZprava[] = [
+      dobraZprava({ id: "stara", expeditionId: null, channel: "general", createdAt: "2026-10-01T09:00:00.000Z" }),
+      dobraZprava({ id: "nova", expeditionId: null, channel: "general", createdAt: "2026-10-01T12:00:00.000Z" }),
+    ];
+    const vysledek = seskupKonverzace(zpravy, {}, "2026-10-01T10:00:00.000Z");
+    expect(vysledek[0]?.unreadCount).toBe(1);
+    expect(vysledek[0]?.lastMessage?.id).toBe("nova");
+  });
 });
 
 describe("kontrakt Step 2 — cesty + guardy", () => {
@@ -269,14 +310,25 @@ describe("kontrakt Step 2 — cesty + guardy", () => {
     expect(konverzaceReadPath()).toBe("/api/diskuze/konverzace/read");
   });
 
-  it("matice: čtení PUBLIC, zápis USER, Důležité hlídá server 403", () => {
-    expect(PRISTUP_KONVERZACE[KONVERZACE_PATH]).toBe("PUBLIC");
+  it("matice: čtení i zápis USER, Důležité hlídá server 403", () => {
+    expect(PRISTUP_KONVERZACE[KONVERZACE_PATH]).toBe("USER");
     expect(PRISTUP_KONVERZACE[KONVERZACE_READ_PATH]).toBe("USER");
-    expect(PRISTUP_KONVERZACE[GLOBALNI_ZPRAVY_PATH]).toBe("PUBLIC");
+    expect(PRISTUP_KONVERZACE[GLOBALNI_ZPRAVY_PATH]).toBe("USER");
     const radky = MATICE_KONVERZACE.map((r) => `${r.metoda} ${r.cesta} ${r.kdo}`);
-    expect(radky).toContain("GET /api/diskuze/konverzace PUBLIC");
+    expect(radky).toContain("GET /api/diskuze/konverzace USER");
+    expect(radky).toContain("GET /api/diskuze/zpravy USER");
     expect(radky).toContain("POST /api/diskuze/zpravy USER");
     expect(radky).toContain("POST /api/diskuze/konverzace/read USER");
+  });
+
+  it("klubová příloha se odešle až po přihlášení, soukromá dál hlídá účastníka", () => {
+    const zdroj = readFileSync(new URL("../server/src/diskuze-routes.ts", import.meta.url), "utf8");
+    const start = zdroj.indexOf('if (pristup.stav === "verejna")');
+    const blok = zdroj.slice(start, start + 500);
+    expect(blok.indexOf("vyzadujPrihlaseni")).toBeGreaterThanOrEqual(0);
+    expect(blok.indexOf("vyzadujPrihlaseni")).toBeLessThan(blok.indexOf("odesli()"));
+    const soukroma = zdroj.indexOf('pristup.stav === "soukroma"');
+    expect(zdroj.slice(soukroma, soukroma + 400)).toContain("jeUcastnikSoukromeho");
   });
 
   it("jeKanalDiskuze přijme klubové kanály a soukromý chat", () => {
@@ -364,12 +416,17 @@ describe("klient Step 2 — mock fetch", () => {
 describe("Step 2 — soubory bez any", () => {
   it("žádný zakázaný typ any ve scope souborech + testu", () => {
     const zakazanyTyp = ["as", "any"].join(" ");
+    const kontrakt = readdirSync("src/shared/api-typy").map((jmeno) =>
+      join("src/shared/api-typy", jmeno),
+    );
     for (const soubor of [
       "server/src/diskuze.ts",
+      "server/src/diskuze-routes.ts",
       "server/src/index.ts",
       "src/shared/api-types.ts",
       "src/lib/diskuze-api.ts",
       "tests/diskuze-step2.test.ts",
+      ...kontrakt,
     ]) {
       const obsah = readFileSync(soubor, "utf8");
       expect(obsah).not.toMatch(/:\s*any\b/);

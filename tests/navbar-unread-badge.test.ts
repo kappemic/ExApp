@@ -73,9 +73,9 @@ describe("Navbar zdroj-kontrakt — badge na živých datech", () => {
     expect(hook).toContain("export function jeNeprectene");
   });
 
-  it("Navbar používá hook jako jediný zdroj pravdy + součet", () => {
-    expect(navbar).toContain("useUnreadExpeditions");
-    expect(navbar).toContain("spocitejNeprectene");
+  it("Navbar bere přehled konverzací (kolečko i bez otevření chatu)", () => {
+    expect(navbar).toContain("useKonverzacePrehled");
+    expect(navbar).toContain("pocetNeprectenych");
     expect(navbar).toContain("pocetNeprectenych > 0");
   });
 
@@ -84,10 +84,13 @@ describe("Navbar zdroj-kontrakt — badge na živých datech", () => {
     expect(navbar).not.toContain("bg-jantar");
   });
 
-  it("ids ze snapshotu + tichý upgrade z BFF (vzor ChatPage)", () => {
-    expect(navbar).toContain("getExpeditionsSync");
-    expect(navbar).toContain("getExpeditions");
-    expect(navbar).toContain('cerstve.source !== "db"');
+  it("badge se obnovuje z přehledu konverzací, ne z id výprav", () => {
+    const prehled: string = ctiZdroj("src/hooks/useKonverzacePrehled.tsx");
+    expect(prehled).toContain("getKonverzace");
+    expect(prehled).toContain("visibilitychange");
+    expect(prehled).toContain("setInterval");
+    expect(prehled).toContain("VYCHOZI_UNREAD_POLLING_MS");
+    expect(navbar).not.toContain("getExpeditionsSync");
   });
 
   it("tečka jen když > 0, reuse NeprectenaTecka", () => {

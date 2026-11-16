@@ -1,13 +1,13 @@
 /**
- * tests/zebricky.test.ts — Krok 5 Fáze 4: veřejný žebříček (účast > km).
+ * tests/zebricky.test.ts — Krok 5 Fáze 4: žebříček přihlášených (účast > km).
  *
  * Kontrakt (aditivně nad §15, nic se nepřejmenovává):
- * - GET /api/zebricky?obdobi=celkem|YYYY — PUBLIC (bez session),
+ * - GET /api/zebricky?obdobi=celkem|YYYY — USER (bez session → 401),
  *   řazení `ucastnil_se DESC, km DESC`, tie-break `jmeno ASC`
  *   (deterministické pořadí), `LIMIT 50`, bez PII kromě `jmeno`
  *   (žádný e-mail / telefon / secrety).
  * - Filtr roku počítá jen výpravy daného roku (rozsah datum od–do).
- * - Odhlášený vidí tabulku + CTA (stávající /login + /register).
+ * - Stránka je za RequireAuth; anonym na ni nevidí CTA.
  * - Výkon: jeden GROUP BY dotaz + index
  *   `participants(status, user_id)` a `expeditions(datum)` —
  *   EXPLAIN bez seq-scanu na 1000+ participants.
@@ -17,7 +17,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  PRISTUP_ZEBRICKY,
   ZEBRICKY_PATH,
+  ZEBRICKY_TRASY_PATH,
   jeZebrickyOdpoved,
   zebrickyListUrl,
 } from "../src/shared/api-types";
@@ -275,22 +277,24 @@ describe("getZebricek — klient bez HTTP (mock fetch)", () => {
   });
 });
 
-describe("route GET /api/zebricky (PUBLIC, jeden GROUP BY, LIMIT 50)", () => {
+describe("route GET /api/zebricky (USER, jeden GROUP BY, LIMIT 50)", () => {
   function cti(soubor: string): string {
     return readFileSync(soubor, "utf8");
   }
 
   function okoliZebricky(): string {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/statistiky-routes.ts");
     const pozice = obsah.indexOf("/api/zebricky");
     expect(pozice).toBeGreaterThan(-1);
     return obsah.slice(Math.max(0, pozice - 1000), pozice + 6000);
   }
 
-  it("route existuje a je PUBLIC (žádný login/admin guard v okruhu)", () => {
+  it("route existuje a vyžaduje přihlášení (bez admin guardu)", () => {
     const okoli = okoliZebricky();
-    expect(okoli).not.toContain("vyzadujPrihlaseni");
+    expect(okoli).toContain("vyzadujPrihlaseni");
     expect(okoli).not.toContain("vyzadujAdmina");
+    expect(PRISTUP_ZEBRICKY[ZEBRICKY_PATH]).toBe("USER");
+    expect(PRISTUP_ZEBRICKY[ZEBRICKY_TRASY_PATH]).toBe("USER");
   });
 
   it("agreguje jen ucastnil_se jedním GROUP BY (bez N+1)", () => {
@@ -345,6 +349,19 @@ describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", ()
     return readFileSync(soubor, "utf8");
   }
 
+  it("heatmapa bere všechny uskutečněné výpravy, ne jen docházku", () => {
+    const stranka = cti("src/pages/ZebrickyPage.tsx");
+    expect(stranka).toContain("ZebrickyHeatmapa");
+    const mapa = cti("src/components/zebricky/ZebrickyHeatmapa.tsx");
+    expect(mapa).toContain("getTrasyZebricku");
+    expect(mapa).toContain("Ušlé výpravy");
+    const server = cti("server/src/statistiky-routes.ts");
+    expect(server).toContain('app.get("/api/zebricky/trasy"');
+    const trasy = server.slice(server.indexOf('app.get("/api/zebricky/trasy"'));
+    expect(trasy.slice(0, 400)).toContain("vyzadujPrihlaseni");
+    expect(server).toContain('eq(expeditions.stav, "proběhlá")');
+  });
+
   it("tabulka pořadí s popiskem a záhlavím", () => {
     const obsah = cti("src/pages/ZebrickyPage.tsx");
     expect(obsah).toContain("<table");
@@ -365,10 +382,16 @@ describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", ()
     expect(obsah).toContain("user");
   });
 
-  it("odhlášený vidí CTA (stávající /login + /register)", () => {
+  it("stránka je za RequireAuth a anonym na ni nevidí CTA", () => {
+    const app = cti("src/App.tsx");
+    const pozice = app.indexOf('path="/zebricky"');
+    expect(pozice).toBeGreaterThan(-1);
+    const okoli = app.slice(pozice, pozice + 280);
+    expect(okoli).toContain("<RequireAuth>");
+    expect(okoli).toContain("<ZebrickyPage />");
     const obsah = cti("src/pages/ZebrickyPage.tsx");
-    expect(obsah).toContain('to="/login"');
-    expect(obsah).toContain('to="/register"');
+    expect(obsah).not.toContain("zebricky-prihlaseni");
+    expect(obsah).not.toContain('to="/login"');
   });
 
   it("stav načítání přes role=status, žádné PII ani secrety", () => {
@@ -391,5 +414,6 @@ describe("klientský bundle nikdy nenese SECRET (aditivně)", () => {
     expect(obsah.toLowerCase()).not.toContain("access_token");
     expect(obsah.toLowerCase()).not.toContain("refresh_token");
     expect(obsah.toLowerCase()).not.toContain("client_secret");
+    expect(obsah).toContain('credentials: "include"');
   });
 });

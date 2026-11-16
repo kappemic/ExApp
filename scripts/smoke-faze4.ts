@@ -5,15 +5,16 @@
  *   health → strava/auth-url (PUBLIC, mock fixture) →
  *   strava/neparovane bez session → 401 → s loginem → 200 (jen když je
  *   v env admin účet, jinak SKIP) → statistiky/moje bez session → 401 →
- *   s loginem → 200 (jinak SKIP) → zebricky default → 200 →
- *   zebricky?obdobi=2025 → 200 → zebricky?obdobi=nesmysl → 422.
+ *   s loginem → 200 (jinak SKIP) → zebricky bez session → 401 →
+ *   s loginem → 200 / 422 (jinak SKIP).
  *
  * Zvláštnosti (diagnostika 6a):
  *   - `GET /api/zebricky` na produkční DB bez migrace 0007 vrací 500
  *     (chybí sloupec expeditions.km). To NENÍ chyba smoke — takový
  *     výsledek se hlásí jako SKIP s jasnou hláškou, nikdy jako FAIL.
- *     Validace `obdobi` běží před DB dotazem, takže 422 na nesmysl
- *     musí projít i bez migrace.
+ *     Validace `obdobi` běží až po přihlášení a před DB dotazem,
+ *     takže 422 na nesmysl musí projít se session i bez migrace.
+ *     Bez session je odpověď vždy 401.
  *   - `GET /api/strava/auth-url` vyžaduje `STRAVA_MOCK=1` v prostředí
  *     volajícího (BFF pak vrací mock fixture bez reálné registrace
  *     Strava appky). Bez mocku se mock-větev hlásí jako SKIP, ne FAIL.
@@ -248,24 +249,24 @@ async function main(): Promise<void> {
     "NEPRIHLASEN",
   );
 
-  // 3) Žebříčky (PUBLIC) — 500 toleruje SKIP kvůli chybějící migraci 0007.
-  zkontrolujZebricky(
-    "žebříčky celkem",
-    await volej("GET", "/api/zebricky", null),
-    "celkem",
-  );
-  zkontrolujZebricky(
-    `žebříčky za rok ${PLATNY_ROK}`,
-    await volej("GET", `/api/zebricky?obdobi=${PLATNY_ROK}`, null),
-    PLATNY_ROK,
-  );
-
-  // 4) Negativní: nesmysl období → 422 (validace běží před DB, platí i bez migrace).
+  // 3) Žebříčky bez session → 401 (auth dřív než validace období).
   zkontroluj(
-    "žebříčky s nesmyslným obdobím jsou odmítnuty",
+    "žebříčky bez přihlášení jsou odmítnuty",
+    await volej("GET", "/api/zebricky", null),
+    401,
+    "NEPRIHLASEN",
+  );
+  zkontroluj(
+    "trasy žebříčku bez přihlášení jsou odmítnuty",
+    await volej("GET", "/api/zebricky/trasy", null),
+    401,
+    "NEPRIHLASEN",
+  );
+  zkontroluj(
+    "žebříčky s nesmyslným obdobím bez přihlášení jsou odmítnuty",
     await volej("GET", `/api/zebricky?obdobi=${NESMYSL_OBDOBI}`, null),
-    422,
-    "VALIDATION_ERROR",
+    401,
+    "NEPRIHLASEN",
   );
 
   // 5) Pozitivní s loginem — jen když je v env admin účet, jinak SKIP.
@@ -276,6 +277,10 @@ async function main(): Promise<void> {
     );
     preskoceno(
       "statistiky s přihlášením",
+      "není SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_HESLO v prostředí, nic se nemění",
+    );
+    preskoceno(
+      "žebříčky s přihlášením",
       "není SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_HESLO v prostředí, nic se nemění",
     );
   } else {
@@ -303,6 +308,23 @@ async function main(): Promise<void> {
 
     const statistiky = await volej("GET", "/api/statistiky/moje", cookieAdmin);
     zkontroluj("statistiky s přihlášením", statistiky, 200);
+
+    zkontrolujZebricky(
+      "žebříčky celkem s přihlášením",
+      await volej("GET", "/api/zebricky", cookieAdmin),
+      "celkem",
+    );
+    zkontrolujZebricky(
+      `žebříčky za rok ${PLATNY_ROK} s přihlášením`,
+      await volej("GET", `/api/zebricky?obdobi=${PLATNY_ROK}`, cookieAdmin),
+      PLATNY_ROK,
+    );
+    zkontroluj(
+      "žebříčky s nesmyslným obdobím jsou odmítnuty",
+      await volej("GET", `/api/zebricky?obdobi=${NESMYSL_OBDOBI}`, cookieAdmin),
+      422,
+      "VALIDATION_ERROR",
+    );
     if (statistiky.status === 200) {
       if (jeTvarStatistik(statistiky.telo)) {
         ok("statistiky vrací čísla a pole aktivity");

@@ -54,6 +54,18 @@ describe("validujRegistraci — kod povinny", () => {
     expect(vysledek.chybyPoli["heslo"]?.length).toBeGreaterThan(0);
   });
 
+  it("telefon normalizuje na E.164 a kratke cislo odmitne", () => {
+    const platny = validujRegistraci(
+      dobraRegistrace({ telefon: "777 123 456" }),
+    );
+    expect(platny.uspech).toBe(true);
+    expect(platny.data?.telefon).toBe("+420777123456");
+
+    const neplatny = validujRegistraci(dobraRegistrace({ telefon: "12345" }));
+    expect(neplatny.uspech).toBe(false);
+    expect(neplatny.chybyPoli["telefon"]?.length).toBeGreaterThan(0);
+  });
+
   it("neplatny e-mail neprojde", () => {
     const vysledek = validujRegistraci(
       dobraRegistrace({ email: "neni-email" }),

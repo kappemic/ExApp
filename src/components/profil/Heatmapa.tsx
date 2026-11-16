@@ -3,7 +3,7 @@
  *
  * Design kontrakt (frontend-ui-engineering + mobile-native + break-ui):
  * - Deníkové tokeny: papír #FBF8F1, inkoust #1A2E22, smrk #2D6A4F (trasa),
- *   jantar #A05E0C (nejnovější trasa + ikona prázdného stavu), linka #DCE7DE.
+ *   sytější oranžová #ff7a1a (nevybraná trasa), smrk #2D6A4F (vybraná trasa), linka #DCE7DE.
  * - Mobile-first: mapa 320px vysoká na mobilu, 420px na sm+; všechna
  *   tlačítka min 44×44px, `touch-action: manipulation`; samotná mapa
  *   `pan-x pan-y` (gesta Leafletu), hover jen `(hover:hover)`.
@@ -29,14 +29,40 @@ import {
   type Souradnice,
 } from "../../lib/polyline";
 import type { ApiAktivita } from "../../shared/api-types";
+import { isoNaEvropske } from "../../lib/evropske-datum";
+import { formatKmZaokrouhlene } from "../../lib/format-cisla";
 
-interface Trasa {
+export interface Trasa {
   id: string;
   nazev: string;
   datum: string;
   body: Souradnice[];
   hranice: Hranice;
   km: number | null;
+}
+
+export function polylajnaNaTrasu(vstup: {
+  id: string;
+  nazev: string;
+  datum: string;
+  km: number | null;
+  trasaPolyline: string | null;
+}): Trasa | null {
+  if (typeof vstup.trasaPolyline !== "string") return null;
+  if (vstup.trasaPolyline.trim().length === 0) return null;
+  const body = dekodujPolyline(vstup.trasaPolyline);
+  if (body.length < 2) return null;
+  const hranice = spocitejHranice(body);
+  if (hranice === null) return null;
+  const nazev = vstup.nazev.length > 0 ? vstup.nazev : vstup.id;
+  return {
+    id: vstup.id,
+    nazev,
+    datum: vstup.datum,
+    body,
+    hranice,
+    km: vstup.km,
+  };
 }
 
 type Faze =
@@ -55,11 +81,6 @@ const SEZNAM_NADPIS = "Tvoje výpravy";
 const SEZNAM_TEXT =
   "Na těchto výpravách jsi zapsaný. Mapa trasy se vykreslí, jakmile k výpravě přidáme trasu (např. aktivita ze Stravy nebo GPS trasu) — kilometry platí hned.";
 
-function formatKm(km: number): string {
-  const zaokrouhleno = Math.round(km * 10) / 10;
-  return `${String(zaokrouhleno).replace(".", ",")} km`;
-}
-
 /** Česká popis stavu docházky pro seznam pod mapou. */
 function popisStavu(status: ApiAktivita["status"]): string | null {
   if (status === "ucastnil_se") return "navštívil jsem";
@@ -74,10 +95,10 @@ const VYCHOZI_ZOOM = 7;
 
 // Deníkové tokeny pro Leaflet canvas — Leaflet neumí číst CSS `var()`,
 // proto hex kopie jediného zdroje pravdy z `src/index.css` (`@theme`).
-// Nesmí se objevit žádný jiný inline hex: smrk = běžná trasa,
-// jantar = vybraná trasa.
+// Nesmí se objevit žádný jiný inline hex: jantar = běžná trasa,
+// smrk = trasa, kterou si čtenář vybral. Legenda používá stejné hex.
 const BARVA_SMRK = "#2d6a4f"; // = --color-smrk
-const BARVA_JANTAR = "#a05e0c"; // = --color-jantar
+const BARVA_JANTAR = "#ff7a1a"; // saturated orange for unselected routes
 
 interface StylCary {
   color: string;
@@ -87,35 +108,51 @@ interface StylCary {
 
 interface CaryVrstva {
   setStyle: (styl: StylCary) => unknown;
+  getTooltip?: () => { getElement: () => HTMLElement | undefined } | undefined;
+}
+
+function popisekTrasy(trasa: Trasa): string {
+  const evropske = isoNaEvropske(trasa.datum);
+  const datum = evropske.length > 0 ? evropske : trasa.datum;
+  return datum.length > 0 ? `${trasa.nazev} · ${datum}` : trasa.nazev;
+}
+
+function obarviPopisek(cara: CaryVrstva, vybrana: boolean): void {
+  const ramecek = cara.getTooltip?.()?.getElement?.();
+  if (ramecek === undefined) return;
+  ramecek.style.borderColor = vybrana ? BARVA_SMRK : BARVA_JANTAR;
+  ramecek.style.width = "max-content";
+  ramecek.style.maxWidth = "min(28rem, calc(100vw - 2.5rem))";
+  ramecek.style.whiteSpace = "nowrap";
+  ramecek.style.overflow = "hidden";
+  const text = ramecek.firstElementChild;
+  if (text instanceof HTMLElement) {
+    text.style.display = "block";
+    text.style.maxWidth = "100%";
+    text.style.overflow = "hidden";
+    text.style.whiteSpace = "nowrap";
+    text.style.textOverflow = "ellipsis";
+  }
 }
 
 function stylCary(jeAktivni: boolean): StylCary {
   return jeAktivni
-    ? { color: BARVA_JANTAR, weight: 5, opacity: 0.95 }
-    : { color: BARVA_SMRK, weight: 4, opacity: 0.8 };
+    ? { color: BARVA_SMRK, weight: 5, opacity: 0.95 }
+    : { color: BARVA_JANTAR, weight: 4, opacity: 1 };
 }
 
 function aktivitaNaTrasu(aktivita: ApiAktivita): Trasa | null {
-  if (typeof aktivita.trasaPolyline !== "string") return null;
-  if (aktivita.trasaPolyline.trim().length === 0) return null;
-  const body = dekodujPolyline(aktivita.trasaPolyline);
-  if (body.length < 2) return null;
-  const hranice = spocitejHranice(body);
-  if (hranice === null) return null;
   const nazev =
     typeof aktivita.nazev === "string" && aktivita.nazev.length > 0
       ? aktivita.nazev
       : aktivita.expeditionId;
-  const datum =
-    typeof aktivita.datum === "string" ? aktivita.datum : "";
-  return {
+  return polylajnaNaTrasu({
     id: aktivita.id,
     nazev,
-    datum,
-    body,
-    hranice,
+    datum: typeof aktivita.datum === "string" ? aktivita.datum : "",
     km: aktivita.km,
-  };
+    trasaPolyline: aktivita.trasaPolyline,
+  });
 }
 
 function jeOfflineProhlizec(): boolean {
@@ -277,7 +314,7 @@ export default function Heatmapa(): JSX.Element {
           {SEZNAM_TEXT}
         </p>
         <p className="mt-3 text-sm font-bold tabular-nums">
-          Celkem: {formatKm(faze.kmCelkem)} · {faze.aktivity.length}{" "}
+          Celkem: {formatKmZaokrouhlene(faze.kmCelkem)} · {faze.aktivity.length}{" "}
           {faze.aktivity.length === 1 ? "výprava" : "výpravy"}
         </p>
         <ul role="list" className="mt-3 space-y-1.5">
@@ -298,7 +335,7 @@ export default function Heatmapa(): JSX.Element {
                 </span>
                 <span className="shrink-0 text-[13px] font-semibold tabular-nums text-inkoust/70">
                   {aktivita.datum ?? ""}{" "}
-                  {aktivita.km !== null ? formatKm(aktivita.km) : "km nezapsány"}
+                  {aktivita.km !== null ? formatKmZaokrouhlene(aktivita.km) : "km nezapsány"}
                 </span>
               </li>
             );
@@ -313,22 +350,24 @@ export default function Heatmapa(): JSX.Element {
 
 /**
  * Prezentace: Leaflet mapa líně přes `import("leaflet")`.
- * Dlaždice OSM (bez klíče), polylines smrk, nejnovější jantar, fitBounds.
+ * Dlaždice OSM (bez klíče), polylines jantar, vybraná smrk, fitBounds.
  */
-function HeatmapaMapa({
+export function HeatmapaMapa({
   trasy,
   kmCelkem,
+  nadpis = "Spárované trasy",
+  popisekMapy = "Heatmapa spárovaných tras",
 }: {
   trasy: Trasa[];
   kmCelkem: number;
+  nadpis?: string;
+  popisekMapy?: string;
 }): JSX.Element {
   const kontejnerRef = useRef<HTMLDivElement | null>(null);
   const mapaRef = useRef<{ remove: () => void } | null>(null);
   const caryRef = useRef<Map<string, CaryVrstva>>(new Map());
   const [chybaMapy, setChybaMapy] = useState<boolean>(false);
-  const [aktivniId, setAktivniId] = useState<string | null>(
-    trasy.length > 0 ? (trasy[trasy.length - 1]?.id ?? null) : null,
-  );
+  const [aktivniId, setAktivniId] = useState<string | null>(null);
 
   const celkovaHranice = slucHranice(trasy.map((t) => t.hranice));
 
@@ -347,6 +386,7 @@ function HeatmapaMapa({
 
     void (async (): Promise<void> => {
       try {
+        await import("leaflet/dist/leaflet.css");
         const L = await import("leaflet");
         if (zruseno || kontejnerRef.current === null) return;
 
@@ -390,8 +430,14 @@ function HeatmapaMapa({
           // XSS obrana: název trasy je uživatelský vstup — přes
           // `textContent` se nikdy nepropíše jako HTML.
           const popisek = document.createElement("div");
-          popisek.textContent = `${trasa.nazev}${trasa.datum.length > 0 ? ` · ${trasa.datum}` : ""}`;
+          popisek.textContent = popisekTrasy(trasa);
+          popisek.style.whiteSpace = "nowrap";
+          popisek.style.overflow = "hidden";
+          popisek.style.textOverflow = "ellipsis";
           cara.bindTooltip(popisek, { sticky: true });
+          cara.on("tooltipopen", () => {
+            obarviPopisek(cara, trasa.id === aktivniIdRef.current);
+          });
           cara.addTo(instance);
           caryRef.current.set(trasa.id, cara);
         }
@@ -422,7 +468,9 @@ function HeatmapaMapa({
   // Zvýraznění výběru bez remountu: jen `setStyle` nad živými křivkami.
   useEffect(() => {
     for (const [id, cara] of caryRef.current) {
-      cara.setStyle(stylCary(id === aktivniId));
+      const vybrana = id === aktivniId;
+      cara.setStyle(stylCary(vybrana));
+      obarviPopisek(cara, vybrana);
     }
   }, [aktivniId]);
 
@@ -473,30 +521,32 @@ function HeatmapaMapa({
     pocet === 1 ? "1 trasa" : pocet >= 2 && pocet <= 4 ? `${pocet} trasy` : `${pocet} tras`;
 
   return (
-    <section aria-label="Heatmapa spárovaných tras" className="text-left">
+    <section aria-label={popisekMapy} className="text-left">
       <div className="overflow-hidden rounded-lg border-2 border-inkoust bg-white/70 shadow-denik">
         <div
           ref={kontejnerRef}
           role="application"
-          aria-label={`Interaktivní mapa: ${popisPoctu}, celkem ${formatKm(kmCelkem)}`}
+          aria-label={`Interaktivní mapa: ${popisPoctu}, celkem ${formatKmZaokrouhlene(kmCelkem)}`}
           className="heatmapa-plocha h-[320px] w-full bg-papir sm:h-[420px]"
         />
         <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-inkoust/15 bg-papir px-4 py-3">
           <p role="status" className="text-sm font-bold tabular-nums">
-            {popisPoctu} · {formatKm(kmCelkem)}
+            {popisPoctu} · {formatKmZaokrouhlene(kmCelkem)}
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-inkoust/75">
             <span className="inline-flex min-h-[44px] items-center gap-1.5">
               <span
                 aria-hidden="true"
-                className="inline-block h-1 w-6 rounded-full bg-smrk"
+                className="inline-block w-6 rounded-full"
+                style={{ height: 4, backgroundColor: BARVA_JANTAR }}
               />
               trasa
             </span>
             <span className="inline-flex min-h-[44px] items-center gap-1.5">
               <span
                 aria-hidden="true"
-                className="inline-block h-1 w-6 rounded-full bg-jantar"
+                className="inline-block w-6 rounded-full"
+                style={{ height: 5, backgroundColor: BARVA_SMRK, opacity: 0.95 }}
               />
               vybraná
             </span>
@@ -512,7 +562,7 @@ function HeatmapaMapa({
       </div>
 
       <h3 className="mt-5 text-base font-extrabold tracking-tight">
-        Spárované trasy ({pocet})
+        {nadpis} ({pocet})
       </h3>
       <ul
         role="list"
@@ -529,22 +579,21 @@ function HeatmapaMapa({
                 }
                 aria-pressed={jeAktivni}
                 className={`flex min-h-[44px] w-full flex-col gap-0.5 rounded px-2 py-2 text-left transition-colors sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 ${
-                  jeAktivni ? "bg-jantar/10" : "hover:bg-linka/50"
+                  jeAktivni ? "bg-smrk/10" : "hover:bg-linka/50"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
                   <span
                     aria-hidden="true"
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full border border-inkoust ${
-                      jeAktivni ? "bg-jantar" : "bg-smrk"
-                    }`}
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-inkoust"
+                    style={{ backgroundColor: jeAktivni ? BARVA_SMRK : BARVA_JANTAR }}
                   />
                   <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                     {trasa.nazev}
                   </span>
                 </span>
                 <span className="pl-4 text-sm tabular-nums text-inkoust/70 sm:pl-0">
-                  {[trasa.datum, trasa.km !== null ? formatKm(trasa.km) : "bez km"]
+                  {[trasa.datum, trasa.km !== null ? formatKmZaokrouhlene(trasa.km) : "bez km"]
                     .filter((c) => c.length > 0)
                     .join(" · ")}
                 </span>

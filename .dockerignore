@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-server
+.git
+logs
+*.log
+.env*
+_tmp-*
+graphify-out
+.neon
+tests
+coverage

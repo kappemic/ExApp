@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { inicialyProAvatar, urlAvataruProZobrazeni } from "../lib/storage/avatar";
+import PostupnaFotka from "./fotky/PostupnaFotka";
 
 interface AvatarKruhProps {
   jmeno: string;
@@ -28,14 +29,13 @@ export default function AvatarKruh({
 
   if (ukazFoto) {
     return (
-      <img
+      <PostupnaFotka
         src={cisty}
         alt=""
         width={36}
         height={36}
-        loading="lazy"
         onError={() => setRozbity(true)}
-        className="avatar-kruh h-9 w-9 shrink-0 grow-0 basis-9 rounded-full border-2 border-inkoust object-cover"
+        className="avatar-kruh h-9 w-9 shrink-0 grow-0 basis-9 rounded-full border border-linka object-cover"
       />
     );
   }
@@ -44,7 +44,7 @@ export default function AvatarKruh({
     <span
       aria-hidden="true"
       title={jmeno}
-      className={`avatar-kruh flex h-9 w-9 shrink-0 grow-0 basis-9 select-none items-center justify-center rounded-full border-2 border-inkoust text-[13px] font-extrabold ${barva}`}
+      className={`avatar-kruh flex h-9 w-9 shrink-0 grow-0 basis-9 select-none items-center justify-center rounded-full border border-linka text-[13px] font-bold ${barva}`}
     >
       {inicialyProAvatar(jmeno)}
     </span>

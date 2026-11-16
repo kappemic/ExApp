@@ -11,10 +11,12 @@
  * Bytes are loaded from the app stream (`/soubor`), never from an R2 host.
  */
 
+import { apiBase } from "./api-base";
+import { volitelnyRozmer } from "./fotky-rozmery";
+import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 import {
   albumFotkaSouborPath,
   fotkaSouborPath,
-  jeApiChyba,
   type ApiAlbum,
   type ApiAlbumFotka,
   type DruhAlba,
@@ -29,23 +31,9 @@ export type AlbaVysledek<T> =
   | { ok: true; data: T }
   | { ok: false; chyba: string };
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
-
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
 
 function chybaZTela(telo: unknown, nahradni: string): AlbaVysledek<never> {
-  if (jeApiChyba(telo)) return { ok: false, chyba: telo.error.message };
-  return { ok: false, chyba: nahradni };
+  return { ok: false, chyba: chybaZApiTela(telo, nahradni).chyba };
 }
 
 function jeDruh(hodnota: unknown): hodnota is DruhAlba {
@@ -89,6 +77,8 @@ function normalizujFotku(hodnota: unknown): ApiAlbumFotka | null {
   if (!jeFotka(hodnota)) return null;
   const expeditionId = radek["expeditionId"];
   const albumId = radek["albumId"];
+  const sirka = volitelnyRozmer(radek["sirka"]);
+  const vyska = volitelnyRozmer(radek["vyska"]);
   return {
     id: radek["id"] as string,
     url: radek["url"] as string,
@@ -96,6 +86,7 @@ function normalizujFotku(hodnota: unknown): ApiAlbumFotka | null {
     jeNahled: radek["jeNahled"] as boolean,
     expeditionId: expeditionId === undefined ? null : (expeditionId as string | null),
     albumId: albumId === undefined ? null : (albumId as string | null),
+    ...(sirka !== undefined && vyska !== undefined ? { sirka, vyska } : {}),
   };
 }
 
@@ -185,7 +176,7 @@ export async function nactiAlba(): Promise<AlbaVysledek<ApiAlbum[]>> {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (!odpoved.ok) return chybaZTela(telo, "Alba se nepodařilo načíst.");
     if (typeof telo !== "object" || telo === null) {
       return { ok: false, chyba: "Alba se nepodařilo načíst." };
@@ -214,7 +205,7 @@ export async function nactiFotkyAlba(albumId: string): Promise<AlbaVysledek<ApiA
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 404) {
       return { ok: false, chyba: "Tohle album tu není." };
     }
@@ -253,7 +244,7 @@ export async function vytvorAlbum(nazev: string): Promise<AlbaVysledek<ApiAlbum 
       },
       body: JSON.stringify({ nazev }),
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 401 || odpoved.status === 403) {
       return chybaZTela(telo, "Nové album může založit jen vedoucí.");
     }
@@ -278,7 +269,7 @@ export async function smazAlbum(albumId: string): Promise<AlbaVysledek<null>> {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 401 || odpoved.status === 403) {
       return chybaZTela(telo, "Album může smazat jen vedoucí.");
     }
@@ -305,7 +296,7 @@ export async function obnovFotkuZKose(fotkaId: string): Promise<AlbaVysledek<nul
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 401 || odpoved.status === 403) {
       return chybaZTela(telo, "Fotku může obnovit jen vedoucí.");
     }
@@ -331,7 +322,7 @@ export async function trvaleSmazFotkuZKose(fotkaId: string): Promise<AlbaVyslede
       credentials: "include",
       headers: { Accept: "application/json" },
     });
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 401 || odpoved.status === 403) {
       return chybaZTela(telo, "Fotku může smazat jen vedoucí.");
     }
@@ -362,7 +353,7 @@ export async function smazFotkuAlba(
         headers: { Accept: "application/json" },
       },
     );
-    const telo = await ctiTelo(odpoved);
+    const telo = await ctiJsonTelo(odpoved);
     if (odpoved.status === 401 || odpoved.status === 403) {
       return chybaZTela(telo, "Fotku může smazat jen vedoucí.");
     }
@@ -392,7 +383,7 @@ export async function nahrajFotku(albumId: string, soubor: File): Promise<AlbaVy
       body: telo,
     });
     if (odpoved.ok) return { ok: true, data: null };
-    const json = await ctiTelo(odpoved);
+    const json = await ctiJsonTelo(odpoved);
     return chybaZTela(json, "Fotku se nepodařilo nahrát.");
   } catch {
     return { ok: false, chyba: "Bez připojení fotku nahrát nejde." };

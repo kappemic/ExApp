@@ -1,3 +1,5 @@
+import { apiBase } from "./api-base";
+import { ctiJsonTelo } from "./api-odpoved";
 /**
  * Tenká read vrstva pro osobní statistiky (Fáze 4, Krok 3).
  *
@@ -28,19 +30,7 @@ export interface StatistikyResult {
   errorCode?: StatistikyErrorCode;
 }
 
-function apiBase(): string {
-  const raw: unknown = import.meta.env.VITE_API_BASE_URL;
-  if (typeof raw !== "string") return "";
-  return raw.trim().replace(/\/+$/, "");
-}
 
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
 
 /** Prázdné statistiky pro nováčka / fallback (nuly + [], nikdy nevyhazuje). */
 export function prazdneStatistiky(): StatistikyResponse {
@@ -83,7 +73,7 @@ export async function getMojeStatistiky(): Promise<StatistikyResult> {
       errorCode: "BACKEND_CHYBA",
     };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!jeStatistikyOdpoved(telo)) {
     return {
       data: prazdneStatistiky(),

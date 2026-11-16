@@ -16,11 +16,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  filtrujPolozkyZalozky,
   jePinnedKanal,
+  maNeprecteneVZalozce,
   popisekNeprectenychKonverzace,
   prevedNaPolozky,
   seradKonverzace,
+  textNahleduKonverzace,
   vyberNazevKonverzace,
+  zalozkaProKanal,
 } from "../src/components/chat/ConversationList";
 import {
   muzeOdeslatComposer,
@@ -37,7 +41,11 @@ import {
   vytvorWorstCaseKonverzace,
   vytvorWorstCaseNazvy,
 } from "../src/pages/ChatPage";
-import type { ApiKonverzace, ApiZprava } from "../src/lib/diskuze-api";
+import {
+  mapaNeprectenychVyprav,
+  pocetVlakenSNeprectenymi,
+} from "../src/hooks/useKonverzacePrehled";
+import type { ApiKonverzace, ApiZprava } from "../src/shared/api-types";
 
 const ADRESAR_TESTU: string = dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +60,7 @@ function zprava(cast: Partial<ApiZprava> & { id: string }): ApiZprava {
     authorName: "Jan Novák",
     channel: "expedice",
     text: "Ahoj",
+    prilohy: [],
     createdAt: "2026-10-14T10:00:00.000Z",
     ...cast,
   };
@@ -177,7 +186,73 @@ describe("ConversationList pure: řazení (pinned nahoře)", () => {
   });
 });
 
+describe("ConversationList pure: záložky", () => {
+  function radek(
+    key: string,
+    channel: "dulezite" | "general" | "expedice" | "soukrome",
+    unreadCount: number,
+    expeditionId: string | null = null,
+  ): ReturnType<typeof prevedNaPolozky>[number] {
+    return {
+      key,
+      nazev: key,
+      channel,
+      expeditionId,
+      pinned: channel === "dulezite" || channel === "general",
+      lastMessageNazev: "",
+      lastMessageText: "",
+      lastMessagePriloha: "",
+      lastMessageAt: null,
+      unreadCount,
+    };
+  }
+
+  const polozky = [
+    radek("dulezite", "dulezite", 1),
+    radek("general", "general", 0),
+    radek("expedice:brdy", "expedice", 2, "brdy"),
+    radek("soukrome:a:b", "soukrome", 0),
+  ];
+
+  it("výprava není ve skupinách", () => {
+    expect(zalozkaProKanal("expedice")).toBe("vypravy");
+    expect(filtrujPolozkyZalozky(polozky, "skupiny").map((p) => p.key)).toEqual([
+      "dulezite",
+      "general",
+    ]);
+    expect(filtrujPolozkyZalozky(polozky, "vypravy").map((p) => p.key)).toEqual([
+      "expedice:brdy",
+    ]);
+    expect(maNeprecteneVZalozce(polozky, "vypravy")).toBe(true);
+    expect(maNeprecteneVZalozce(polozky, "clenove")).toBe(false);
+  });
+
+  it("přehled počítá vlákna a mapu výprav", () => {
+    expect(pocetVlakenSNeprectenymi(polozky)).toBe(2);
+    const mapa = mapaNeprectenychVyprav(polozky);
+    expect(mapa.get("brdy")).toBe(true);
+    expect(mapa.has("dulezite")).toBe(false);
+  });
+});
+
 describe("ConversationList pure: badge + pluralizace", () => {
+  it("soubor bez textu je v náhledu, prázdné vlákno zůstane prázdné", () => {
+    expect(
+      textNahleduKonverzace({
+        lastMessageNazev: "Ty",
+        lastMessageText: "",
+        lastMessagePriloha: "poznamka.txt",
+      }),
+    ).toBe("Ty: poznamka.txt");
+    expect(
+      textNahleduKonverzace({
+        lastMessageNazev: "",
+        lastMessageText: "",
+        lastMessagePriloha: "",
+      }),
+    ).toBe("Zatím bez zpráv — začni první vzkazem.");
+  });
+
   it("1 nepřečtená / 2–4 nepřečtené / 5+ nepřečtených", () => {
     expect(popisekNeprectenychKonverzace(1)).toBe("1 nepřečtená zpráva");
     expect(popisekNeprectenychKonverzace(3)).toBe("3 nepřečtené zprávy");
@@ -278,6 +353,8 @@ describe("break-ui worst-case: 0 zpráv + dlouhá jména nerozbijí layout", () 
 describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
   it("seznam: listbox + option + selected + badge role=status", () => {
     const zdroj: string = ctiZdroj("src/components/chat/ConversationList.tsx");
+    expect(zdroj).toContain('role="tablist"');
+    expect(zdroj).toContain("Výpravy");
     expect(zdroj).toContain('role="listbox"');
     expect(zdroj).toContain('role="option"');
     expect(zdroj).toContain("aria-selected");
@@ -300,11 +377,11 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
     expect(zdroj).toContain("oznacKonverzaciJakoPrectenou");
   });
 
-  it("bublina: hlavička authorName + Ty jen pro jeMoje (žádné plošné Ty)", () => {
+  it("bublina: hlavička nese jméno, bez odznaku ty", () => {
     const zdroj: string = ctiZdroj("src/components/chat/ZpravaBublina.tsx");
     expect(zdroj).toContain("autorPopisek");
-    expect(zdroj).toContain("{jeMoje &&");
     expect(zdroj).toContain("skrytHlavicku");
+    expect(zdroj).not.toContain(">ty<");
     expect(zdroj).not.toContain("dangerouslySetInnerHTML");
   });
 
@@ -339,6 +416,8 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
     const composer: string = ctiZdroj("src/components/chat/Composer.tsx");
     expect(composer).toContain("text-base");
     expect(composer).toContain('enterKeyHint="send"');
+    expect(composer).toContain('udalost.key !== "Enter"');
+    expect(composer).toContain("requestSubmit");
     const detail: string = ctiZdroj("src/components/chat/KonverzaceDetail.tsx");
     expect(detail).toContain("env(safe-area-inset-bottom");
     expect(detail).toContain("overscroll-contain");

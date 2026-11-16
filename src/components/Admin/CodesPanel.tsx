@@ -122,12 +122,12 @@ export default function CodesPanel(): JSX.Element {
             onChange={(e) => setPoznamka(e.target.value)}
             placeholder="Třeba Nováčci – říjen"
             maxLength={VALIDACE.poznamkaMaxDelka}
-            className="min-h-[44px] w-full flex-1 rounded-md border-2 border-linka bg-white px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none"
+            className="min-h-[44px] w-full flex-1 rounded-xl border border-pole bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none"
           />
           <button
             type="submit"
             disabled={generuji}
-            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2.5 text-sm font-bold text-papir transition-colors hover:bg-inkoust disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 py-2.5 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
           >
             {generuji ? "Generuji…" : "Vygenerovat kód"}
           </button>
@@ -150,7 +150,7 @@ export default function CodesPanel(): JSX.Element {
       {serazene.length === 0 ? (
         <div
           role="status"
-          className="rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-10 text-center shadow-denik"
+          className="rounded-lg border-2 border-inkoust/30 bg-white/60 px-6 py-10 text-center shadow-denik"
         >
           <h2 className="text-base font-bold">Zatím žádný kód</h2>
           <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">

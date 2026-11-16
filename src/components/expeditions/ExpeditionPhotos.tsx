@@ -10,9 +10,12 @@ import {
   type ApiFotka,
 } from "../../lib/expedition-fotky";
 import ConfirmDialog from "../kalendar/ConfirmDialog";
+import { KostraFotky } from "../StrankaKostra";
 import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
 import MazaniVyberVrstva from "../fotky/MazaniVyberVrstva";
 import PapirObal from "../fotky/PapirObal";
+import FotkyRadkovaMrizka from "../fotky/FotkyRadkovaMrizka";
+import PostupnaFotka from "../fotky/PostupnaFotka";
 import { useFotkyMazani } from "../../hooks/useFotkyMazani";
 import {
   idsFotekKeSmazani,
@@ -22,7 +25,7 @@ import {
 import FotkyLightbox, { jeFotkyLightboxOtevreny } from "./FotkyLightbox";
 import {
   fotkyHoverBgLinka,
-  fotkyHoverBgSmrkPlne,
+  fotkyHoverBgOkrPlne,
   fotkyHoverOpacity,
   fotkyMrizkaDlazdice,
   fotkyTlacitkoZaklad,
@@ -286,7 +289,7 @@ export default function ExpeditionPhotos({
     galerieOtevrena && typeof document !== "undefined"
       ? createPortal(
           <div
-            className={`fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-3 sm:items-center${
+            className={`nocturne fixed inset-0 z-[80] flex items-end justify-center bg-inkoust/50 p-3 sm:items-center${
               denik ? ` nahled-ovladani${galerieZavira ? " nahled-zavira" : ""}` : ""
             }`}
             onMouseDown={zavriGalerii}
@@ -363,82 +366,82 @@ export default function ExpeditionPhotos({
                       : "Zatím tu není žádná fotka."}
                   </p>
                 ) : (
-                  <ul role="list" className="grid grid-cols-2 gap-2">
-                    {fotky.map((fotka, poradi) => {
+                  <FotkyRadkovaMrizka
+                    fotky={fotky}
+                    className="-mx-3 w-[calc(100%+1.5rem)]"
+                    render={(fotka, _rozmer, nahlasRozmer) => {
+                      const poradi = fotky.findIndex((polozka) => polozka.id === fotka.id);
                       const jeNahled: boolean = fotka.jeNahled;
                       const vybrana: boolean = mazani.vybrane.has(fotka.id);
                       const rozbita: boolean = rozbite[fotka.id] === true;
                       const popisekFotky = `Otevřít fotku ${poradi + 1} z ${fotky.length}`;
-                      return (
-                        <li key={fotka.id} className="min-w-0">
-                          {mazani.mazaciRezim ? (
-                            <button
-                              type="button"
-                              aria-pressed={vybrana}
-                              aria-label="Vybrat fotku ke smazání"
-                              onClick={() => {
-                                mazani.prepniVyber(fotka.id);
+                      if (mazani.mazaciRezim) {
+                        return (
+                          <button
+                            type="button"
+                            aria-pressed={vybrana}
+                            aria-label="Vybrat fotku ke smazání"
+                            onClick={() => {
+                              mazani.prepniVyber(fotka.id);
+                            }}
+                            className={`group ${fotkyMrizkaDlazdice}`}
+                          >
+                            <ObrazekFotky
+                              expeditionId={expeditionId}
+                              fotkaId={fotka.id}
+                              rozbita={rozbita}
+                              bezOdkazu
+                              onRozmer={nahlasRozmer}
+                              onRozbita={() => {
+                                setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
                               }}
-                              className={`group ${fotkyMrizkaDlazdice} ${
-                                vybrana
-                                  ? "border-jantar ring-2 ring-jantar/30"
-                                  : jeNahled
-                                    ? "border-inkoust"
-                                    : "border-inkoust/40"
-                              }`}
-                            >
-                              <ObrazekFotky
-                                expeditionId={expeditionId}
-                                fotkaId={fotka.id}
-                                rozbita={rozbita}
-                                bezOdkazu
-                                onRozbita={() => {
-                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
-                                }}
-                                className="absolute inset-0 h-full w-full object-cover"
-                              />
-                              <MazaniVyberVrstva vybrana={vybrana} />
-                            </button>
-                          ) : rozbita ? (
-                            <div
-                              className={`${fotkyMrizkaDlazdice} border-inkoust/40`}
-                              aria-current={jeNahled ? "true" : undefined}
-                            >
-                              <ObrazekFotky
-                                expeditionId={expeditionId}
-                                fotkaId={fotka.id}
-                                rozbita
-                                onRozbita={() => {
-                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
-                                }}
-                                className="absolute inset-0 h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setLightboxId(fotka.id)}
-                              aria-label={popisekFotky}
-                              aria-current={jeNahled ? "true" : undefined}
-                              className={`${fotkyMrizkaDlazdice} ${
-                                jeNahled ? "border-inkoust" : "border-inkoust/40"
-                              }`}
-                            >
-                              <ObrazekFotky
-                                expeditionId={expeditionId}
-                                fotkaId={fotka.id}
-                                rozbita={false}
-                                onRozbita={() => {
-                                  setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
-                                }}
-                                className="absolute inset-0 h-full w-full object-cover"
-                              />
-                            </button>
-                          )}
-                        </li>
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                            <MazaniVyberVrstva vybrana={vybrana} />
+                          </button>
+                        );
+                      }
+                      if (rozbita) {
+                        return (
+                          <div
+                            className={`${fotkyMrizkaDlazdice} bg-inkoust/5`}
+                            aria-current={jeNahled ? "true" : undefined}
+                          >
+                            <ObrazekFotky
+                              expeditionId={expeditionId}
+                              fotkaId={fotka.id}
+                              rozbita
+                              onRozmer={nahlasRozmer}
+                              onRozbita={() => {
+                                setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                              }}
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxId(fotka.id)}
+                          aria-label={popisekFotky}
+                          aria-current={jeNahled ? "true" : undefined}
+                          className={`${fotkyMrizkaDlazdice} bg-inkoust/5`}
+                        >
+                          <ObrazekFotky
+                            expeditionId={expeditionId}
+                            fotkaId={fotka.id}
+                            rozbita={false}
+                            onRozmer={nahlasRozmer}
+                            onRozbita={() => {
+                              setRozbite((prev) => ({ ...prev, [fotka.id]: true }));
+                            }}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                        </button>
                       );
-                    })}
-                  </ul>
+                    }}
+                  />
                 )}
 
                 {nahledChyba !== null && (
@@ -460,7 +463,7 @@ export default function ExpeditionPhotos({
                       void naPridat();
                     }}
                   >
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/55">
+                    <p className="text-sm font-semibold text-mech">
                       Přidat fotku
                     </p>
                     <label htmlFor={souborPoleId} className="sr-only">
@@ -477,7 +480,7 @@ export default function ExpeditionPhotos({
                       }}
                       aria-invalid={chybaSouboru !== null}
                       aria-describedby={chybaSouboru !== null ? `${souborPoleId}-chyba` : undefined}
-                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-full file:border-2 file:border-inkoust file:bg-papir file:px-4 file:text-sm file:font-bold"
+                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-xl file:border-2 file:border-inkoust file:bg-papir file:px-4 file:text-sm file:font-bold"
                     />
                     {soubory.length > 0 && (
                       <p className="mt-1 text-[13px] text-inkoust/70">
@@ -505,7 +508,7 @@ export default function ExpeditionPhotos({
                     <button
                       type="submit"
                       disabled={odesilaSe}
-                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrkPlne} mt-3 w-full rounded-full border-2 border-inkoust bg-smrk px-5 text-sm font-bold text-papir disabled:opacity-60`}
+                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgOkrPlne} mt-3 w-full rounded-full border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust disabled:opacity-60`}
                     >
                       {odesilaSe ? "Nahrávám…" : "Nahrát fotky"}
                     </button>
@@ -519,20 +522,18 @@ export default function ExpeditionPhotos({
       : null;
 
   return (
-    <section aria-labelledby={nadpisId} className="mt-5">
+    <section aria-labelledby={nadpisId} className="mt-5 flex h-full flex-col rounded-2xl border border-pole bg-papir p-4">
       <h3
         id={nadpisId}
-        className="text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60"
+        className="font-display text-xl font-bold text-inkoust"
       >
         Fotky z výpravy
       </h3>
 
       {stav === "nacitani" && (
-        <div
-          className="mt-2 h-40 animate-pulse rounded-2xl border-2 border-inkoust/15 bg-inkoust/10 motion-reduce:animate-none"
-          aria-busy="true"
-          aria-label="Načítám fotky"
-        />
+        <div className="mt-2">
+          <KostraFotky pocet={4} />
+        </div>
       )}
 
       {stav === "chyba" && (
@@ -551,7 +552,7 @@ export default function ExpeditionPhotos({
       )}
 
       {stav === "hotovo" && (nahled !== null || !denik) && (
-        <div className="mt-2 overflow-hidden rounded-2xl border-2 border-inkoust bg-papir">
+        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-mlha">
           <PapirObal
             src={nahled !== null ? urlSouboruFotky(expeditionId, nahled.id) : null}
             alt="Fotka z výpravy"
@@ -569,7 +570,7 @@ export default function ExpeditionPhotos({
             setGalerieZavira(false);
             setGalerieOtevrena(true);
           }}
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} mt-3 w-full rounded-full border-2 border-inkoust bg-papir px-5 text-sm font-bold text-inkoust`}
+          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} mt-3 w-full rounded-xl bg-mlha px-6 text-base font-semibold text-inkoust`}
         >
           Všechny fotky ({pocet})
         </button>
@@ -629,6 +630,7 @@ function ObrazekFotky({
   fotkaId,
   rozbita,
   onRozbita,
+  onRozmer,
   className,
   bezOdkazu = false,
 }: {
@@ -636,6 +638,7 @@ function ObrazekFotky({
   fotkaId: string;
   rozbita: boolean;
   onRozbita: () => void;
+  onRozmer?: (sirka: number, vyska: number) => void;
   className: string;
   /** Skip the fallback link when the image sits inside another button. */
   bezOdkazu?: boolean;
@@ -643,7 +646,7 @@ function ObrazekFotky({
   const src: string = urlSouboruFotky(expeditionId, fotkaId);
   if (rozbita) {
     return (
-      <div className="flex h-28 w-full flex-col items-center justify-center bg-papir px-2 text-center">
+      <div className="flex h-full w-full flex-col items-center justify-center bg-inkoust/5 px-2 text-center">
         <p role="status" className="text-[12px] font-semibold text-inkoust/70">
           Fotku se nepodařilo načíst.
         </p>
@@ -661,11 +664,12 @@ function ObrazekFotky({
     );
   }
   return (
-    <img
+    <PostupnaFotka
       src={src}
       alt="Fotka z výpravy"
       loading="lazy"
       className={className}
+      onRozmer={onRozmer}
       onError={onRozbita}
     />
   );

@@ -11,10 +11,15 @@
  */
 
 import type { Request } from "express";
-import type { Zprava } from "../../drizzle/schema/zpravy";
+import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from "drizzle-orm";
+import { users } from "../../drizzle/schema/users";
+import { zpravy, type Zprava } from "../../drizzle/schema/zpravy";
+import type { Db } from "./db";
+import { nactiMapuPriloh } from "./zprava-prilohy";
 import type {
   ApiKonverzace,
   ApiZprava,
+  ApiZpravaPriloha,
   KanalDiskuze,
 } from "../../src/shared/api-types";
 
@@ -62,7 +67,7 @@ export function slozZobrazovaneJmeno(profil: ProfilProJmeno): string {
   if (cele.length > 0) return cele;
   const nick: string = typeof profil.discordNick === "string" ? profil.discordNick.trim() : "";
   if (nick.length > 0) return nick;
-  return profil.email.trim();
+  return "Člen";
 }
 
 /**
@@ -97,6 +102,33 @@ export function smiPsatKanal(
   return true;
 }
 
+/**
+ * Page of an ASC thread. `konec` keeps the latest `limit` rows so a live
+ * poll sees new messages instead of the oldest page.
+ */
+export function orezStrankuZprav(
+  vlakno: readonly ApiZprava[],
+  limit: number,
+  cursor: string | null,
+  konec: boolean,
+): { zpravy: ApiZprava[]; nextCursor: string | null } {
+  if (konec) {
+    const zpravy: ApiZprava[] = vlakno.slice(Math.max(0, vlakno.length - limit));
+    return { zpravy, nextCursor: null };
+  }
+  let start = 0;
+  if (cursor !== null) {
+    const idx: number = vlakno.findIndex((zprava) => zprava.id === cursor);
+    start = idx === -1 ? 0 : idx + 1;
+  }
+  const zpravy: ApiZprava[] = vlakno.slice(start, start + limit);
+  const zbyva: boolean = start + limit < vlakno.length;
+  return {
+    zpravy,
+    nextCursor: zbyva && zpravy.length > 0 ? (zpravy[zpravy.length - 1]?.id ?? null) : null,
+  };
+}
+
 /** Klíč konverzace pro řádek (`dulezite`|`general`|`expedice:<slug>`). */
 export function klicKonverzaceProRadek(
   channel: KanalDiskuze,
@@ -107,13 +139,42 @@ export function klicKonverzaceProRadek(
 }
 
 /**
+ * A message is unread when it is newer than the last read mark.
+ * With no mark, everything counts — except messages at or before the
+ * account was created (`ucetOd`). Those were never "new" for this user.
+ */
+export function jeZpravaNeprectena(
+  createdAt: string,
+  lastReadAt: string | null | undefined,
+  ucetOd: string | null | undefined = null,
+  autorId: string | null | undefined = null,
+  viewerId: string | null | undefined = null,
+): boolean {
+  if (
+    viewerId !== undefined &&
+    viewerId !== null &&
+    viewerId.length > 0 &&
+    autorId !== undefined &&
+    autorId !== null &&
+    autorId.toLowerCase() === viewerId.toLowerCase()
+  ) {
+    return false;
+  }
+  if (ucetOd !== undefined && ucetOd !== null && createdAt <= ucetOd) return false;
+  if (lastReadAt === undefined || lastReadAt === null) return true;
+  return createdAt > lastReadAt;
+}
+
+/**
  * Seskupí zprávy do tvaru GET konverzace (čistá funkce bez DB).
  * `precteni` = mapa `key → lastReadAt ISO` přihlášeného (anonym `{}` → 0).
- * `lastMessage` = MAX(createdAt); `unreadCount` = zprávy s časem > lastRead.
+ * `lastMessage` = MAX(createdAt); `unreadCount` = zprávy po lastRead a po vzniku účtu.
  */
 export function seskupKonverzace(
   zpravySeznam: ReadonlyArray<ApiZprava>,
   precteni: Readonly<Record<string, string>>,
+  ucetOd: string | null = null,
+  viewerId: string | null = null,
 ): ApiKonverzace[] {
   const skupiny = new Map<string, ApiKonverzace>();
   const serazene: ApiZprava[] = [...zpravySeznam].sort((a, b) =>
@@ -139,18 +200,267 @@ export function seskupKonverzace(
     const key = klicKonverzaceProRadek(zprava.channel, zprava.expeditionId);
     const konverzace = skupiny.get(key);
     if (konverzace === undefined) continue;
-    const lastRead: string | undefined = precteni[key];
-    if (lastRead === undefined || zprava.createdAt > lastRead) {
+    if (jeZpravaNeprectena(zprava.createdAt, precteni[key], ucetOd, zprava.autorId, viewerId)) {
       konverzace.unreadCount += 1;
     }
   }
   return [...skupiny.values()].sort((a, b) => (a.key > b.key ? 1 : a.key < b.key ? -1 : 0));
 }
 
+const UUID_ZPRAVY =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One page of a thread. `konec` returns the latest `limit` rows in ASC order.
+ * An unknown cursor starts at the beginning, matching `orezStrankuZprav`.
+ */
+export async function nactiStrankuZprav(
+  db: Db,
+  filtr: SQL,
+  limit: number,
+  cursor: string | null,
+  konec: boolean,
+): Promise<{ radky: Zprava[]; nextCursor: string | null }> {
+  if (konec) {
+    const nejnovejsi = await db
+      .select()
+      .from(zpravy)
+      .where(filtr)
+      .orderBy(desc(zpravy.createdAt), desc(zpravy.id))
+      .limit(limit);
+    return { radky: nejnovejsi.reverse(), nextCursor: null };
+  }
+  let where: SQL = filtr;
+  if (cursor !== null && UUID_ZPRAVY.test(cursor)) {
+    const kotva = await db
+      .select({ id: zpravy.id, createdAt: zpravy.createdAt })
+      .from(zpravy)
+      .where(and(filtr, eq(zpravy.id, cursor)))
+      .limit(1);
+    const radek = kotva[0];
+    if (radek !== undefined) {
+      const poKotve = or(
+        gt(zpravy.createdAt, radek.createdAt),
+        and(eq(zpravy.createdAt, radek.createdAt), gt(zpravy.id, radek.id)),
+      );
+      const slozene = and(filtr, poKotve);
+      if (slozene !== undefined) where = slozene;
+    }
+  }
+  const nactene = await db
+    .select()
+    .from(zpravy)
+    .where(where)
+    .orderBy(asc(zpravy.createdAt), asc(zpravy.id))
+    .limit(limit + 1);
+  const zbyva = nactene.length > limit;
+  const radky = zbyva ? nactene.slice(0, limit) : nactene;
+  const posledni = radky[radky.length - 1];
+  return {
+    radky,
+    nextCursor: zbyva && posledni !== undefined ? posledni.id : null,
+  };
+}
+
+/** Read marks as a SQL relation `(key, last_read)`. Empty input yields no rows. */
+export function poddotazPrecteni(precteni: Readonly<Record<string, string>>): SQL {
+  const radky: SQL[] = [];
+  for (const [key, iso] of Object.entries(precteni)) {
+    if (iso.trim().length === 0) continue;
+    const datum = new Date(iso);
+    if (Number.isNaN(datum.getTime())) continue;
+    radky.push(sql`(${key}, ${datum.toISOString()}::timestamptz)`);
+  }
+  if (radky.length === 0) {
+    return sql`(SELECT NULL::text AS key, NULL::timestamptz AS last_read WHERE false)`;
+  }
+  return sql`(SELECT v.key, v.last_read FROM (VALUES ${sql.join(radky, sql`, `)}) AS v(key, last_read))`;
+}
+
+function datumZBunky(hodnota: unknown): Date | null {
+  if (hodnota instanceof Date && !Number.isNaN(hodnota.getTime())) return hodnota;
+  if (typeof hodnota === "string" || typeof hodnota === "number") {
+    const datum = new Date(hodnota);
+    if (!Number.isNaN(datum.getTime())) return datum;
+  }
+  return null;
+}
+
+function textZBunky(hodnota: unknown): string | null {
+  return typeof hodnota === "string" && hodnota.length > 0 ? hodnota : null;
+}
+
+function pocetZBunky(hodnota: unknown): number {
+  if (typeof hodnota === "number" && Number.isFinite(hodnota)) return hodnota;
+  if (typeof hodnota === "bigint") return Number(hodnota);
+  if (typeof hodnota === "string") {
+    const cislo = Number(hodnota);
+    if (Number.isFinite(cislo)) return cislo;
+  }
+  return 0;
+}
+
+/**
+ * Last message and unread count per channel, without loading the thread.
+ * Same rules as `seskupKonverzace` plus `jeZpravaNeprectena`.
+ */
+export async function nactiPrehledZprav(
+  db: Db,
+  viewerId: string | null,
+  precteni: Readonly<Record<string, string>>,
+  ucetOd: string | null,
+): Promise<ApiKonverzace[]> {
+  const posledni = await db.execute(sql`
+    SELECT DISTINCT ON (klic)
+      klic, id, expedice_id, kanal, autor_id, autor_jmeno, text, created_at
+    FROM (
+      SELECT
+        CASE
+          WHEN kanal = 'expedice' THEN 'expedice:' || expedice_id
+          ELSE kanal
+        END AS klic,
+        id,
+        expedice_id,
+        kanal,
+        autor_id::text AS autor_id,
+        autor_jmeno,
+        text,
+        created_at
+      FROM zpravy
+      WHERE smazano_at IS NULL
+    ) AS vlakno
+    ORDER BY klic, created_at DESC, id DESC
+  `);
+  const pocty = await db.execute(sql`
+    SELECT z.klic, count(*)::int AS pocet
+    FROM (
+      SELECT
+        CASE
+          WHEN kanal = 'expedice' THEN 'expedice:' || expedice_id
+          ELSE kanal
+        END AS klic,
+        created_at,
+        autor_id
+      FROM zpravy
+      WHERE smazano_at IS NULL
+    ) AS z
+    LEFT JOIN ${poddotazPrecteni(precteni)} AS p ON p.key = z.klic
+    WHERE (
+      ${viewerId}::text IS NULL
+      OR z.autor_id IS NULL
+      OR lower(z.autor_id::text) <> lower(${viewerId}::text)
+    )
+      AND (${ucetOd}::timestamptz IS NULL OR z.created_at > ${ucetOd}::timestamptz)
+      AND (p.last_read IS NULL OR z.created_at > p.last_read)
+    GROUP BY z.klic
+  `);
+  const neprectene = new Map<string, number>();
+  for (const radek of pocty.rows) {
+    const bunka = radek as { klic?: unknown; pocet?: unknown };
+    const klic = textZBunky(bunka.klic);
+    if (klic === null) continue;
+    neprectene.set(klic, pocetZBunky(bunka.pocet));
+  }
+  const radky: {
+    klic: string;
+    id: string;
+    expediceId: string | null;
+    kanal: string;
+    autorId: string | null;
+    autorJmeno: string;
+    text: string;
+    createdAt: Date;
+  }[] = [];
+  for (const surovy of posledni.rows) {
+    const bunka = surovy as {
+      klic?: unknown;
+      id?: unknown;
+      expedice_id?: unknown;
+      kanal?: unknown;
+      autor_id?: unknown;
+      autor_jmeno?: unknown;
+      text?: unknown;
+      created_at?: unknown;
+    };
+    const klic = textZBunky(bunka.klic);
+    const id = textZBunky(bunka.id);
+    const kanal = textZBunky(bunka.kanal);
+    const createdAt = datumZBunky(bunka.created_at);
+    if (klic === null || id === null || kanal === null || createdAt === null) continue;
+    if (typeof bunka.text !== "string") continue;
+    radky.push({
+      klic,
+      id,
+      expediceId: typeof bunka.expedice_id === "string" ? bunka.expedice_id : null,
+      kanal,
+      autorId: typeof bunka.autor_id === "string" ? bunka.autor_id : null,
+      autorJmeno: typeof bunka.autor_jmeno === "string" ? bunka.autor_jmeno : "",
+      text: bunka.text,
+      createdAt,
+    });
+  }
+  const autori = [...new Set(radky.flatMap((radek) => (radek.autorId === null ? [] : [radek.autorId])))];
+  const jmena = new Map<string, ProfilProJmeno>();
+  if (autori.length > 0) {
+    const profily = await db
+      .select({
+        id: users.id,
+        jmeno: users.jmeno,
+        prijmeni: users.prijmeni,
+        discordNick: users.discordNick,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(inArray(users.id, autori));
+    for (const profil of profily) {
+      jmena.set(profil.id, {
+        jmeno: profil.jmeno,
+        prijmeni: profil.prijmeni,
+        discordNick: profil.discordNick,
+        email: profil.email,
+        avatarUrl: profil.avatarUrl,
+      });
+    }
+  }
+  const prilohy = await nactiMapuPriloh(
+    db,
+    "zprava",
+    radky.map((radek) => radek.id),
+  );
+  const konverzace: ApiKonverzace[] = [];
+  for (const radek of radky) {
+    const api = toApiZprava(
+      {
+        id: radek.id,
+        expediceId: radek.expediceId,
+        kanal: radek.kanal,
+        autorId: radek.autorId,
+        autorJmeno: radek.autorJmeno,
+        text: radek.text,
+        createdAt: radek.createdAt,
+        smazanoAt: null,
+      },
+      radek.autorId === null ? null : (jmena.get(radek.autorId) ?? null),
+      prilohy.get(radek.id) ?? [],
+    );
+    if (api === null) continue;
+    konverzace.push({
+      key: radek.klic,
+      expeditionId: api.expeditionId,
+      channel: api.channel,
+      lastMessage: api,
+      unreadCount: neprectene.get(radek.klic) ?? 0,
+    });
+  }
+  return konverzace;
+}
+
 /** DB řádek `zpravy` + JOIN `users` → veřejná `ApiZprava`; nevalidní → null. */
 export function toApiZprava(
   radek: Zprava,
   autor: ProfilProJmeno | null = null,
+  prilohy: readonly ApiZpravaPriloha[] = [],
 ): ApiZprava | null {
   if (typeof radek.id !== "string" || radek.id.length === 0) return null;
   const surovyKanal: unknown = (radek as { kanal?: unknown }).kanal;
@@ -190,6 +500,7 @@ export function toApiZprava(
     authorAvatarUrl: verejnyAvatarUrl(autor?.avatarUrl),
     channel,
     text: radek.text,
+    prilohy: prilohy.map((priloha) => ({ ...priloha })),
     createdAt: radek.createdAt.toISOString(),
   };
 }
@@ -227,13 +538,11 @@ export function smiPoslatZpravu(ip: string, ted: number = Date.now()): boolean {
   return true;
 }
 
-/** IP klienta pro rate-limit (X-Forwarded-For má přednost za proxy). */
+/**
+ * Client IP for rate limits. Express `trust proxy` already resolved `req.ip`.
+ * The raw X-Forwarded-For header is not read, so a caller cannot pick the bucket.
+ */
 export function ctiIpZRequestu(req: Request): string {
-  const hlavicka: unknown = req.headers["x-forwarded-for"];
-  if (typeof hlavicka === "string" && hlavicka.trim().length > 0) {
-    const prvni = hlavicka.split(",")[0];
-    if (prvni !== undefined && prvni.trim().length > 0) return prvni.trim();
-  }
   if (typeof req.ip === "string" && req.ip.trim().length > 0) return req.ip.trim();
   return "neznama";
 }
@@ -255,10 +564,10 @@ export function ctiIpZRequestu(req: Request): string {
 export function jeVlaknoNeprectene(
   latestMessageAt: string | null,
   lastReadAt: string | null,
+  ucetOd: string | null = null,
 ): boolean {
   if (latestMessageAt === null) return false;
-  if (lastReadAt === null) return true;
-  return latestMessageAt > lastReadAt;
+  return jeZpravaNeprectena(latestMessageAt, lastReadAt, ucetOd);
 }
 
 /** Anonymní meta — lastReadAt null, unread vždy false (bez personalizace). */

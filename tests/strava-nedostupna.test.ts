@@ -105,7 +105,7 @@ describe("strava.ts rozlišuje výpadek od vnitřní chyby", () => {
 
 describe("GET /api/strava/neparovane → 502, ostatní chyby beze změny", () => {
   it("catch posílá STRAVA_NEDOSTUPNA a loguje jen event + endpoint", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.lastIndexOf("/api/strava/neparovane");
     expect(pozice).toBeGreaterThan(-1);
     const okoli = obsah.slice(pozice, pozice + 5000);
@@ -124,7 +124,7 @@ describe("GET /api/strava/neparovane → 502, ostatní chyby beze změny", () =>
   });
 
   it("401 / 403 / 409 větve zůstávají (přihlášení, práva, uzavření, duplicita)", () => {
-    const obsah = cti("server/src/index.ts");
+    const obsah = cti("server/src/strava-routes.ts");
     const pozice = obsah.indexOf("/api/strava/neparovane");
     expect(pozice).toBeGreaterThan(-1);
     const pred = obsah.slice(Math.max(0, pozice - 500), pozice + 3000);

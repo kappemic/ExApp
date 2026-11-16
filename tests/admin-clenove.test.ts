@@ -121,6 +121,7 @@ describe("nactiCleny — guard/mapper se skola/trida/discordNick (mock fetch, be
       clenstvi: "clen",
       funkce: null,
       isAdmin: false,
+      isSuperadmin: false,
       skola: "ZŠ Lesní",
       trida: "5.A",
       discordNick: "anezka.hraje",
@@ -303,12 +304,12 @@ describe("smazClena — DELETE /api/users/:id (mock fetch, bez HTTP)", () => {
 
 describe("DELETE /api/users/:id — admin guard a zákaz vlastního účtu", () => {
   it("route hlídá vyzadujAdmina a porovná id session", () => {
-    const server = readFileSync("server/src/index.ts", "utf8");
+    const server = readFileSync("server/src/clenove-routes.ts", "utf8");
     const start = server.indexOf("app.delete(\"/api/users/:id\"");
     expect(start).toBeGreaterThan(-1);
     const konec = server.indexOf("app.delete(", start + 10);
     const route = server.slice(start, konec === -1 ? undefined : konec);
-    expect(route).toContain("vyzadujAdmina");
+    expect(route).toContain("vyzadujSuperadmina");
     expect(route).toContain("session.id === id");
     expect(route).toContain("Vlastní účet z administrace smazat nejde.");
   });
@@ -316,15 +317,16 @@ describe("DELETE /api/users/:id — admin guard a zákaz vlastního účtu", () 
 
 describe("GET /api/users — čtení pro přihlášené, úprava dál jen admin", () => {
   it("seznam hlídá přihlášení a mapper nese telefon", () => {
-    const server = readFileSync("server/src/index.ts", "utf8");
+    const server = readFileSync("server/src/clenove-routes.ts", "utf8");
     const start = server.indexOf("app.get(\"/api/users\"");
     expect(start).toBeGreaterThan(-1);
     const konec = server.indexOf("app.patch(\"/api/users/:id\"");
     const usek = server.slice(start, konec);
     expect(usek).toContain("vyzadujPrihlaseni");
     expect(usek).not.toContain("vyzadujAdmina");
+    expect(usek).toContain("vidiTelefonyClenu");
     expect(usek).toContain("telefon:");
     const patch = server.slice(konec, server.indexOf("app.delete(\"/api/users/:id\""));
-    expect(patch).toContain("vyzadujAdmina");
+    expect(patch).toContain("vyzadujSuperadmina");
   });
 });

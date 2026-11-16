@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import AlbumFotky from "../components/fotky/AlbumFotky";
+import { KostraAlba, KostraFotky } from "../components/StrankaKostra";
 import AlbumKarta from "../components/fotky/AlbumKarta";
 import FotkyNahravaciPanel from "../components/fotky/FotkyNahravaciPanel";
 import SlozkySeznam from "../components/fotky/SlozkySeznam";
@@ -21,6 +22,16 @@ type FotkyNavigacniStav = {
   rozbalNahravani?: boolean;
   ciloveAlbumId?: string;
 };
+
+const TLACITKO_ZNOVU = `${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} mt-4 rounded-md border-2 border-inkoust bg-papir px-4 text-sm font-bold`;
+
+function TlacitkoZnovu({ onZnovu }: { onZnovu: () => void }): JSX.Element {
+  return (
+    <button type="button" onClick={onZnovu} className={TLACITKO_ZNOVU}>
+      Zkusit znovu
+    </button>
+  );
+}
 
 export default function FotkyPage(): JSX.Element {
   const { albumId } = useParams<{ albumId: string }>();
@@ -99,7 +110,6 @@ export default function FotkyPage(): JSX.Element {
 
   const otevrene = alba.find((album) => album.id === albumId) ?? null;
   const zobrazitSlozky = stav === "hotovo" && alba.length > 0;
-  const vybraneAlbumId = albumId ?? vybraneId;
   const albumKeSmazani =
     isAdmin && otevrene !== null && otevrene.druh === "vlastni"
       ? otevrene
@@ -158,7 +168,7 @@ export default function FotkyPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 sm:px-6 sm:pt-10">
+    <main className="mx-auto w-full px-4 pb-8 pt-6 sm:px-6 sm:pt-10 lg:px-8 xl:px-12">
       <header className="border-b-2 border-inkoust pb-5">
         {albumId === undefined ? (
           <p className="text-sm font-medium text-mech">Školní expediční klub</p>
@@ -187,7 +197,7 @@ export default function FotkyPage(): JSX.Element {
         <FotkyNahravaciPanel
           isAdmin={isAdmin}
           alba={alba.filter((polozka) => polozka.druh !== "kos")}
-          vybraneId={vybraneAlbumId}
+          vybraneId={vybraneId}
           onVyber={setVybraneId}
           onNahrano={poNahrani}
           onVytvoreno={poNovemAlbu}
@@ -234,15 +244,15 @@ export default function FotkyPage(): JSX.Element {
             <>
               <div className="hidden lg:block">
                 {stav === "hotovo" && alba.length > 0 ? (
-                  <div
-                    role="status"
-                    className="rounded-lg border-2 border-dashed border-inkoust/35 bg-white/40 p-8 text-center"
-                  >
-                    <h2 className="text-base font-bold tracking-tight">Vyber složku vlevo</h2>
-                    <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
-                      Klikni na album ve složkách a uvidíš jeho fotky.
-                    </p>
-                  </div>
+                  <SeznamAlb
+                    alba={alba}
+                    stav={stav}
+                    chyba={chyba}
+                    jeAdmin={isAdmin}
+                    onZnovu={() => {
+                      setPokus((hodnota) => hodnota + 1);
+                    }}
+                  />
                 ) : null}
               </div>
               <div className="lg:hidden">
@@ -316,10 +326,8 @@ function StavSeznamuObsah({
 }): JSX.Element | null {
   if (stav === "nacitani" && jenPrazdnyNeboChyba) {
     return (
-      <div role="status" aria-label="Načítám alba" className="mt-4 space-y-3">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="h-14 animate-pulse rounded-lg border-2 border-inkoust/20 bg-white/60" />
-        ))}
+      <div className="mt-4">
+        <KostraAlba pocet={2} />
       </div>
     );
   }
@@ -328,13 +336,7 @@ function StavSeznamuObsah({
       <div role="alert" className="mt-4 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik">
         <h2 className="text-base font-bold tracking-tight">Alba se nepodařilo načíst</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">{chyba}</p>
-        <button
-          type="button"
-          onClick={onZnovu}
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} mt-4 rounded-md border-2 border-inkoust bg-papir px-4 text-sm font-bold`}
-        >
-          Zkusit znovu
-        </button>
+        <TlacitkoZnovu onZnovu={onZnovu} />
       </div>
     );
   }
@@ -368,11 +370,7 @@ function SeznamAlb({
 }): JSX.Element {
   if (stav === "nacitani") {
     return (
-      <div role="status" aria-label="Načítám alba" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-56 animate-pulse rounded-lg border-2 border-inkoust/20 bg-white/60" />
-        ))}
-      </div>
+      <KostraAlba pocet={3} />
     );
   }
 
@@ -381,13 +379,7 @@ function SeznamAlb({
       <div role="alert" className="rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik">
         <h2 className="text-base font-bold tracking-tight">Alba se nepodařilo načíst</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">{chyba}</p>
-        <button
-          type="button"
-          onClick={onZnovu}
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} mt-4 rounded-md border-2 border-inkoust bg-papir px-4 text-sm font-bold`}
-        >
-          Zkusit znovu
-        </button>
+        <TlacitkoZnovu onZnovu={onZnovu} />
       </div>
     );
   }
@@ -406,7 +398,7 @@ function SeznamAlb({
   }
 
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
       {alba.map((album) => (
         <AlbumKarta key={`${album.druh}:${album.id}`} album={album} />
       ))}
@@ -435,9 +427,7 @@ function DetailAlba({
 }): JSX.Element {
   if (stavSeznamu === "nacitani" && album === null) {
     return (
-      <p role="status" aria-busy="true" className="text-sm text-inkoust/70">
-        Načítám album…
-      </p>
+      <KostraFotky popisek="Načítám album" />
     );
   }
 
@@ -446,13 +436,7 @@ function DetailAlba({
       <div role="alert" className="rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik">
         <h2 className="text-base font-bold tracking-tight">Album se nepodařilo načíst</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">{chybaSeznamu}</p>
-        <button
-          type="button"
-          onClick={onZnovu}
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} mt-4 rounded-md border-2 border-inkoust bg-papir px-4 text-sm font-bold`}
-        >
-          Zkusit znovu
-        </button>
+        <TlacitkoZnovu onZnovu={onZnovu} />
       </div>
     );
   }
@@ -476,15 +460,13 @@ function DetailAlba({
 
   return (
     <>
-      <div className="rounded-lg border-2 border-inkoust bg-white/40 p-3 shadow-denik sm:p-4 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-        <AlbumFotky
-          key={albumId}
-          album={album}
-          obnova={obnova}
-          isAdmin={isAdmin}
-          onZmenaAlba={onZmenaAlba}
-        />
-      </div>
+      <AlbumFotky
+        key={albumId}
+        album={album}
+        obnova={obnova}
+        isAdmin={isAdmin}
+        onZmenaAlba={onZmenaAlba}
+      />
     </>
   );
 }

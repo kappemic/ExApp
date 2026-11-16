@@ -10,16 +10,16 @@ export default function NahledPrazdne({
   akce?: { popisek: string; onClick: () => void };
 }): JSX.Element {
   return (
-    <div role="status" className="text-left">
-      <p className="text-balance text-2xl font-light leading-tight">{nadpis}</p>
-      <p className="mt-2 max-w-[70ch] text-base leading-relaxed text-[hsl(var(--muted-foreground))]">
-        {text}
+    <div role="status" className="rounded-xl bg-mlha/60 px-5 py-6 text-left">
+      <p className="font-display text-balance text-xl font-bold leading-tight text-inkoust">
+        {nadpis}
       </p>
+      <p className="mt-1 max-w-[65ch] text-base leading-relaxed text-mech">{text}</p>
       {akce !== undefined ? (
         <button
           type="button"
           onClick={akce.onClick}
-          className="nahled-press nahled-invert mt-4 inline-flex min-h-[44px] items-center rounded-none border border-[hsl(var(--foreground))] bg-transparent px-4 font-condensed text-sm"
+          className="nahled-press mt-4 inline-flex min-h-[44px] items-center rounded-xl bg-papir px-5 text-sm font-semibold text-inkoust shadow-denik hover:bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
         >
           {akce.popisek}
         </button>

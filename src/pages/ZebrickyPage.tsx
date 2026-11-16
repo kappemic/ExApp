@@ -1,9 +1,12 @@
-import { useEffect, useState, type JSX } from "react";
-import { Link } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState, type JSX } from "react";
 import { TlacitkoProfilu } from "../components/clen/ClenProfil";
+import { KostraTabulka } from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
+import { formatKmZaokrouhlene } from "../lib/format-cisla";
 import { getZebricek } from "../lib/zebricky-api";
 import type { ZebrickyRadek } from "../shared/api-types";
+
+const ZebrickyHeatmapa = lazy(() => import("../components/zebricky/ZebrickyHeatmapa"));
 
 type ObdobiVolba = string;
 
@@ -20,13 +23,8 @@ function volbyObdobi(): Array<{ hodnota: string; popisek: string }> {
   ];
 }
 
-function formatKm(km: number): string {
-  return `${String(Math.round(km * 10) / 10).replace(".", ",")} km`;
-}
-
 export default function ZebrickyPage(): JSX.Element {
-  const { user, isLoading } = useAuth();
-  const odhlasen = !isLoading && user === null;
+  const { user } = useAuth();
   const [obdobi, setObdobi] = useState<ObdobiVolba>("celkem");
   const [radky, setRadky] = useState<ZebrickyRadek[]>([]);
   const [nacitani, setNacitani] = useState<boolean>(true);
@@ -52,7 +50,7 @@ export default function ZebrickyPage(): JSX.Element {
   }, [obdobi]);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
+    <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
       <header className="border-b-2 border-inkoust pb-5">
         <p className="text-sm font-medium text-mech">Školní expediční klub</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -92,25 +90,31 @@ export default function ZebrickyPage(): JSX.Element {
           </select>
         </div>
 
+        <div className="lg:mt-6 lg:grid lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)] lg:items-start lg:gap-x-10">
+        <div className="lg:col-start-2 lg:row-start-1">
+        <Suspense
+          fallback={
+            <div
+              aria-busy="true"
+              aria-label="Načítám mapu výprav"
+              className="mt-6 h-[320px] animate-pulse rounded-lg border-2 border-inkoust/20 bg-linka/40 sm:h-[420px] lg:mt-0"
+            />
+          }
+        >
+          <ZebrickyHeatmapa obdobi={obdobi} />
+        </Suspense>
+        </div>
+
+        <div className="lg:col-start-1 lg:row-start-1">
+
         {nacitani && (
-          <div
-            role="status"
-            aria-label="Načítám žebříček"
-            className="mt-4 space-y-3"
-          >
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-12 animate-pulse rounded-md border-2 border-inkoust/20 bg-white/60"
-              />
-            ))}
-          </div>
+          <KostraTabulka popisek="Načítám žebříček" />
         )}
 
         {!nacitani && chyba !== null && radky.length === 0 && (
           <div
             role="alert"
-            className="mt-4 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik"
+            className="mt-4 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik lg:mt-0"
           >
             <h2 className="text-base font-bold tracking-tight">
               Žebříček je teď nedostupný
@@ -124,7 +128,7 @@ export default function ZebrickyPage(): JSX.Element {
         {!nacitani && radky.length === 0 && chyba === null && (
           <div
             role="status"
-            className="mt-4 flex flex-col items-center rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-14 text-center shadow-denik"
+            className="mt-4 flex flex-col items-center rounded-lg border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-14 text-center shadow-denik lg:mt-0"
           >
             <div
               aria-hidden="true"
@@ -161,8 +165,14 @@ export default function ZebrickyPage(): JSX.Element {
         )}
 
         {!nacitani && radky.length > 0 && (
-          <div className="mt-4 overflow-x-auto rounded-lg border-2 border-inkoust bg-white/80 shadow-denik">
-            <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+          <div className="mt-4 overflow-x-auto rounded-lg border-2 border-inkoust bg-white/80 shadow-denik lg:mt-0">
+            <table className="w-full min-w-[560px] border-collapse text-left text-sm lg:min-w-0 lg:table-fixed">
+              <colgroup className="max-lg:hidden">
+                <col className="w-[4.5rem]" />
+                <col />
+                <col className="w-[6.5rem]" />
+                <col className="w-[7rem]" />
+              </colgroup>
               <caption className="sr-only">
                 Žebříček členů podle účasti a kilometrů
               </caption>
@@ -217,7 +227,7 @@ export default function ZebrickyPage(): JSX.Element {
                         {radek.vypravy}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {formatKm(radek.km)}
+                        {formatKmZaokrouhlene(radek.km)}
                       </td>
                     </tr>
                   );
@@ -227,34 +237,8 @@ export default function ZebrickyPage(): JSX.Element {
           </div>
         )}
 
-        {odhlasen && (
-          <section
-            aria-labelledby="zebricky-prihlaseni"
-            className="mt-5 rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik"
-          >
-            <h2 id="zebricky-prihlaseni" className="text-base font-bold tracking-tight">
-              Chceš být v žebříčku?
-            </h2>
-            <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
-              Přihlas se, nebo se zaregistruj s kódem od vedoucí — pak se ti
-              započítá účast na výpravách.
-            </p>
-            <div className="mt-3 flex flex-col justify-center gap-2 sm:flex-row">
-              <Link
-                to="/login"
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust"
-              >
-                Přihlásit se
-              </Link>
-              <Link
-                to="/register"
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka"
-              >
-                Registrace s kódem
-              </Link>
-            </div>
-          </section>
-        )}
+        </div>
+        </div>
       </div>
     </main>
   );

@@ -16,12 +16,12 @@
 
 import {
   aktivitaRucnePath,
-  jeApiChyba,
   jeUlozAktivituOdpoved,
   type ApiErrorCode,
   type UlozAktivituRucneResponse,
 } from "../shared/api-types";
-import { apiBaseUrl } from "./strava-api";
+import { OBECNA_CHYBA, chybaZApiTela, ctiJsonTelo, jeRecord } from "./api-odpoved";
+import { apiBaseUrl } from "./api-base";
 
 export interface RucniAktivitaVstup {
   km: number;
@@ -37,20 +37,6 @@ export type RucniAktivitaVysledek =
       kod?: ApiErrorCode;
       details?: Record<string, string[]>;
     };
-
-const OBECNA_CHYBA = "Něco se pokazilo. Zkus to prosím později.";
-
-function jeRecord(hodnota: unknown): hodnota is Record<string, unknown> {
-  return typeof hodnota === "object" && hodnota !== null && !Array.isArray(hodnota);
-}
-
-async function ctiTelo(odpoved: Response): Promise<unknown> {
-  try {
-    return await odpoved.json();
-  } catch {
-    return null;
-  }
-}
 
 function ctiDetails(telo: unknown): Record<string, string[]> | undefined {
   if (!jeRecord(telo)) return undefined;
@@ -97,17 +83,13 @@ export async function ulozAktivituRucne(
   } catch {
     return { ok: false, chyba: OBECNA_CHYBA };
   }
-  const telo = await ctiTelo(odpoved);
+  const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
-    if (jeApiChyba(telo)) {
-      return {
-        ok: false,
-        chyba: telo.error.message,
-        kod: telo.error.code,
-        details: ctiDetails(telo),
-      };
+    const zaklad = chybaZApiTela(telo);
+    if (zaklad.kod !== undefined) {
+      return { ...zaklad, details: ctiDetails(telo) };
     }
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return zaklad;
   }
   if (!jeUlozAktivituOdpoved(telo)) {
     return { ok: false, chyba: OBECNA_CHYBA };

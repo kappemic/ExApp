@@ -1,10 +1,11 @@
-import { useEffect, useId, useState, type FormEvent, type JSX } from "react";
+import { useEffect, useId, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
 import {
   VALIDACE,
   VALIDACNI_ZPRAVY,
   type UpravitExpediciRequest,
   type VytvoritExpediciRequest,
 } from "../../shared/api-types";
+import DatumVstup from "../DatumVstup";
 
 /**
  * ExpeditionForm — deníkový admin formulář výpravy (Krok 4).
@@ -25,6 +26,54 @@ export interface HodnotyExpedice {
   popis: string;
   trasaOdkaz: string;
   kapacitaCelkem: number;
+}
+
+export interface SnimkyCestyVyber {
+  tam: File[];
+  zpet: File[];
+}
+
+export interface UlozenySnimekCesty {
+  id: string;
+  url: string;
+}
+
+const SNIMKU_NA_SMER = 8;
+const SNIMEK_MAX_BAJTU = 8 * 1024 * 1024;
+
+function pridejSnimky(
+  stavajici: readonly File[],
+  nove: readonly File[],
+  uzObsazeno: number,
+): { soubory: File[]; chyba: string | null } {
+  const soubory: File[] = [...stavajici];
+  let chyba: string | null = null;
+  for (const soubor of nove) {
+    const typ = soubor.type;
+    const pripona = soubor.name.split(".").pop()?.toLowerCase() ?? "";
+    const obrazek =
+      typ === "image/jpeg" ||
+      typ === "image/png" ||
+      typ === "image/webp" ||
+      pripona === "jpg" ||
+      pripona === "jpeg" ||
+      pripona === "png" ||
+      pripona === "webp";
+    if (!obrazek) {
+      if (chyba === null) chyba = "Snímek musí být JPG, PNG nebo WebP.";
+      continue;
+    }
+    if (soubor.size > SNIMEK_MAX_BAJTU) {
+      if (chyba === null) chyba = "Snímek může mít nejvýš 8 MB.";
+      continue;
+    }
+    if (uzObsazeno + soubory.length >= SNIMKU_NA_SMER) {
+      if (chyba === null) chyba = "Na jeden směr jde nahrát nejvýš 8 snímků.";
+      continue;
+    }
+    soubory.push(soubor);
+  }
+  return { soubory, chyba };
 }
 
 export interface ExpeditionFormVychozi {
@@ -48,7 +97,14 @@ interface ExpeditionFormProps {
   serverChyba: string | null;
   /** Pole → hláška z 422 details (server je zdrojem pravdy). */
   serverChybyPoli: ChybyExpedice;
-  onSubmit: (payload: VytvoritExpediciRequest | UpravitExpediciRequest) => void;
+  onSubmit: (
+    payload: VytvoritExpediciRequest | UpravitExpediciRequest,
+    snimky: SnimkyCestyVyber,
+  ) => void;
+  /** Screenshots already stored for this expedition (edit). */
+  ulozeneTam?: readonly UlozenySnimekCesty[];
+  ulozeneZpet?: readonly UlozenySnimekCesty[];
+  onSmazatSnimek?: (id: string) => void;
   onZrusit: () => void;
   /**
    * Úprava historie: při true se klientská kontrola minulosti data přeskočí
@@ -219,7 +275,81 @@ function validujKlientsky(
 }
 
 const VSTUP_TRIDY =
-  "min-h-[44px] w-full rounded-md border-2 border-inkoust bg-white/80 px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40";
+  "min-h-[44px] w-full rounded-xl border border-pole bg-papir px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40";
+
+function VyberSnimku({
+  id,
+  nadpis,
+  napoveda,
+  soubory,
+  ulozene,
+  disabled,
+  onVyber,
+  onOdebrat,
+  onSmazatUlozeny,
+}: {
+  id: string;
+  nadpis: string;
+  napoveda: string;
+  soubory: readonly File[];
+  ulozene: readonly UlozenySnimekCesty[];
+  disabled: boolean;
+  onVyber: (udalost: ChangeEvent<HTMLInputElement>) => void;
+  onOdebrat: (index: number) => void;
+  onSmazatUlozeny?: (id: string) => void;
+}): JSX.Element {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-inkoust">
+        {nadpis} <span className="font-normal text-inkoust/60">(nepovinné)</span>
+      </label>
+      <input
+        id={id}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={disabled}
+        onChange={onVyber}
+        className="block w-full min-h-[44px] text-base file:mr-3 file:min-h-[44px] file:rounded-xl file:border-0 file:bg-mlha file:px-3 file:text-base file:font-bold"
+      />
+      <p className="mt-1 text-base leading-relaxed text-inkoust/70 lg:text-sm">{napoveda}</p>
+      {(ulozene.length > 0 || soubory.length > 0) && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {ulozene.map((snimek) => (
+            <li key={snimek.id} className="relative">
+              <img src={snimek.url} alt="" className="h-16 w-16 rounded-xl object-cover" />
+              {onSmazatUlozeny !== undefined && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onSmazatUlozeny(snimek.id)}
+                  aria-label="Odebrat snímek"
+                  className="absolute -top-2 -right-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-papir shadow-razitko text-sm font-bold"
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+          {soubory.map((soubor, index) => (
+            <li key={`${soubor.name}-${soubor.size}-${index}`} className="flex max-w-full items-center gap-1 rounded-full border border-inkoust/30 bg-papir py-0.5 pr-1 pl-2.5">
+              <span className="max-w-full truncate text-base font-semibold">{soubor.name}</span>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onOdebrat(index)}
+                aria-label={`Odebrat ${soubor.name}`}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-base"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function ExpeditionForm({
   nadpis,
@@ -230,6 +360,9 @@ export default function ExpeditionForm({
   serverChybyPoli,
   onSubmit,
   onZrusit,
+  ulozeneTam = [],
+  ulozeneZpet = [],
+  onSmazatSnimek,
   povolitMinulost = false,
   id,
   skrytAkce = false,
@@ -245,6 +378,9 @@ export default function ExpeditionForm({
   );
   const [chyby, setChyby] = useState<ChybyExpedice>({});
   const [odeslano, setOdeslano] = useState<boolean>(false);
+  const [snimkyTam, setSnimkyTam] = useState<File[]>([]);
+  const [snimkyZpet, setSnimkyZpet] = useState<File[]>([]);
+  const [chybaSnimku, setChybaSnimku] = useState<string | null>(null);
   const zaklad = useId();
 
   // Serverové 422 detaily (zdroj pravdy) přimícháme k lokálním chybám.
@@ -295,7 +431,19 @@ export default function ExpeditionForm({
       trasaOdkaz: vysledek.hodnoty.trasaOdkaz,
       kapacitaCelkem: vysledek.hodnoty.kapacitaCelkem,
     };
-    onSubmit(payload);
+    onSubmit(payload, { tam: snimkyTam, zpet: snimkyZpet });
+  }
+
+  function pridejSoubory(smer: "tam" | "zpet", udalost: ChangeEvent<HTMLInputElement>): void {
+    const seznam = udalost.target.files;
+    udalost.target.value = "";
+    if (seznam === null || seznam.length === 0) return;
+    const stavajici = smer === "tam" ? snimkyTam : snimkyZpet;
+    const obsazeno = smer === "tam" ? ulozeneTam.length : ulozeneZpet.length;
+    const vysledek = pridejSnimky(stavajici, Array.from(seznam), obsazeno);
+    if (smer === "tam") setSnimkyTam(vysledek.soubory);
+    else setSnimkyZpet(vysledek.soubory);
+    setChybaSnimku(vysledek.chyba);
   }
 
   function zmenPole(
@@ -331,19 +479,38 @@ export default function ExpeditionForm({
   const poleChybi = (pole: PoleExpedice): boolean => chyby[pole] !== undefined;
 
   return (
-    <form id={id} onSubmit={odesli} noValidate aria-label={nadpis}>
+    <form
+      id={id}
+      onSubmit={odesli}
+      noValidate
+      aria-label={nadpis}
+      className={skrytAkce ? undefined : "flex min-h-0 flex-1 flex-col lg:block"}
+    >
+      {!skrytAkce && (
+        <h2 className="shrink-0 px-5 pt-6 text-2xl font-bold text-inkoust sm:text-3xl lg:px-0 lg:pb-5 lg:pt-0">
+          {nadpis}
+        </h2>
+      )}
       {serverChyba !== null && (
         <p
           role="alert"
-          className="mb-4 rounded-md border-2 border-inkoust bg-jantar/15 px-3 py-2 text-sm font-semibold"
+          className={`mb-4 rounded-2xl bg-jantar/10 px-3 py-2 text-sm font-semibold ${
+            skrytAkce ? "" : "mx-5 mt-5 lg:mx-0 lg:mt-0"
+          }`}
         >
           {serverChyba}
         </p>
       )}
 
-      <div className="space-y-4">
+      <div
+        className={
+          skrytAkce
+            ? "space-y-4"
+            : "min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain px-5 pb-4 pt-5 [touch-action:pan-y] lg:block lg:overflow-visible lg:px-0 lg:pb-0 lg:pt-0 lg:[touch-action:auto]"
+        }
+      >
         <div>
-          <label htmlFor={idPro("nazev")} className="mb-1 block text-sm font-bold">
+          <label htmlFor={idPro("nazev")} className="mb-1.5 block text-sm font-semibold text-inkoust">
             Název výpravy <span aria-hidden="true">*</span>
           </label>
           <input
@@ -367,19 +534,18 @@ export default function ExpeditionForm({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
-            <label htmlFor={idPro("datum")} className="mb-1 block text-sm font-bold">
+            <label htmlFor={idPro("datum")} className="mb-1.5 block text-sm font-semibold text-inkoust">
               Datum od <span aria-hidden="true">*</span>
             </label>
-            <input
+            <DatumVstup
               id={idPro("datum")}
-              type="date"
               value={datum}
               disabled={odesilaSe}
-              onChange={(e) => zmenPole("datum", e.target.value, setDatum)}
-              aria-invalid={poleChybi("datum")}
-              aria-describedby={poleChybi("datum") ? chybaPro("datum") : undefined}
+              onChange={(iso) => zmenPole("datum", iso, setDatum)}
+              ariaInvalid={poleChybi("datum")}
+              ariaDescribedBy={poleChybi("datum") ? chybaPro("datum") : undefined}
               className={`${VSTUP_TRIDY} ${poleChybi("datum") ? "border-red-800" : ""}`}
             />
             {chyby.datum !== undefined && (
@@ -390,19 +556,18 @@ export default function ExpeditionForm({
           </div>
 
           <div>
-            <label htmlFor={idPro("datumDo")} className="mb-1 block text-sm font-bold">
+            <label htmlFor={idPro("datumDo")} className="mb-1.5 block text-sm font-semibold text-inkoust">
               Datum do{" "}
               <span className="font-normal text-inkoust/60">(nepovinné)</span>
             </label>
-            <input
+            <DatumVstup
               id={idPro("datumDo")}
-              type="date"
               value={datumDo}
               min={datum.trim().length > 0 ? datum.trim() : undefined}
               disabled={odesilaSe}
-              onChange={(e) => zmenPole("datumDo", e.target.value, setDatumDo)}
-              aria-invalid={poleChybi("datumDo")}
-              aria-describedby={poleChybi("datumDo") ? chybaPro("datumDo") : undefined}
+              onChange={(iso) => zmenPole("datumDo", iso, setDatumDo)}
+              ariaInvalid={poleChybi("datumDo")}
+              ariaDescribedBy={poleChybi("datumDo") ? chybaPro("datumDo") : undefined}
               className={`${VSTUP_TRIDY} ${poleChybi("datumDo") ? "border-red-800" : ""}`}
             />
             {chyby.datumDo !== undefined && (
@@ -412,8 +577,8 @@ export default function ExpeditionForm({
             )}
           </div>
 
-          <div className="sm:col-span-2">
-            <label htmlFor={idPro("kapacitaCelkem")} className="mb-1 block text-sm font-bold">
+          <div className="lg:col-span-2">
+            <label htmlFor={idPro("kapacitaCelkem")} className="mb-1.5 block text-sm font-semibold text-inkoust">
               Kapacita{" "}
               <span className="font-normal text-inkoust/60">(nepovinná)</span>
             </label>
@@ -441,7 +606,7 @@ export default function ExpeditionForm({
                 {chyby.kapacitaCelkem}
               </p>
             ) : (
-              <p id={napovedaPro("kapacitaCelkem")} className="mt-1 text-xs text-inkoust/60">
+              <p id={napovedaPro("kapacitaCelkem")} className="mt-1 text-base leading-relaxed text-inkoust/70 lg:text-sm">
                 Prázdné nebo 0 = bez omezení míst.
               </p>
             )}
@@ -449,7 +614,7 @@ export default function ExpeditionForm({
         </div>
 
         <div>
-          <label htmlFor={idPro("sraz")} className="mb-1 block text-sm font-bold">
+          <label htmlFor={idPro("sraz")} className="mb-1.5 block text-sm font-semibold text-inkoust">
             Sraz (místo a čas) <span aria-hidden="true">*</span>
           </label>
           <input
@@ -473,7 +638,7 @@ export default function ExpeditionForm({
         </div>
 
         <div>
-          <label htmlFor={idPro("popis")} className="mb-1 block text-sm font-bold">
+          <label htmlFor={idPro("popis")} className="mb-1.5 block text-sm font-semibold text-inkoust">
             Popis <span className="font-normal text-inkoust/60">(nepovinný)</span>
           </label>
           <textarea
@@ -496,7 +661,7 @@ export default function ExpeditionForm({
         </div>
 
         <div>
-          <label htmlFor={idPro("trasaOdkaz")} className="mb-1 block text-sm font-bold">
+          <label htmlFor={idPro("trasaOdkaz")} className="mb-1.5 block text-sm font-semibold text-inkoust">
             Odkaz na trasu{" "}
             <span className="font-normal text-inkoust/60">(nepovinný, mapy.com)</span>
           </label>
@@ -523,21 +688,49 @@ export default function ExpeditionForm({
               {chyby.trasaOdkaz}
             </p>
           ) : (
-            <p id={napovedaPro("trasaOdkaz")} className="mt-1 text-xs text-inkoust/60">
+            <p id={napovedaPro("trasaOdkaz")} className="mt-1 text-base leading-relaxed text-inkoust/70 lg:text-sm">
               Vlož odkaz na naplánovanou cestu (mapy.com). Začíná https://.
             </p>
           )}
         </div>
+
+        <VyberSnimku
+          id={`${zaklad}-cesta-tam`}
+          nadpis="Cesta tam"
+          napoveda="Snímky cesty na místo. Nemusíš nic nahrát. Nejvýš 8 obrázků, každý do 8 MB."
+          soubory={snimkyTam}
+          ulozene={ulozeneTam}
+          disabled={odesilaSe}
+          onVyber={(e) => pridejSoubory("tam", e)}
+          onOdebrat={(index) => setSnimkyTam((prev) => prev.filter((_, i) => i !== index))}
+          onSmazatUlozeny={onSmazatSnimek}
+        />
+        <VyberSnimku
+          id={`${zaklad}-cesta-zpet`}
+          nadpis="Cesta zpátky"
+          napoveda="Snímky cesty zpátky. Nemusíš nic nahrát. Nejvýš 8 obrázků, každý do 8 MB."
+          soubory={snimkyZpet}
+          ulozene={ulozeneZpet}
+          disabled={odesilaSe}
+          onVyber={(e) => pridejSoubory("zpet", e)}
+          onOdebrat={(index) => setSnimkyZpet((prev) => prev.filter((_, i) => i !== index))}
+          onSmazatUlozeny={onSmazatSnimek}
+        />
+        {chybaSnimku !== null && (
+          <p role="alert" className="text-sm font-semibold text-red-800">
+            {chybaSnimku}
+          </p>
+        )}
       </div>
 
       {!skrytAkce && (
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-linka bg-papir px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:static lg:mt-6 lg:flex-row lg:justify-end lg:border-0 lg:bg-transparent lg:px-0 lg:pb-3">
           <button
             type="button"
             onClick={onZrusit}
             disabled={odesilaSe}
             title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-white/60 px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-60"
+            className="nahled-press inline-flex min-h-[48px] min-w-[44px] items-center justify-center rounded-xl bg-mlha px-6 py-2 text-base font-semibold text-inkoust hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
           >
             Zrušit
           </button>
@@ -545,7 +738,7 @@ export default function ExpeditionForm({
             type="submit"
             disabled={odesilaSe}
             title={odesilaSe ? "Ukládání probíhá…" : odeslatPopisek}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2 text-sm font-bold text-papir transition-colors hover:bg-inkoust disabled:opacity-60"
+            className="nahled-press inline-flex min-h-[48px] min-w-[44px] items-center justify-center rounded-xl bg-okr px-6 py-2 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
           >
             {odesilaSe ? "Ukládám…" : odeslatPopisek}
           </button>

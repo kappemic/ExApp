@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type JSX } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import LogoKlubu from "../components/LogoKlubu";
 import { useAuth, type PolePrihlaseni } from "../hooks/useAuth";
 
 /**
@@ -14,9 +15,9 @@ export function bezpecneFrom(hodnota: string | null): string {
 }
 
 const VSTUP_TRIDY =
-  "min-h-[44px] w-full rounded-md border-2 border-linka bg-white px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none";
+  "min-h-[44px] w-full rounded-xl border border-pole bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none";
 const VSTUP_CHYBA_TRIDY =
-  "min-h-[44px] w-full rounded-md border-2 border-red-800 bg-white px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 focus:border-red-800 focus:outline-none";
+  "min-h-[44px] w-full rounded-xl border-2 border-red-800 bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 focus:border-red-800 focus:outline-none";
 
 type ChybyPoli = Partial<Record<PolePrihlaseni, string>>;
 
@@ -50,8 +51,13 @@ export default function LoginPage(): JSX.Element {
 
   return (
     <main className="mx-auto w-full max-w-md px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
-      <p className="text-sm font-medium text-mech">ExApp · přihlášení</p>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Přihlášení</h1>
+      <div className="flex items-center gap-4">
+        <LogoKlubu velikost="lg" />
+        <div className="min-w-0">
+          <p className="font-condensed text-sm font-medium text-mech">ExApp · přihlášení</p>
+          <h1 className="font-expanded mt-0.5 text-3xl font-extrabold tracking-tight">Přihlášení</h1>
+        </div>
+      </div>
       <p className="mt-2 text-base text-inkoust/75">
         Vítej zpět v ExApp. Zadej e-mail a heslo z registrace.
       </p>
@@ -118,7 +124,7 @@ export default function LoginPage(): JSX.Element {
               aria-pressed={ukazatHeslo}
               aria-label={ukazatHeslo ? "Skrýt heslo" : "Zobrazit heslo"}
               onClick={() => setUkazatHeslo((v) => !v)}
-              className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-linka bg-papir px-3 text-sm font-bold transition-colors hover:border-inkoust motion-reduce:transition-none"
+              className="bez-prejeti nahled-press inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-linka bg-papir px-3 text-sm font-bold hover:-translate-y-px hover:border-inkoust hover:bg-smrk/[0.08] motion-reduce:hover:translate-y-0"
             >
               <span aria-hidden="true">{ukazatHeslo ? "⋯" : "👁"}</span>
             </button>
@@ -133,7 +139,7 @@ export default function LoginPage(): JSX.Element {
         <button
           type="submit"
           disabled={odesilaSe}
-          className="mt-1 inline-flex min-h-[44px] w-full items-center justify-center rounded-md border-2 border-inkoust bg-smrk px-4 py-2.5 text-base font-bold text-papir transition-colors hover:bg-inkoust disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
+          className="nahled-press mt-1 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 py-2.5 text-base font-bold text-inkoust transition-colors hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
         >
           {odesilaSe ? "Přihlašuji…" : "Přihlásit se"}
         </button>

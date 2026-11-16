@@ -231,8 +231,8 @@ describe("PRISTUP_KROK2 + PRISTUP_KROK6 — hranice vzorů", () => {
     expect(PRISTUP_KROK2[EXPEDICE_UZAVRIT_VZOR]).toBe("ADMIN");
   });
 
-  it("fotky: seznam PUBLIC, detail ADMIN", () => {
-    expect(PRISTUP_KROK6[EXPEDICE_FOTKY_VZOR]).toBe("PUBLIC");
+  it("fotky: seznam USER, detail ADMIN", () => {
+    expect(PRISTUP_KROK6[EXPEDICE_FOTKY_VZOR]).toBe("USER");
     expect(PRISTUP_KROK6[EXPEDICE_FOTKA_DETAIL_VZOR]).toBe("ADMIN");
   });
 });

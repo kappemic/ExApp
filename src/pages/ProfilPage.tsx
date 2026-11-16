@@ -7,12 +7,14 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
+import { formatKmZaokrouhlene } from "../lib/format-cisla";
 import {
   getMojeStatistiky,
   type StatistikyResponse,
 } from "../lib/statistiky-api";
 import { useProfile } from "../hooks/useProfile";
 import ProfileForm from "../components/profil/ProfileForm";
+import { vypniOznameni, zapniOznameni } from "../lib/push-odber";
 import type { ApiUser } from "../shared/api-types";
 import {
   ctiStravaDuvodZUrl,
@@ -57,6 +59,53 @@ const PANEL_OBSAH: Record<
  * v `useProfile`, UI jen konzumuje. Po uložení drží čerstvého usera
  * lokálně (server je zdrojem pravdy, žádný optimistic update).
  */
+function OznameniKarta(): JSX.Element {
+  const [hlaska, setHlaska] = useState<string | null>(null);
+  const [bezi, setBezi] = useState(false);
+
+  async function zapnout(): Promise<void> {
+    setBezi(true);
+    const vysledek = await zapniOznameni();
+    setBezi(false);
+    setHlaska(vysledek.ok ? "Oznámení jsou zapnutá na tomhle zařízení." : vysledek.chyba);
+  }
+
+  async function vypnout(): Promise<void> {
+    setBezi(true);
+    const vysledek = await vypniOznameni();
+    setBezi(false);
+    setHlaska(vysledek.ok ? "Oznámení jsou na tomhle zařízení vypnutá." : vysledek.chyba);
+  }
+
+  return (
+    <section className="mb-6 rounded-lg border-2 border-inkoust bg-papir p-4 text-left shadow-denik">
+      <h2 className="text-base font-extrabold">Oznámení</h2>
+      <p className="mt-1 text-sm text-inkoust/75">
+        Soukromá zpráva a označení ve Generalu nebo Důležitých. Chodí, když máš ExApp na ploše a tady si je zapneš.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={bezi}
+          onClick={() => void zapnout()}
+          className="min-h-[44px] rounded border-2 border-inkoust bg-inkoust px-4 text-sm font-bold text-papir [touch-action:manipulation] disabled:opacity-60"
+        >
+          Zapnout na tomhle zařízení
+        </button>
+        <button
+          type="button"
+          disabled={bezi}
+          onClick={() => void vypnout()}
+          className="min-h-[44px] rounded border-2 border-inkoust bg-papir px-4 text-sm font-bold text-inkoust [touch-action:manipulation] disabled:opacity-60"
+        >
+          Vypnout
+        </button>
+      </div>
+      {hlaska !== null && <p className="mt-3 text-sm font-bold text-inkoust">{hlaska}</p>}
+    </section>
+  );
+}
+
 function OsobniPanel(): JSX.Element {
   const { profil, stav, chyba, znovuNacti } = useProfile();
   const [prepsany, setPrepsany] = useState<ApiUser | null>(null);
@@ -83,7 +132,7 @@ function OsobniPanel(): JSX.Element {
       <div
         aria-busy="true"
         aria-label="Načítám osobní údaje"
-        className="mx-auto w-full max-w-2xl space-y-3 text-left"
+        className="mx-auto w-full max-w-2xl space-y-3 text-left lg:mx-0 lg:max-w-none"
       >
         {[0, 1, 2, 3].map((i) => (
           <div
@@ -116,28 +165,6 @@ type StravaFaze =
   | { stav: "chyba"; zprava: string };
 
 /**
- * Formátuje ISO expiraci česky (`cs-CZ`). Nevalidní / null → null
- * (volající ukáže neutrální text, nikdy raw vstup ani `Invalid Date`).
- */
-function formatujExpiraci(expirace: string | null): string | null {
-  if (expirace === null || expirace.trim().length === 0) return null;
-  const datum = new Date(expirace);
-  if (Number.isNaN(datum.getTime())) return null;
-  return datum.toLocaleString("cs-CZ", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-/** True, když expirace už proběhla (krátkodobý přístupový klíč po platnosti). */
-function jeExpiraceProšla(expirace: string | null): boolean {
-  if (expirace === null || expirace.trim().length === 0) return false;
-  const datum = new Date(expirace);
-  if (Number.isNaN(datum.getTime())) return false;
-  return datum.getTime() <= Date.now();
-}
-
-/**
  * Karta Strava propojení (Fáze 4, Krok 1) v Přehledu.
  * Připojit → redirect na Strava authorize (serverový callback vymění
  * code za tokeny, secret nikdy neopustí server). Odpojit → DELETE
@@ -153,8 +180,8 @@ interface StravaUpozorneni {
  * `GET /api/strava/stav` (atlet + scope + expirace), fallback na legacy
  * `/api/me` (starší BFF bez `/api/strava/stav`). Nikdy nenese tokeny.
  */
-async function ctiFaziPropojeni(): Promise<StravaFaze> {
-  const rozsireny = await nactiStravaStavRozsireny();
+async function ctiFaziPropojeni(obnovit = false): Promise<StravaFaze> {
+  const rozsireny = await nactiStravaStavRozsireny({ obnovit });
   if (rozsireny.ok) {
     if (rozsireny.data.propojeno) {
       return {
@@ -184,11 +211,8 @@ async function ctiFaziPropojeni(): Promise<StravaFaze> {
 function StravaKarta(): JSX.Element {
   const [faze, setFaze] = useState<StravaFaze>({ stav: "nacitani" });
   const [pracuje, setPracuje] = useState<boolean>(false);
-  const [obnovuje, setObnovuje] = useState<boolean>(false);
   const [upozorneni, setUpozorneni] = useState<StravaUpozorneni | null>(null);
-  // Pořadí načtení stavu: mount efekt i ruční „Obnovit stav" sdílí jeden
-  // čítač — pozdě dorazivší odpověď (mount vs. klik) nesmí přepsat
-  // čerstvější stav. Vlastníkem spinneru je vždy nejnovější požadavek.
+  // Pozdě dorazivší odpověď z mountu nesmí přepsat novější stav.
   const pozadavekRef = useRef<number>(0);
 
   useEffect(() => {
@@ -222,37 +246,6 @@ function StravaKarta(): JSX.Element {
       zije = false;
     };
   }, []);
-
-  /**
-   * Explicitní aktualizace stavu z `GET /api/strava/stav` (tlačítko
-   * „Obnovit stav"). Jen znovu přečte veřejný stav z DB — klíče se
-   * nikdy nevracejí klientovi, výměna přístupového klíče probíhá jen na
-   * serveru při příštím volání Stravy.
-   * - Každý klik vede na `ctiFaziPropojeni()` (primárně stavový
-   *   endpoint, fallback legacy `/api/me`).
-   * - Neočekávaná výjimka nesmí projít skrz `void onClick` tiše:
-   *   zachytí se a složí chybovou fázi (žádný pád, žádný visící
-   *   „Obnovuji…"). `finally` zháší spinner jen vlastníkovi.
-   * - Guard `pozadavekRef` proti závodu s mount efektem: starší
-   *   odpověď čerstvější stav nepřepíše.
-   */
-  async function obnovitStav(): Promise<void> {
-    const moje = (pozadavekRef.current += 1);
-    setObnovuje(true);
-    try {
-      const novaFaze = await ctiFaziPropojeni();
-      if (pozadavekRef.current !== moje) return;
-      setFaze(novaFaze);
-    } catch {
-      if (pozadavekRef.current !== moje) return;
-      setFaze({
-        stav: "chyba",
-        zprava: "Stav se nepodařilo obnovit. Zkus to prosím později.",
-      });
-    } finally {
-      if (pozadavekRef.current === moje) setObnovuje(false);
-    }
-  }
 
   async function pripoj(): Promise<void> {
     setPracuje(true);
@@ -305,44 +298,19 @@ function StravaKarta(): JSX.Element {
       <div aria-hidden="true" className="h-1.5 w-full bg-jantar" />
       <div className="p-5">
       <h2 className="text-base font-extrabold tracking-tight">Strava</h2>
-      <div aria-live="polite" className="mt-1.5 text-sm leading-relaxed text-inkoust/75">
+      <div aria-live="polite" className="mt-1.5 max-w-[70ch] text-sm leading-relaxed text-inkoust/75">
         {faze.stav === "nacitani" && <p>Zjišťuji stav propojení…</p>}
         {faze.stav === "nepropojeno" && (
           <p>Propoj si účet se Stravou — kilometry a převýšení se pak připíšou k výpravám.</p>
         )}
         {faze.stav === "propojeno" && (
-          <div className="space-y-1">
-            <p>
-              Propojeno jako atlet{" "}
-              <span className="font-bold text-inkoust">
-                {faze.stravaId.length > 0 ? faze.stravaId : "—"}
-              </span>
-              .
-            </p>
-            <p className="text-sm">
-              Platnost propojení do{" "}
-              <span className="font-bold text-inkoust">
-                {formatujExpiraci(faze.expirace) ?? "—"}
-              </span>
-              {faze.scope !== null && faze.scope.length > 0 && (
-                <>
-                  {" · "}oprávnění{" "}
-                  <code className="rounded bg-linka/50 px-1.5 py-0.5 text-xs font-bold">
-                    {faze.scope}
-                  </code>
-                </>
-              )}
-              .
-            </p>
-            {jeExpiraceProšla(faze.expirace) && (
-              <p role="status" className="text-sm font-semibold text-jantar">
-                Přístupový klíč vypršel. Při příštím načtení aktivit ho
-                server automaticky vymění pomocí uloženého obnovovacího
-                klíče. Kdyby výměna selhala (např. odvolané oprávnění),
-                bude potřeba Stravu znovu připojit.
-              </p>
-            )}
-          </div>
+          <p>
+            Propojeno jako atlet{" "}
+            <span className="font-bold text-inkoust">
+              {faze.stravaId.length > 0 ? faze.stravaId : "—"}
+            </span>
+            . Kilometry se připisují k výpravám samy.
+          </p>
         )}
         {faze.stav === "chyba" && <p role="alert">{faze.zprava}</p>}
       </div>
@@ -361,26 +329,12 @@ function StravaKarta(): JSX.Element {
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        {/* Obnovit je k dispozici v každém ustáleném stavu (propojeno,
-            nepropojeno i chyba) — po chybě je retry bez reloadu, jinak by
-            setFaze({chyba}) tlačítko odmontoval. Jen během prvotního
-            načítání se nezobrazuje (fetch už běží v mount efektu). */}
-        {faze.stav !== "nacitani" && (
-          <button
-            type="button"
-            onClick={() => void obnovitStav()}
-            disabled={pracuje || obnovuje}
-            className="min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-50"
-          >
-            {obnovuje ? "Obnovuji…" : "Obnovit stav"}
-          </button>
-        )}
         {faze.stav === "propojeno" ? (
           <button
             type="button"
             onClick={() => void odpoj()}
-            disabled={pracuje || obnovuje}
-            className="min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-white px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-linka/60 disabled:opacity-50"
+            disabled={pracuje}
+            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
           >
             {pracuje ? "Odpojuji…" : "Odpojit Stravu"}
           </button>
@@ -388,8 +342,8 @@ function StravaKarta(): JSX.Element {
           <button
             type="button"
             onClick={() => void pripoj()}
-            disabled={pracuje || obnovuje || faze.stav === "nacitani"}
-            className="min-h-[44px] min-w-[44px] rounded bg-inkoust px-4 py-2 text-sm font-bold text-papir transition-opacity disabled:opacity-50"
+            disabled={pracuje || faze.stav === "nacitani"}
+            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
           >
             {pracuje ? "Přesměrovávám…" : "Připojit Stravu"}
           </button>
@@ -481,7 +435,7 @@ function StatistikyPanel(): JSX.Element {
             Kilometry
           </dt>
           <dd className="mt-1 text-3xl font-extrabold tabular-nums">
-            {formatKm(data.kmCelkem)}
+            {formatKmZaokrouhlene(data.kmCelkem)}
           </dd>
         </div>
         <div className="rounded-lg border-2 border-inkoust bg-papir px-4 py-5 text-center shadow-denik">
@@ -509,7 +463,7 @@ function StatistikyPanel(): JSX.Element {
           }
           meta.push(
             typeof aktivita.km === "number"
-              ? formatKm(aktivita.km)
+              ? formatKmZaokrouhlene(aktivita.km)
               : "bez kilometrů",
           );
           meta.push(
@@ -532,11 +486,6 @@ function StatistikyPanel(): JSX.Element {
       </ul>
     </section>
   );
-}
-
-function formatKm(km: number): string {
-  const zaokrouhleno = Math.round(km * 10) / 10;
-  return `${String(zaokrouhleno).replace(".", ",")} km`;
 }
 
 function formatPrevyseni(metry: number): string {
@@ -567,7 +516,7 @@ export default function ProfilPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
+    <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
       <header className="border-b-2 border-inkoust pb-5">
         <p className="text-sm font-medium text-mech">Školní expediční klub</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -579,7 +528,7 @@ export default function ProfilPage(): JSX.Element {
         </p>
 
         <div
-          className="sticky top-0 z-10 -mx-4 bg-papir/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
+          className="sticky top-0 z-10 -mx-4 bg-papir/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12"
           style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top, 0px))" }}
         >
           <div
@@ -600,7 +549,7 @@ export default function ProfilPage(): JSX.Element {
                   aria-controls={aktivni ? `panel-${tab.id}` : undefined}
                   tabIndex={aktivni ? 0 : -1}
                   onClick={() => setAktivniTab(tab.id)}
-                  className={`min-h-[44px] min-w-[44px] touch-manipulation rounded px-4 py-2 text-sm font-bold select-none transition-colors ${
+                  className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded px-4 py-2 text-sm font-bold select-none transition-colors ${
                     aktivni
                       ? "bg-inkoust text-papir"
                       : "text-inkoust hover:bg-linka/60"
@@ -619,9 +568,14 @@ export default function ProfilPage(): JSX.Element {
           role="tabpanel"
           id={`panel-${aktivniTab}`}
           aria-labelledby={`tab-${aktivniTab}`}
-          className="rounded-lg border-2 border-inkoust bg-white/60 p-6 text-center shadow-denik"
+          className="rounded-lg border-2 border-inkoust bg-white/60 p-6 text-center shadow-denik lg:text-left"
         >
-          {aktivniTab === "osobni" && <OsobniPanel />}
+          {aktivniTab === "osobni" && (
+            <>
+              <OznameniKarta />
+              <OsobniPanel />
+            </>
+          )}
           {aktivniTab === "strava" && <StravaKarta />}
           {aktivniTab === "statistiky" && <StatistikyPanel />}
           {aktivniTab === "heatmapa" && (

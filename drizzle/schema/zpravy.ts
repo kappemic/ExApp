@@ -15,8 +15,9 @@
  *   jména v čase zápisu (`jmeno + prijmeni`, fallback `discordNick`, pak `email`).
  *   Důvod: po SET NULL by jinak jméno autora zmizelo; snapshot paměť drží.
  *   Odvozovací pravidlo patří na hranici API (budoucí krok), DB drží jen text.
- * - `text` 1–1000 znaků (meze hlídá SQL CHECK v migraci
- *   `0009_faze5_diskuze.sql`, trim na hranici API).
+ * - `text` 0–1000 znaků (SQL CHECK `zpravy_text_check`, od migrace 0020
+ *   `char_length(text) <= 1000` — prázdný text je povolený kvůli přílohám;
+ *   trim zůstává na hranici API).
  * - `smazano_at` NULL = viditelná zpráva; NOT NULL = soft-smazáno (admin).
  * - Složený index (expedice_id, created_at) pro řazení vlákna výpravy;
  *   index (kanal, created_at) pro globální kanály (migrace 0011).
@@ -84,7 +85,7 @@ export const zpravy = pgTable(
      * "" = zapsáno před migrací 0011 (historie bez otisku).
      */
     autorJmeno: text("autor_jmeno").notNull().default(""),
-    /** Tělo zprávy (trim na hranici; 1–1000 znaků hlídá SQL CHECK). */
+    /** Tělo zprávy (trim na hranici; 0–1000 znaků hlídá SQL CHECK). */
     text: text("text").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
