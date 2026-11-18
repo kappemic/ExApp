@@ -9,6 +9,9 @@ COPY . .
 
 # Public build-time values only. Secrets stay in the runtime environment.
 ARG VITE_API_BASE_URL
+# Railway passes service variables to Docker builds only when declared here.
+# build-hosted.mjs derives VITE_API_BASE_URL from it when that is unset.
+ARG RAILWAY_PUBLIC_DOMAIN
 ARG VITE_APP_ENV=production
 ARG VITE_APP_NAME=ExApp
 ARG VITE_STRAVA_CLIENT_ID
