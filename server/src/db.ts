@@ -67,7 +67,33 @@ function vytvorDb(): Db {
   pool.on("error", (chyba: Error) => {
     console.error("Postgres pool: chyba nečinného spojení:", chyba.message);
   });
+  logujSelhaneDotazy(pool);
   return drizzle(pool, { schema });
+}
+
+/**
+ * Routy odpovídají na chybu DB obecnou 500 bez logu, takže by příčina
+ * (nedostupná DB, chybějící tabulka) zůstala neviditelná. Selhaný dotaz
+ * proto zapíše kód a text chyby a chybu pošle dál beze změny.
+ * Neloguje se SQL, parametry ani URL.
+ */
+function logujSelhaneDotazy(pool: Pool): void {
+  type Dotaz = (...args: unknown[]) => Promise<unknown>;
+  const puvodni = pool.query.bind(pool) as Dotaz;
+  const obaleny: Dotaz = async (...args) => {
+    try {
+      return await puvodni(...args);
+    } catch (chyba: unknown) {
+      const kod =
+        typeof chyba === "object" && chyba !== null && "code" in chyba
+          ? String((chyba as { code: unknown }).code)
+          : "neznámý";
+      const text = chyba instanceof Error ? chyba.message.slice(0, 200) : "neznámá chyba";
+      console.error(JSON.stringify({ event: "db_dotaz_selhal", kod, text }));
+      throw chyba;
+    }
+  };
+  (pool as unknown as { query: Dotaz }).query = obaleny;
 }
 
 /** Lazily vytvořený singleton — spojení vzniká až při prvním dotazu. */
