@@ -9,11 +9,11 @@
  * Usage: npm run seed:superadmin
  */
 
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import { eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { resolve } from "node:path";
 import { users } from "../drizzle/schema/users";
 
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write(`seed:superadmin → ${maskovanyHost(dbUrl)}\n`);
-  const db = drizzle(neon(dbUrl), { schema: { users } });
+  const db = drizzle(new Pool({ connectionString: dbUrl }), { schema: { users } });
   const admini = await db
     .select({ id: users.id })
     .from(users)
@@ -90,4 +90,7 @@ main().catch((chyba: unknown) => {
   const zprava = chyba instanceof Error ? chyba.message : "neznámá chyba";
   process.stderr.write(`seed:superadmin SELHALO: ${zprava}\n`);
   process.exitCode = 1;
+}).finally(() => {
+  // Pool spojení drží proces naživu, po doběhnutí ho ukončíme.
+  process.exit();
 });

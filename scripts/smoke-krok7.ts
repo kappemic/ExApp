@@ -8,10 +8,10 @@
  *
  * Spuštění: nejdřív `npm run server:dev`, pak `npx tsx scripts/smoke-krok7.ts`.
  */
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import dotenv from "dotenv";
 import { inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { randomInt } from "node:crypto";
 import { resolve } from "node:path";
 import { expeditions } from "../drizzle/schema/expeditions";
@@ -30,7 +30,7 @@ function vytvorDb(): ReturnType<typeof drizzle> {
   if (url === undefined || url.trim().length === 0) {
     throw new Error("Chybí DATABASE_URL (server-only, z .env.local).");
   }
-  return drizzle(neon(url), {
+  return drizzle(new Pool({ connectionString: url }), {
     schema: { users, registrationCodes, expeditions },
   });
 }
@@ -381,4 +381,7 @@ main().catch((chyba: unknown) => {
   const zprava = chyba instanceof Error ? chyba.message : "neznámá chyba";
   process.stderr.write(`smoke krok7 SELHALO: ${zprava}\n`);
   process.exitCode = 1;
+}).finally(() => {
+  // Pool spojení drží proces naživu, po doběhnutí ho ukončíme.
+  process.exit();
 });

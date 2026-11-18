@@ -1,14 +1,15 @@
 /**
- * server/src/db.ts — server-only Drizzle klient nad Neonem.
+ * server/src/db.ts — server-only Drizzle klient nad Postgresem.
  *
  * DATABASE_URL se čte POUZE na serveru (nikdy VITE_*, nikdy do bundlu).
- * Používá HTTP driver (@neondatabase/serverless + drizzle-orm/neon-http),
- * takže nepotřebuje trvalé TCP spojení ani nativní `pg` binding.
+ * Standardní TCP driver (`pg` + drizzle-orm/node-postgres) s poolem spojení,
+ * funguje s libovolným Postgresem (Railway, Neon i lokální).
+ * SSL se řídí parametrem `sslmode` v URL.
  */
 
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { clenove } from "../../drizzle/schema/clenove";
 import { diskuzePrecteni } from "../../drizzle/schema/diskuze_precteni";
 import { konverzacePrecteni } from "../../drizzle/schema/konverzace_precteni";
@@ -49,7 +50,7 @@ const schema = {
   konverzacePrecteni,
 };
 
-export type Db = NeonHttpDatabase<typeof schema>;
+export type Db = NodePgDatabase<typeof schema>;
 
 let db: Db | null = null;
 
@@ -60,8 +61,13 @@ function vytvorDb(): Db {
       "Chybí DATABASE_URL. Nastav ji v .env.local (server-only, nikdy s prefixem VITE_).",
     );
   }
-  const sql = neon(url);
-  return drizzle(sql, { schema });
+  const pool = new Pool({ connectionString: url, max: 10 });
+  // Chyba nečinného spojení (restart DB, výpadek sítě) nesmí shodit proces.
+  // Pool vadné spojení zahodí a další dotaz otevře nové. URL se nikdy neloguje.
+  pool.on("error", (chyba: Error) => {
+    console.error("Postgres pool: chyba nečinného spojení:", chyba.message);
+  });
+  return drizzle(pool, { schema });
 }
 
 /** Lazily vytvořený singleton — spojení vzniká až při prvním dotazu. */

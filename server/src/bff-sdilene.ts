@@ -8,8 +8,8 @@ export const MAX_POKUSU_KOD = 12;
 
 /**
  * Postgres unique_violation (23505) — typově bezpečná detekce bez any.
- * HTTP driver (neon-http) balí NeonDbError do `cause` — obálka od drizzle
- * nese jen query/params, takže se kontrolují obě úrovně (pg i neon-http).
+ * Drizzle balí chybu driveru do `cause` (obálka nese jen query/params),
+ * takže se kontrolují obě úrovně: přímá chyba `pg` i obalená v `cause`.
  */
 export function jeUnikatniKolize(chyba: unknown): boolean {
   if (typeof chyba !== "object" || chyba === null) return false;

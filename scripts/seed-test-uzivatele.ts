@@ -24,11 +24,11 @@
  * SMOKE_ADMIN_HESLO na stejné heslo jako TEST_SEED_HESLO_VEDOUCI, pak npm run smoke:fotky.
  */
 
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { expeditions } from "../drizzle/schema/expeditions";
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     `seed:test-uzivatele → cílová DB: ${maskovanyHost(dbUrl)} (dev only)\n`,
   );
 
-  const db = drizzle(neon(dbUrl), { schema: { users, expeditions, participants } });
+  const db = drizzle(new Pool({ connectionString: dbUrl }), { schema: { users, expeditions, participants } });
 
   for (const ucet of UCTY) {
     const zEnv = process.env[ucet.envHeslo];
@@ -223,4 +223,7 @@ main().catch((chyba: unknown) => {
   const zprava = chyba instanceof Error ? chyba.message : "neznámá chyba";
   process.stderr.write(`seed:test-uzivatele SELHALO: ${zprava}\n`);
   process.exitCode = 1;
+}).finally(() => {
+  // Pool spojení drží proces naživu, po doběhnutí ho ukončíme.
+  process.exit();
 });

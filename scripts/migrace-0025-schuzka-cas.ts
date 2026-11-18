@@ -2,7 +2,7 @@
  * Applies drizzle/migrations/0025_schuzka_cas.sql. Idempotent.
  * Prints only the database host, never the connection string.
  */
-import { neon } from "@neondatabase/serverless";
+import { Client } from "pg";
 import dotenv from "dotenv";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -36,22 +36,27 @@ async function main(): Promise<void> {
   if (dbUrl === undefined || dbUrl.trim().length === 0) {
     throw new Error("Chybí DATABASE_URL.");
   }
-  const sql = neon(dbUrl);
   const soubor = readFileSync(
     resolve(process.cwd(), "drizzle/migrations/0025_schuzka_cas.sql"),
     "utf8",
   );
-  for (const prikaz of prikazy(soubor)) {
-    await sql.query(prikaz);
-  }
-  const kontrola = await sql`
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_name = 'meetings' AND column_name = 'cas'
-  `;
-  const radek = kontrola[0] as { column_name?: string } | undefined;
-  if (radek?.column_name !== "cas") {
-    throw new Error("Sloupec meetings.cas po migraci chybí.");
+  const klient = new Client({ connectionString: dbUrl });
+  await klient.connect();
+  try {
+    for (const prikaz of prikazy(soubor)) {
+      await klient.query(prikaz);
+    }
+    const kontrola = await klient.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'meetings' AND column_name = 'cas'
+    `);
+    const radek = kontrola.rows[0] as { column_name?: string } | undefined;
+    if (radek?.column_name !== "cas") {
+      throw new Error("Sloupec meetings.cas po migraci chybí.");
+    }
+  } finally {
+    await klient.end();
   }
   console.log(`Migrace 0025 je na ${hostZUrl(dbUrl)}. Sloupec meetings.cas existuje.`);
 }

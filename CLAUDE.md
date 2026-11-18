@@ -6,7 +6,7 @@ Když se dokument a kód rozcházejí, platí kód.
 
 ## Stack
 
-Vite + React 19 + Tailwind 4 | Express 5 BFF na `:3001` | Neon Postgres + Drizzle | JWT v cookie `exapp_session` | Cloudflare R2 na fotky | Vitest | nasazení na Railway jako jeden origin (BFF servíruje i klienta).
+Vite + React 19 + Tailwind 4 | Express 5 BFF na `:3001` | Postgres na Railway + Drizzle (driver `pg`, `drizzle-orm/node-postgres`) | JWT v cookie `exapp_session` | Cloudflare R2 na fotky | Vitest | nasazení na Railway jako jeden origin (BFF servíruje i klienta).
 
 ## Vývoj
 
@@ -18,6 +18,8 @@ Vite + React 19 + Tailwind 4 | Express 5 BFF na `:3001` | Neon Postgres + Drizzl
 - Část testů čte zdrojáky jako text a hlídá v nich konkrétní řetězce a počty. Když po refaktoru selže takový test, rozhodni, jestli se změnilo chování, nebo jen zápis.
 
 ## Živá data
+
+Databáze je Postgres na Railway, ve stejném projektu jako aplikace. Neon se od listopadu 2026 nepoužívá: free tier nestačil a HTTP driver `neon-http` byl nahrazen za `pg`. Aplikace na Railway bere `DATABASE_URL` jako referenci `${{Postgres.DATABASE_URL}}` (interní síť), lokálně patří do `.env.local` veřejná `DATABASE_PUBLIC_URL`.
 
 `.env.local` může mířit na živou databázi. Seed skript odmítne běh jen při `NODE_ENV=production`, sám tedy před živou DB nechrání. Migrace, seed i smoke skripty, které zapisují, spouštěj až po potvrzení uživatelem.
 
