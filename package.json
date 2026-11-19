@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo --port 5175",
     "sync": "tsx scripts/sync-readmodel.ts",
     "prebuild": "npm run sync",
     "build": "tsc --noEmit && vite build",

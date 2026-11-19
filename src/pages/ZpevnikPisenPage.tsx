@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type JSX } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import HlavickaZpet from "../components/HlavickaZpet";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
-import { AkordovyProuzek, akordyZTela } from "../components/zpevnik/AkordovyProuzek";
+import Ikona from "../components/Ikona";
+import { akordyZTela } from "../components/zpevnik/AkordovyProuzek";
 import { TeloPisnePohled } from "../components/zpevnik/TeloPisnePohled";
 import { ZpevnikOvladaniPrecteni } from "../components/zpevnik/ZpevnikOvladaniPrecteni";
 import { useAuth } from "../hooks/useAuth";
@@ -67,78 +68,111 @@ export default function ZpevnikPisenPage(): JSX.Element {
     void navigate("/zpevnik");
   }
 
+  const stepper =
+    ukazPosun && tonina !== null ? (
+      <div className="inline-flex items-center gap-0.5 rounded-[9px] bg-povrch-2 p-[3px]">
+        <button
+          type="button"
+          aria-label="Půltón dolů"
+          className="nahled-press flex size-10 items-center justify-center rounded-[7px] text-mech hover:bg-povrch min-[90rem]:size-8"
+          onClick={() => zmenPosun(-1)}
+        >
+          <Ikona nazev="minus" className="size-3.5" />
+        </button>
+        <span className="min-w-12 text-center text-sm font-bold tabular-nums text-inkoust">{tonina}</span>
+        <button
+          type="button"
+          aria-label="Půltón nahoru"
+          className="nahled-press flex size-10 items-center justify-center rounded-[7px] text-mech hover:bg-povrch min-[90rem]:size-8"
+          onClick={() => zmenPosun(1)}
+        >
+          <Ikona nazev="plus" className="size-3.5" />
+        </button>
+      </div>
+    ) : null;
+
   return (
-    <main className="mx-auto w-full max-w-2xl bg-papir px-4 pb-10 pt-4 text-inkoust sm:px-6 sm:pt-6 lg:px-8">
+    <main className="mx-auto w-full max-w-2xl bg-papir px-5 pb-10 pt-4 text-inkoust sm:px-6 sm:pt-6 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <HlavickaZpet
         zpet="/zpevnik"
         zpetPopisek="Zpět do zpěvníku"
         onZpet={() => void navigate("/zpevnik")}
         titulek="Zpěvník"
+        className="min-[90rem]:hidden"
       />
 
       {chyba !== null && <p className="mt-6">{chyba}</p>}
 
       {pisen !== null && telo !== null && (
         <>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">{pisen.nazev}</h1>
+          <div className="mt-3 flex items-start justify-between gap-3 min-[90rem]:mt-0 min-[90rem]:items-end">
+            <div className="min-w-0">
+              <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+                {pisen.nazev}
+              </h1>
+              {pisen.autor.length > 0 && <p className="mt-1 text-[13px] text-ink-3 min-[90rem]:mt-3 min-[90rem]:text-[15px] min-[90rem]:text-mech">{pisen.autor}</p>}
+            </div>
             {schvaluje && id !== undefined && (
-              <div className="flex shrink-0 items-center gap-0.5 pt-1">
-                <Link
-                  to={`/zpevnik/${id}/upravit`}
-                  state={{ odkud: `${location.pathname}${location.search}` }}
-                  className="inline-flex min-h-11 items-center px-1.5 text-sm font-semibold text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-                >
-                  Upravit
-                </Link>
+              <div className="flex shrink-0 items-center gap-1 min-[90rem]:gap-2.5">
                 <button
                   type="button"
-                  className="inline-flex min-h-11 items-center px-1.5 text-sm font-semibold text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+                  className="nahled-press inline-flex min-h-11 items-center rounded-xl px-2 text-[13px] font-semibold text-mech hover:text-inkoust min-[90rem]:h-[46px] min-[90rem]:px-3 min-[90rem]:text-sm"
                   onClick={() => setMaze(true)}
                 >
                   Smazat
                 </button>
+                <Link
+                  to={`/zpevnik/${id}/upravit`}
+                  state={{ odkud: `${location.pathname}${location.search}` }}
+                  className="nahled-press inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-[13px] font-semibold text-smrk min-[90rem]:h-[46px] min-[90rem]:bg-smrk min-[90rem]:px-[18px] min-[90rem]:text-sm min-[90rem]:text-papir"
+                >
+                  <Ikona nazev="pencil" className="hidden size-4 min-[90rem]:block" />
+                  Upravit
+                </Link>
               </div>
             )}
           </div>
-          {pisen.autor.length > 0 && <p className="mt-1 text-sm text-mech">{pisen.autor}</p>}
 
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-mech">Text a akordy</p>
-            <ZpevnikOvladaniPrecteni />
+          <div className="mt-5 min-[90rem]:mt-8 min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_340px] min-[90rem]:items-start min-[90rem]:gap-7">
+            <section aria-labelledby="pisen-text" className="flex flex-col gap-4 rounded-2xl border border-linka bg-povrch p-4 shadow-jemny sm:p-5 min-[90rem]:gap-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 id="pisen-text" className="font-display text-base font-bold text-inkoust min-[90rem]:text-lg">Text a akordy</h2>
+                <ZpevnikOvladaniPrecteni />
+              </div>
+              <div className="min-[90rem]:hidden">{stepper}</div>
+              <div className="min-[90rem]:columns-2 min-[90rem]:gap-8 [&_*]:break-inside-avoid">
+                <TeloPisnePohled telo={telo} />
+              </div>
+              <p className="flex items-center gap-[7px] text-[11px] text-[#9aa189]">
+                <Ikona nazev="hand" className="size-3 text-[#b3b8a4]" />
+                Dotyk posouvání pozastaví.
+              </p>
+            </section>
+
+            {akordy.length > 0 ? (
+              <aside className="mt-6 flex flex-col gap-3.5 min-[90rem]:mt-0 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:p-5 min-[90rem]:shadow-jemny">
+                <h2 className="text-[10.5px] font-bold uppercase tracking-[1.2px] text-ink-3">Akordy v písni</h2>
+                <ul aria-label="Akordy v písni" className="flex flex-wrap gap-2">
+                  {akordy.map((akord) => (
+                    <li
+                      key={akord}
+                      className="inline-flex size-11 items-center justify-center rounded-xl bg-povrch-2 font-display text-sm font-bold text-inkoust min-[90rem]:size-[52px] min-[90rem]:text-base"
+                    >
+                      {akord}
+                    </li>
+                  ))}
+                </ul>
+                {stepper !== null ? (
+                  <div className="hidden items-center justify-between border-t border-linka pt-3 min-[90rem]:flex">
+                    <span className="text-[12.5px] font-medium text-mech">Transponovat</span>
+                    {stepper}
+                  </div>
+                ) : null}
+              </aside>
+            ) : null}
           </div>
-
-          {ukazPosun && tonina !== null && (
-            <div className="mt-3 inline-flex items-center rounded-full border border-pole bg-povrch">
-              <button
-                type="button"
-                aria-label="Půltón dolů"
-                className="h-11 w-11 rounded-full text-lg font-bold"
-                onClick={() => zmenPosun(-1)}
-              >
-                −
-              </button>
-              <span className="min-w-14 text-center text-base font-extrabold">{tonina}</span>
-              <button
-                type="button"
-                aria-label="Půltón nahoru"
-                className="h-11 w-11 rounded-full text-lg font-bold"
-                onClick={() => zmenPosun(1)}
-              >
-                +
-              </button>
-            </div>
-          )}
         </>
       )}
-
-      {pisen !== null && telo !== null && (
-        <div className="mt-4 rounded-2xl border border-linka bg-povrch p-4 shadow-denik sm:p-5">
-          <TeloPisnePohled telo={telo} />
-        </div>
-      )}
-
-      {akordy.length > 0 && <AkordovyProuzek akordy={akordy} />}
 
       <ConfirmDialog
         otevreno={maze}

@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import Ikona from "../Ikona";
 import { Link, type Location } from "react-router-dom";
 import { pocetRadkuLyriky, type ApiZpevnikNavrh } from "../../shared/zpevnik";
 
@@ -52,30 +53,43 @@ export function ZpevnikKartaNavrhu({
   return (
     <article
       id={`navrh-${navrh.id}`}
-      className="rounded-2xl border border-linka bg-povrch p-4 shadow-denik"
+      className="flex flex-col gap-3 p-4 min-[90rem]:flex-row min-[90rem]:items-center min-[90rem]:gap-4 min-[90rem]:px-5"
     >
-      {navrh.nahledUrl !== null && navrh.nahledUrl.length > 0 && (
-        <img
-          src={navrh.nahledUrl}
-          alt=""
-          className="mb-3 max-h-40 w-full rounded-xl border border-linka object-cover object-top"
-        />
-      )}
-      <h2 className="font-display text-lg font-bold text-inkoust">{nazev}</h2>
-      <p className="mt-1 text-sm text-mech">
-        {autor}
-        {formatCas(navrh.createdAt).length > 0 && ` · ${formatCas(navrh.createdAt)}`}
-      </p>
-      <p className="mt-0.5 text-sm text-ink-3">{popisekZdroje(navrh)}</p>
-      {navrh.problem !== null && (
-        <p className="mt-2 text-sm font-semibold text-inkoust">{POPIS_PROBLEMU[navrh.problem]}</p>
-      )}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <div className="flex min-w-0 flex-1 items-center gap-3 min-[90rem]:gap-4">
+        <span className="relative flex h-14 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] border border-linka bg-povrch-2 text-ink-3">
+          {navrh.nahledUrl !== null && navrh.nahledUrl.length > 0 ? (
+            <img src={navrh.nahledUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+          ) : (
+            <Ikona nazev="music" className="size-4" />
+          )}
+        </span>
+        <div className="flex min-w-0 flex-col gap-[3px]">
+          <Link
+            to={`/zpevnik/navrh/${navrh.id}`}
+            state={{ odkud: `${location.pathname}${location.search}` }}
+            onClick={onPredUpravou}
+            className="truncate text-[14.5px] font-semibold text-inkoust hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          >
+            {nazev}
+          </Link>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3">
+            <span>
+              {autor}
+              {formatCas(navrh.createdAt).length > 0 && ` · ${formatCas(navrh.createdAt)}`}
+            </span>
+            <span className="rounded-full bg-povrch-2 px-[7px] py-0.5 text-[9.5px] font-semibold">{popisekZdroje(navrh)}</span>
+          </p>
+          {navrh.problem !== null && (
+            <p className="text-xs font-semibold text-akcent">{POPIS_PROBLEMU[navrh.problem]}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2">
         <Link
           to={`/zpevnik/navrh/${navrh.id}`}
           state={{ odkud: `${location.pathname}${location.search}` }}
           onClick={onPredUpravou}
-          className="nahled-press inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-pole bg-papir text-sm font-bold text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          className="nahled-press inline-flex h-11 flex-1 items-center justify-center rounded-[9px] border border-linka text-[12.5px] font-medium text-mech hover:bg-povrch-2 min-[90rem]:hidden"
         >
           Upravit
         </Link>
@@ -84,8 +98,9 @@ export function ZpevnikKartaNavrhu({
             type="button"
             aria-label="Vydat"
             onClick={onVydat}
-            className="nahled-press inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-smrk text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+            className="nahled-press inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[9px] bg-smrk px-3.5 text-[12.5px] font-semibold text-papir hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-9 min-[90rem]:flex-none"
           >
+            <Ikona nazev="check" className="size-[13px]" />
             Vydat
           </button>
         )}
@@ -94,7 +109,7 @@ export function ZpevnikKartaNavrhu({
             type="button"
             aria-label="Odmítnout"
             onClick={onZahodit}
-            className="nahled-press inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-akcent/25 bg-akcent-100 text-sm font-bold text-akcent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+            className="nahled-press inline-flex h-11 flex-1 items-center justify-center rounded-[9px] border border-linka px-3 text-[12.5px] font-medium text-ink-3 hover:bg-povrch-2 hover:text-akcent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-9 min-[90rem]:flex-none"
           >
             Odmítnout
           </button>

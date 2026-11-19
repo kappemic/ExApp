@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { useLocation } from "react-router-dom";
+import Ikona from "../components/Ikona";
+import { useLocation, Link } from "react-router-dom";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import HlavickaZpet from "../components/HlavickaZpet";
 import PrazdnyStav from "../components/PrazdnyStav";
@@ -190,10 +191,20 @@ export default function ZpevnikFrontaPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 pb-8 pt-6 sm:px-6 sm:pt-8 lg:px-8">
-      <HlavickaZpet zpet="/zpevnik" zpetPopisek="Zpět do zpěvníku" titulek="Návrhy písní" varianta="nadpis" />
+    <main className="mx-auto w-full max-w-2xl px-5 pb-8 pt-4 sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+      <HlavickaZpet zpet="/zpevnik" zpetPopisek="Zpět do zpěvníku" titulek="Návrhy písní" varianta="nadpis" className="min-[90rem]:hidden" />
+      <div className="hidden items-end justify-between min-[90rem]:flex">
+        <h1 className="font-display text-[46px] font-bold leading-[0.98] tracking-[-1.4px] text-inkoust">Návrhy písní</h1>
+        <Link
+          to="/zpevnik"
+          className="nahled-press inline-flex h-[46px] items-center gap-2 rounded-xl border border-linka bg-povrch px-[18px] text-sm font-semibold text-inkoust hover:bg-povrch-2"
+        >
+          <Ikona nazev="book-open" className="size-4 text-mech" />
+          Zpěvník
+        </Link>
+      </div>
 
-      <div className="mt-4">
+      <div className="mt-4 flex items-center justify-between gap-3 min-[90rem]:mt-8 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4">
         <ZpevnikChipLista>
           {FILTRY.map((polozka) => (
             <ZpevnikChip key={polozka.id} vybrany={filtr === polozka.id} onClick={() => setFiltr(polozka.id)}>
@@ -201,10 +212,13 @@ export default function ZpevnikFrontaPage(): JSX.Element {
             </ZpevnikChip>
           ))}
         </ZpevnikChipLista>
+        <p className="hidden shrink-0 text-[13px] font-medium text-ink-3 min-[90rem]:block">
+          {viditelne.length} {viditelne.length === 1 ? "návrh" : viditelne.length >= 2 && viditelne.length <= 4 ? "návrhy" : "návrhů"}
+        </p>
       </div>
 
       {schvaluje && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
           <input
             ref={souborVstup}
             type="file"
@@ -221,7 +235,7 @@ export default function ZpevnikFrontaPage(): JSX.Element {
             type="button"
             disabled={nahrava}
             onClick={() => souborVstup.current?.click()}
-            className="text-sm font-semibold text-mech underline-offset-2 hover:text-inkoust hover:underline"
+            className="inline-flex min-h-9 items-center font-medium text-mech underline-offset-2 hover:text-inkoust hover:underline disabled:opacity-50"
           >
             {nahrava ? "Nahrávám…" : "Nahrát PDF nebo fotku"}
           </button>
@@ -229,7 +243,7 @@ export default function ZpevnikFrontaPage(): JSX.Element {
             type="button"
             disabled={viditelne.every((navrh) => navrh.problem !== null)}
             onClick={() => void zverejniVse()}
-            className="text-sm font-semibold text-mech underline-offset-2 hover:text-inkoust hover:underline"
+            className="inline-flex min-h-9 items-center font-medium text-mech underline-offset-2 hover:text-inkoust hover:underline disabled:opacity-50"
           >
             Vydat vše
           </button>
@@ -237,7 +251,7 @@ export default function ZpevnikFrontaPage(): JSX.Element {
             type="button"
             disabled={viditelne.length === 0}
             onClick={() => setMazeVse(true)}
-            className="text-sm font-semibold text-mech underline-offset-2 hover:text-inkoust hover:underline"
+            className="inline-flex min-h-9 items-center font-medium text-mech underline-offset-2 hover:text-inkoust hover:underline disabled:opacity-50"
           >
             Odmítnout vše
           </button>
@@ -270,7 +284,7 @@ export default function ZpevnikFrontaPage(): JSX.Element {
         />
       )}
 
-      <ul className="mt-6 space-y-4">
+      <ul className={`m-0 mt-4 list-none divide-y divide-linka overflow-hidden rounded-2xl border border-linka bg-povrch p-0 shadow-jemny min-[90rem]:mt-5 ${viditelne.length === 0 ? "hidden" : ""}`}>
         {viditelne.map((navrh) => (
           <li key={navrh.id}>
             <ZpevnikKartaNavrhu

@@ -90,6 +90,12 @@ Třetí kolo (19. 11. 2026): **Chat** (seznam konverzací bez vnitřní karty, k
 
 Zbývá projít do detailu: Přihlášení a Registrace (vyžaduje odhlášení), Pozvánkové kódy na počítači (pravý sloupec Použité), Píseň, Návrhy písní, Chat, Žebříčky, Členové, Člen, Profil, Statistiky, Nastavení, Pozvánkové kódy, Přihlášení a Registrace, zbylé modály (Docházka, Nahrát fotky, Návrh písně, Správa člena, Smazat výpravu) a menu Více / Profil.
 
+## Ukázková data (19. 11. 2026)
+
+`npm run dev:demo` spustí klienta na portu 5175 s vymyšlenými daty bez databáze. API pod `/__demo` obsluhuje Vite plugin `demo/plugin.ts` (jen `vite serve`, do buildu se nedostane), data jsou v `demo/data.ts`: 18 členů, 19 výprav (nadcházející, probíhající, uzavřené s km a vymyšlenými trasami), schůzky, alba s generovanými fotkami krajiny, 24 písní a 3 návrhy, zprávy ve všech typech konverzací, žebříček a pozvánkové kódy. Zprávy a přihlášení na výpravu se drží jen v paměti procesu, ostatní zápisy vrací 503 s kódem `DEMO`. Přihlášený uživatel je superadmin, takže jsou vidět i správcovské obrazovky.
+
+S daty ověřeno na počítači: Výpravy (seznam i kalendář), Fotky a album, Zpěvník, detail písně, Návrhy písní, Chat, Žebříčky s mapou tras, Členové. Detail písně a Návrhy písní jsou nově podle návrhu (dvousloupcový text, panel akordů s transpozicí, řádkový seznam návrhů).
+
 ## E. Doporučené pořadí
 
 1. **A1 + A2** v `index.css` a sdílených tlačítkách a kartách. Největší efekt, malý zásah. Opravit i komentář v `index.css` a popis C2 v `CLAUDE.md` (krémové pozadí, olivová primární).
