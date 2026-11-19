@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import PrazdnyStav from "../PrazdnyStav";
+import { IkonaObrazek } from "../SeznamIkony";
 import ConfirmDialog from "../kalendar/ConfirmDialog";
 import { KostraFotky } from "../StrankaKostra";
 import FotkyKosHlavicka from "./FotkyKosHlavicka";
@@ -58,6 +60,10 @@ interface AlbumFotkyProps {
   onZmenaAlba?: () => void;
   /** Journal chrome on the photo lightbox and its confirm dialogs. */
   denik?: boolean;
+  /** Pen layout: toolbar icons hidden; actions live in the page header. */
+  skrytVychoziAkce?: boolean;
+  onNahrati?: () => void;
+  onPripravStahniVse?: (stahniVse: () => void) => void;
 }
 
 type Stav = "nacitani" | "hotovo" | "chyba";
@@ -77,6 +83,9 @@ export default function AlbumFotky({
   isAdmin,
   onZmenaAlba,
   denik = false,
+  skrytVychoziAkce = false,
+  onNahrati,
+  onPripravStahniVse,
 }: AlbumFotkyProps): JSX.Element {
   const jeKos = album.druh === "kos";
   const [fotky, setFotky] = useState<ApiFotkaAlba[]>([]);
@@ -177,6 +186,15 @@ export default function AlbumFotky({
   );
 
   const stahovani = useFotkyStahovani(fotky, pripravStahovani);
+  const stahniVseRef = useRef(stahovani.provedStahovani);
+  stahniVseRef.current = stahovani.provedStahovani;
+
+  useEffect(() => {
+    if (onPripravStahniVse === undefined) return;
+    onPripravStahniVse(() => {
+      void stahniVseRef.current("vse");
+    });
+  }, [onPripravStahniVse, stav, fotky.length]);
 
   const vyberovyRezim = mazani.mazaciRezim || (!jeKos && stahovani.stahovaciRezim);
 
@@ -303,7 +321,7 @@ export default function AlbumFotky({
         ? "border-jantar/60 bg-jantar/5"
         : stahovani.stahovaciRezim
           ? "border-smrk/60 bg-smrk/5"
-          : "border-inkoust";
+          : "border-linka";
 
   const akceRowTrida =
     "flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto";
@@ -314,7 +332,7 @@ export default function AlbumFotky({
 
   if (stav === "chyba") {
     return (
-      <div role="alert" className="rounded-lg border-2 border-inkoust bg-white/60 p-5 text-center shadow-denik">
+      <div role="alert" className="rounded-lg border border-linka bg-povrch p-5 text-center shadow-denik">
         <h2 className="text-base font-bold tracking-tight">Fotky se nepodařilo načíst</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">{chyba}</p>
       </div>
@@ -323,27 +341,25 @@ export default function AlbumFotky({
 
   if (fotky.length === 0) {
     return (
-      <div role="status" className="rounded-lg border-2 border-dashed border-inkoust/40 bg-white/40 p-6 text-center">
-        <h2 className="text-base font-bold tracking-tight">
-          {jeKos ? "Koš je prázdný" : "V albu zatím nejsou fotky"}
-        </h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
-          {jeKos
+      <PrazdnyStav
+        ikona={<IkonaObrazek />}
+        nadpis={jeKos ? "Koš je prázdný" : "V albu zatím nejsou fotky"}
+        text={
+          jeKos
             ? `Fotky v koši se po ${KOS_RETENTION_DAYS} dnech smažou natrvalo.`
-            : "Přidej první fotky tlačítkem, nebo je přetáhni nahoře v Nahrát fotky."}
-        </p>
-        {isAdmin && !jeKos ? (
-          <div className="mt-4 flex justify-center">
-            <FotkyNahravaciIkona
-              albumId={album.id}
-              onNahrano={() => {
-                onZmenaAlba?.();
-                void nacist();
-              }}
-            />
-          </div>
-        ) : null}
-      </div>
+            : "Přidej první fotky tlačítkem Nahrát."
+        }
+      >
+        {isAdmin && !jeKos && onNahrati === undefined ? (
+          <FotkyNahravaciIkona
+            albumId={album.id}
+            onNahrano={() => {
+              onZmenaAlba?.();
+              void nacist();
+            }}
+          />
+        ) : undefined}
+      </PrazdnyStav>
     );
   }
 
@@ -410,7 +426,7 @@ export default function AlbumFotky({
 
   return (
     <>
-      {index === null ? (
+      {index === null && (!skrytVychoziAkce || vyberovyRezim) ? (
         <>
           <div
             className={`${fotkyAlbumToolbarZaklad} px-3 py-2.5 ${toolbarRezimTrida} ${
@@ -445,7 +461,7 @@ export default function AlbumFotky({
                 hlavickaStahovani
               ) : (
                 <>
-                  {isAdmin && !jeKos ? (
+                  {isAdmin && !jeKos && !skrytVychoziAkce ? (
                     <FotkyNahravaciIkona
                       albumId={album.id}
                       onNahrano={() => {
@@ -454,7 +470,7 @@ export default function AlbumFotky({
                       }}
                     />
                   ) : null}
-                  {hlavickaStahovani}
+                  {!skrytVychoziAkce ? hlavickaStahovani : null}
                   {hlavickaMazani}
                 </>
               )}
@@ -476,7 +492,8 @@ export default function AlbumFotky({
 
       <FotkyRadkovaMrizka
         fotky={fotky}
-        className="-mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] lg:mx-0 lg:w-full"
+        karty
+        className="w-full"
         render={(fotka, _rozmer, nahlasRozmer) => {
           const src = srcFotkyAlba(album, fotka);
           const poradi = fotky.findIndex((polozka) => polozka.id === fotka.id);
@@ -547,7 +564,7 @@ export default function AlbumFotky({
               void stahovani.ulozDoGalerie();
             }}
             disabled={stahovani.stahujeSe}
-            className={`${fotkyTlacitkoZaklad} rounded-md border-2 border-inkoust bg-inkoust px-4 text-sm font-bold text-papir disabled:opacity-60`}
+            className={`${fotkyTlacitkoZaklad} rounded-md bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60`}
           >
             Uložit do galerie
           </button>

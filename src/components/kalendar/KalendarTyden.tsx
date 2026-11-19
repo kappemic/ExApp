@@ -1,8 +1,9 @@
 import type { JSX, ReactNode } from "react";
-import KalendarPosun from "./KalendarPosun";
+import { KalendarHlavicka, KalendarPlocha } from "./KalendarPosun";
 import { DenKalendare, HlavickaDnu } from "./DenKalendare";
 import {
   popisekDne,
+  poradiVypravy,
   poziceVPasu,
   tydenMrizka,
   type KalendarniUdalost,
@@ -35,8 +36,31 @@ const FORMAT_DEN_MESIC_ROK = new Intl.DateTimeFormat("cs-CZ", {
   year: "numeric",
 });
 
+/** Phone title: one line, so the card stays the same width as the month. */
+function nazevTydneKratky(tyden: ReadonlyArray<string>): string {
+  if (tyden.length !== 7) return "Týden";
+  const prvni = tyden[0];
+  const posledni = tyden[6];
+  if (prvni === undefined || posledni === undefined) return "Týden";
+  const od = new Date(`${prvni}T12:00:00`);
+  const do_ = new Date(`${posledni}T12:00:00`);
+  if (Number.isNaN(od.getTime()) || Number.isNaN(do_.getTime())) return "Týden";
+  const stejnyMesic = od.getMonth() === do_.getMonth() && od.getFullYear() === do_.getFullYear();
+  if (stejnyMesic) {
+    const konec = FORMAT_DEN_MESIC_ROK.format(do_);
+    return `${od.getDate()}.–${konec}`;
+  }
+  const odKratce = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "short" }).format(od);
+  const doKratce = new Intl.DateTimeFormat("cs-CZ", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(do_);
+  return `${odKratce} – ${doKratce}`;
+}
+
 /** Nadpis týdne: „12. října – 18. října 2026". Nevalidní → „Týden". */
-function nazevTydne(tyden: ReadonlyArray<string>): string {
+export function nazevTydne(tyden: ReadonlyArray<string>): string {
   if (tyden.length !== 7) return "Týden";
   const prvni = tyden[0];
   const posledni = tyden[6];
@@ -65,26 +89,27 @@ export default function KalendarTyden(props: KalendarTydenProps): JSX.Element {
   });
 
   return (
-    <div aria-label={`Kalendář – týden ${nazev}`} className="rounded-xl border border-linka bg-papir p-3 sm:p-5 lg:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <h2 className="text-2xl font-bold tabular-nums text-inkoust">{nazev}</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {props.prepinac}
-          <div className="flex items-center gap-1">
-          <KalendarPosun
-            predchozi="Předchozí týden"
-            dalsi="Další týden"
-            onPredchozi={() => onTyden(-1)}
-            onDalsi={() => onTyden(1)}
-            onDnes={onDnes}
-          />
-          </div>
-        </div>
-      </div>
+    <div aria-label={`Kalendář – týden ${nazev}`} className="w-full min-w-0 max-w-full min-[90rem]:overflow-hidden min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:shadow-denik">
+      <KalendarHlavicka
+        nadpis={
+          <>
+            <span className="lg:hidden">{nazevTydneKratky(tyden)}</span>
+            <span className="hidden lg:inline">{nazev}</span>
+          </>
+        }
+        prepinac={props.prepinac}
+        posun={{
+          predchozi: "Předchozí týden",
+          dalsi: "Další týden",
+          onPredchozi: () => onTyden(-1),
+          onDalsi: () => onTyden(1),
+          onDnes,
+        }}
+      />
 
-      <div role="group" aria-label="Dny týdne" className="mt-5">
+      <KalendarPlocha ariaLabel="Dny týdne" onPosun={onTyden}>
         <HlavickaDnu />
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg bg-linka/70">
+        <div className="grid w-full min-w-0 grid-cols-7 gap-y-0.5 min-[90rem]:gap-px min-[90rem]:bg-linka">
           {tyden.map((den, index) => {
             const denni = udalosti.get(den) ?? [];
             return (
@@ -99,11 +124,12 @@ export default function KalendarTyden(props: KalendarTydenProps): JSX.Element {
                 label={popisekDne(den, denni, { mrizka: tyden, mapa: udalosti })}
                 onDen={onDen}
                 datumVypravy={datumVypravy}
+                delkaVypravy={(id) => poradiVypravy(id, den, udalosti)?.celkem ?? 1}
               />
             );
           })}
         </div>
-      </div>
+      </KalendarPlocha>
     </div>
   );
 }

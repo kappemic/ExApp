@@ -28,29 +28,30 @@ export default function VypravaKarta({
       type="button"
       onClick={() => onDetail(expedice)}
       aria-label={`Detail výpravy ${expedice.nazev}`}
-      className="nahled-press nahled-karta group flex h-full w-full flex-col gap-3 rounded-3xl text-left text-inkoust focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-smrk"
+      className="nahled-press nahled-karta group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-linka bg-povrch text-left text-inkoust focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-smrk min-[90rem]:gap-3 min-[90rem]:overflow-visible min-[90rem]:rounded-none min-[90rem]:border-0 min-[90rem]:bg-transparent"
     >
-      <span className="nahled-karta-foto relative block aspect-[4/3] overflow-hidden rounded-3xl bg-mlha">
+      <span className="nahled-karta-foto relative block h-[110px] w-full shrink-0 overflow-hidden bg-mlha min-[90rem]:h-[150px] min-[90rem]:rounded-[14px]">
         {fotkaId !== null ? (
           <VypravaNahled expeditionId={expedice.id} fotkaId={fotkaId} probehla />
         ) : (
           <KrajinaVypravy id={expedice.id} datum={expedice.datum} />
         )}
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 border-b border-black/10 min-[90rem]:rounded-[14px] min-[90rem]:border" />
       </span>
-      <span className="flex min-w-0 flex-col px-1">
+      <span className="flex min-w-0 flex-col gap-1 p-3 min-[90rem]:gap-1 min-[90rem]:p-0">
         <span className="flex min-w-0 items-start gap-2">
-          <span className="font-display min-w-0 flex-1 text-lg font-bold leading-snug tracking-tight">
+          <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold min-[90rem]:whitespace-normal min-[90rem]:text-[14.5px] min-[90rem]:leading-[1.3]">
             {expedice.nazev}
           </span>
           {neprecteno ? (
-            <span className="shrink-0 pt-1 text-[13px] font-semibold text-smrk">nové</span>
+            <span className="shrink-0 text-xs font-semibold text-smrk">nové</span>
           ) : null}
         </span>
-        <time dateTime={expedice.datum} className="mt-0.5 block text-sm text-mech">
-          {formatRozsahData(expedice.datum, expedice.datumDo)}, {ucast}
+        <time dateTime={expedice.datum} className="block text-[11.5px] text-ink-3 min-[90rem]:text-xs">
+          {formatRozsahData(expedice.datum, expedice.datumDo)} · {ucast}
+          <span className="hidden min-[90rem]:inline">{jeBezOmezeni(expedice) ? "" : " přihlášeno"}</span>
         </time>
       </span>
     </button>
   );
 }
-

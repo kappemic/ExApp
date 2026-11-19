@@ -46,7 +46,7 @@ export default function RequireAuth({
       <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
         <div
           role="alert"
-          className="rounded-lg border-2 border-inkoust bg-white/60 p-6 text-center shadow-denik"
+          className="rounded-lg border border-linka bg-povrch p-6 text-center shadow-denik"
         >
           <h1 className="text-2xl font-extrabold tracking-tight">
             Nemáš přístup

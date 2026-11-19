@@ -313,7 +313,7 @@ export default function StravaParovani({
       <button
         type="button"
         onClick={akce}
-        className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold"
+        className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-linka bg-papir px-5 text-sm font-bold"
       >
         Zkusit znovu
       </button>
@@ -410,7 +410,7 @@ export default function StravaParovani({
     <>
     <section
       aria-label="Párování aktivity ze Stravy"
-      className="mt-4 rounded-2xl border-2 border-inkoust bg-papir/60 p-4"
+      className="mt-4 rounded-2xl border border-linka bg-papir/60 p-4"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-inkoust/60">
@@ -444,7 +444,7 @@ export default function StravaParovani({
             disabled={odpojujeSe}
             title="Odpojit Strava aktivitu od výpravy"
             aria-label="Odpojit aktivitu od výpravy"
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-linka bg-papir px-5 text-sm font-bold disabled:opacity-60"
           >
             {odpojujeSe ? "Odpojuji…" : "Odpojit aktivitu"}
           </button>
@@ -464,7 +464,7 @@ export default function StravaParovani({
             disabled={odpojujeSe}
             title="Smazat ručně zapsané kilometry z výpravy"
             aria-label="Smazat ruční zápis z výpravy"
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-linka bg-papir px-5 text-sm font-bold disabled:opacity-60"
           >
             {odpojujeSe ? "Mažu…" : "Smazat ruční zápis"}
           </button>
@@ -564,7 +564,7 @@ export default function StravaParovani({
                       onClick={() => zamitnout(navrh.id)}
                       disabled={potvrzujeSe !== null}
                       title="Zamítnout navrženou aktivitu"
-                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-5 text-sm font-bold disabled:opacity-60"
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-linka bg-papir px-5 text-sm font-bold disabled:opacity-60"
                     >
                       Zamítnout
                     </button>

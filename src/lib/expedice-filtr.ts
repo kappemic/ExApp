@@ -32,3 +32,64 @@ export function filtrujExpedicePodleJmena<T extends { nazev: string }>(
     normalizujProVyhledavani(polozka.nazev).includes(hledane),
   );
 }
+
+export type VypravaKRozdeleni = {
+  datum: string;
+  datumDo?: string | null;
+  stav: string;
+};
+
+export type RozdeleneVypravy<T> = {
+  probihajici: T[];
+  nadchazejici: T[];
+  cekaNaUzavreni: T[];
+  probehle: T[];
+};
+
+function konecYmd(polozka: VypravaKRozdeleni): string {
+  const od = polozka.datum.slice(0, 10);
+  const konec = polozka.datumDo;
+  if (konec === undefined || konec === null || konec.length === 0) return od;
+  return konec.slice(0, 10);
+}
+
+/** Probíhající = dnešek v rozsahu a není uzavřená. Po konci a před uzavřením = čeká. */
+export function rozdelVypravy<T extends VypravaKRozdeleni>(
+  seznam: readonly T[],
+  dnes: string,
+): RozdeleneVypravy<T> {
+  const dnesYmd = dnes.slice(0, 10);
+  const vysledek: RozdeleneVypravy<T> = {
+    probihajici: [],
+    nadchazejici: [],
+    cekaNaUzavreni: [],
+    probehle: [],
+  };
+  for (const polozka of seznam) {
+    if (polozka.stav === "proběhlá") {
+      vysledek.probehle.push(polozka);
+      continue;
+    }
+    const od = polozka.datum.slice(0, 10);
+    const konec = konecYmd(polozka);
+    if (od <= dnesYmd && dnesYmd <= konec) vysledek.probihajici.push(polozka);
+    else if (konec < dnesYmd) vysledek.cekaNaUzavreni.push(polozka);
+    else vysledek.nadchazejici.push(polozka);
+  }
+  return vysledek;
+}
+
+/** Řazení seznamů výprav (návrh: „Podle data“ / „Podle názvu“). */
+export type RazeniVyprav = "datum" | "nazev";
+
+/**
+ * `datum` nechá pořadí, jak přišlo (seznamy jsou už chronologické),
+ * `nazev` řadí česky podle abecedy. Vstup nemění.
+ */
+export function seradVypravy<T extends { nazev: string }>(
+  seznam: readonly T[],
+  razeni: RazeniVyprav,
+): T[] {
+  if (razeni === "datum") return [...seznam];
+  return [...seznam].sort((a, b) => a.nazev.localeCompare(b.nazev, "cs"));
+}

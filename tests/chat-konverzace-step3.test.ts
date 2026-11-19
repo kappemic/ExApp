@@ -93,7 +93,7 @@ describe("ConversationList pure: názvy + pinned", () => {
         konverzace({ key: "general", channel: "general" }),
         null,
       ),
-    ).toBe("General");
+    ).toBe("Obecný");
   });
 
   it("výprava bere název z mapy, fallback id, pak key", () => {
@@ -354,7 +354,7 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
   it("seznam: listbox + option + selected + badge role=status", () => {
     const zdroj: string = ctiZdroj("src/components/chat/ConversationList.tsx");
     expect(zdroj).toContain('role="tablist"');
-    expect(zdroj).toContain("Výpravy");
+    expect(zdroj).toContain("K výpravám");
     expect(zdroj).toContain('role="listbox"');
     expect(zdroj).toContain('role="option"');
     expect(zdroj).toContain("aria-selected");
@@ -385,7 +385,7 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
     expect(zdroj).not.toContain("dangerouslySetInnerHTML");
   });
 
-  it("deníkové tokeny ve všech nových souborech", () => {
+  it("tokeny 12f ve všech nových souborech (vlasová linka, ne tmavý okraj)", () => {
     for (const soubor of [
       "src/components/chat/ConversationList.tsx",
       "src/components/chat/KonverzaceDetail.tsx",
@@ -393,7 +393,8 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
       "src/pages/ChatPage.tsx",
     ]) {
       const zdroj: string = ctiZdroj(soubor);
-      expect(zdroj).toContain("border-inkoust");
+      expect(zdroj).toContain("border-linka");
+      expect(zdroj).not.toMatch(/border-2 border-inkoust(?!\/)/);
       expect(zdroj).toContain("bg-papir");
       expect(zdroj).toContain("shadow-denik");
     }

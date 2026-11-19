@@ -1,5 +1,6 @@
 import { useId, useRef, useState, useEffect, type JSX } from "react";
 import { DNY_V_TYDNU } from "./kalendar/DenKalendare";
+import Ikona from "./Ikona";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 import { mesicMrizkaSKontextem, nazevMesice } from "../lib/kalendar";
 import { evropskeNaIso, isoNaEvropske, jeIsoDatum, maskaEvropskehoData } from "../lib/evropske-datum";
@@ -119,50 +120,42 @@ export default function DatumVstup({
         onClick={() => (otevreno ? setOtevreno(false) : otevri())}
         className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-          <line x1="16" x2="16" y1="2" y2="6" />
-          <line x1="8" x2="8" y1="2" y2="6" />
-          <line x1="3" x2="21" y1="10" y2="10" />
-        </svg>
+        <Ikona nazev="calendar" className="size-4" />
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}
         kotva={kotvaRef}
         onZavrit={() => setOtevreno(false)}
-        sirka={316}
+        sirka={292}
         label="Kalendář"
+        vzhled="datum"
       >
-        <div id={panelId}>
-          <div className="mb-2 flex items-center justify-between gap-2">
+        <div id={panelId} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
             <button
               type="button"
               aria-label="Předchozí měsíc"
               onClick={() => setPohled((stav) => posunMesic(stav.rok, stav.mesic, -1))}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-inkoust hover:bg-mlha"
+              className="flex size-10 items-center justify-center rounded-lg text-inkoust hover:bg-povrch-2 min-[90rem]:size-7"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m15 6-6 6 6 6" />
-              </svg>
+              <Ikona nazev="chevron-left" className="size-4" />
             </button>
-            <p className="font-display text-base font-bold capitalize">{nazevMesice(pohled.rok, pohled.mesic)}</p>
+            <p className="text-[15px] font-bold first-letter:uppercase">{nazevMesice(pohled.rok, pohled.mesic)}</p>
             <button
               type="button"
               aria-label="Další měsíc"
               onClick={() => setPohled((stav) => posunMesic(stav.rok, stav.mesic, 1))}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-inkoust hover:bg-mlha"
+              className="flex size-10 items-center justify-center rounded-lg text-inkoust hover:bg-povrch-2 min-[90rem]:size-7"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
+              <Ikona nazev="chevron-right" className="size-4" />
             </button>
           </div>
-          <div aria-hidden="true" className="grid grid-cols-7 text-center">
+          <div aria-hidden="true" className="grid grid-cols-7 gap-0.5 text-center">
             {DNY_V_TYDNU.map((den) => (
-              <span key={den} className="pb-1 text-[12px] font-medium text-mech">{den}</span>
+              <span key={den} className="text-[10px] font-bold uppercase tracking-[0.6px] text-ink-3">{den}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-0.5">
             {bunky.map((bunka) => {
               const vybrano = bunka.ymd === value;
               const jeDnes = bunka.ymd === dnes;
@@ -174,29 +167,44 @@ export default function DatumVstup({
                   type="button"
                   disabled={zakazano}
                   aria-pressed={vybrano}
-                  aria-current={jeDnes ? "date" : undefined}
+                  aria-current={jeDnes && !vybrano ? "date" : undefined}
                   onClick={() => {
                     onChange(bunka.ymd);
                     setOtevreno(false);
                   }}
-                  className="flex h-10 items-center justify-center disabled:cursor-not-allowed disabled:opacity-30"
+                  className={`flex h-10 items-center justify-center rounded-full text-[12.5px] tabular-nums transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-30 min-[90rem]:h-[34px] ${
+                    vybrano
+                      ? "bg-smrk font-bold text-papir"
+                      : jeDnes
+                        ? "bg-mlha font-bold text-smrk"
+                        : bunka.mimoMesic
+                          ? "font-medium text-[#c3c7b6] hover:bg-povrch-2"
+                          : "font-medium text-inkoust hover:bg-povrch-2"
+                  }`}
                 >
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-sm tabular-nums ${
-                      vybrano
-                        ? "bg-smrk font-semibold text-papir"
-                        : jeDnes
-                          ? "bg-inkoust font-semibold text-papir"
-                          : bunka.mimoMesic
-                            ? "font-medium text-pole hover:bg-mlha"
-                            : "text-inkoust hover:bg-mlha"
-                    }`}
-                  >
-                    {cislo}
-                  </span>
+                  {cislo}
                 </button>
               );
             })}
+          </div>
+          <div className="flex items-center justify-between px-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(dnes);
+                setOtevreno(false);
+              }}
+              className="nahled-press -ml-2 flex min-h-11 items-center rounded-lg px-2 text-[13px] font-semibold text-smrk hover:bg-mlha min-[90rem]:min-h-8"
+            >
+              Dnes
+            </button>
+            <button
+              type="button"
+              onClick={() => setOtevreno(false)}
+              className="nahled-press -mr-2 flex min-h-11 items-center rounded-lg px-2 text-[13px] font-semibold text-smrk hover:bg-mlha min-[90rem]:min-h-8"
+            >
+              Hotovo
+            </button>
           </div>
         </div>
       </VyskakovaciPanel>

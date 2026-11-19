@@ -203,9 +203,9 @@ export default function ClenDetailModal({
         aria-modal="true"
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border-2 border-inkoust bg-papir p-5 shadow-denik sm:p-6"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-linka bg-papir p-5 shadow-denik sm:p-6"
       >
-        <div className="flex items-start justify-between gap-3 border-b-2 border-inkoust pb-4">
+        <div className="flex items-start justify-between gap-3 border-b border-linka pb-4">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mech">
               {upravy ? "Úprava člena" : "Detail člena"}
@@ -231,7 +231,7 @@ export default function ClenDetailModal({
             type="button"
             onClick={onZavrit}
             aria-label="Zavřít detail člena"
-            className="nahled-press nahled-prejeti flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border-2 border-inkoust bg-papir text-xl font-extrabold leading-none text-inkoust"
+            className="nahled-press nahled-prejeti flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border border-linka bg-papir text-xl font-extrabold leading-none text-inkoust"
           >
             <span aria-hidden="true">×</span>
           </button>
@@ -367,7 +367,7 @@ export default function ClenDetailModal({
               </div>
             </dl>
 
-            <div className="mt-5 flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-2 border-t border-linka pt-4 sm:flex-row sm:items-center sm:justify-between">
               {onOdstranit !== undefined && vlastniUcet ? (
                 <p className="text-sm text-inkoust/70">
                   Vlastní účet z administrace smazat nejde.
@@ -391,7 +391,7 @@ export default function ClenDetailModal({
                 <button
                   type="button"
                   onClick={onZavrit}
-                  className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust"
+                  className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border border-linka bg-papir px-5 font-bold text-inkoust"
                 >
                   Zavřít
                 </button>
@@ -400,7 +400,7 @@ export default function ClenDetailModal({
                     type="button"
                     onClick={() => setRezim("upravy")}
                     title="Upravit profil člena"
-                    className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust [touch-action:manipulation]"
+                    className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border border-linka bg-papir px-5 font-bold text-inkoust [touch-action:manipulation]"
                   >
                     Upravit
                   </button>
@@ -734,12 +734,12 @@ function ClenProfilForm({
         </p>
       )}
 
-      <div className="flex flex-col gap-2 border-t-2 border-inkoust pt-4 sm:flex-row sm:justify-end">
+      <div className="flex flex-col gap-2 border-t border-linka pt-4 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onZrusit}
           disabled={ukladam}
-          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
+          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border border-linka bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           Zrušit
         </button>
@@ -751,7 +751,7 @@ function ClenProfilForm({
               ? chybaKombinace
               : "Uložit profil člena"
           }
-          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
+          className="nahled-press nahled-prejeti inline-flex min-h-[44px] items-center justify-center rounded border border-linka bg-papir px-5 font-bold text-inkoust disabled:cursor-not-allowed disabled:opacity-50 [touch-action:manipulation]"
         >
           {ukladam ? "Ukládám…" : "Uložit změny"}
         </button>

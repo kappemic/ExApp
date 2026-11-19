@@ -45,7 +45,7 @@ export default function DomuPage(): JSX.Element {
         </Link>
         <Link
           to="/register"
-          className="nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          className="nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-linka bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
         >
           Registrace s kódem
         </Link>

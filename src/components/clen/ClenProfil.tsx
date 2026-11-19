@@ -176,7 +176,7 @@ function KartaProfilu({
           aria-modal="true"
           aria-labelledby={titulekId}
           onClick={(udalost) => udalost.stopPropagation()}
-          className="my-auto w-full max-w-sm rounded-2xl border-2 border-inkoust bg-papir p-5 shadow-denik"
+          className="my-auto w-full max-w-sm rounded-2xl border border-linka bg-papir p-5 shadow-denik"
         >
           <div className="flex flex-col items-center gap-3 text-center">
             {fotka !== null ? (
@@ -184,7 +184,7 @@ function KartaProfilu({
                 type="button"
                 onClick={() => setZvetseno(true)}
                 aria-label="Zvětšit fotku"
-                className="h-32 w-32 overflow-hidden rounded-full border-2 border-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+                className="h-32 w-32 overflow-hidden rounded-full border border-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
               >
                 <PostupnaFotka
                   src={fotka}
@@ -198,7 +198,7 @@ function KartaProfilu({
             ) : (
               <div
                 aria-hidden="true"
-                className="flex h-32 w-32 items-center justify-center rounded-full border-2 border-inkoust bg-linka text-3xl font-extrabold"
+                className="flex h-32 w-32 items-center justify-center rounded-full border border-linka bg-linka text-3xl font-extrabold"
               >
                 {inicialyProAvatar(jmeno)}
               </div>
@@ -236,7 +236,7 @@ function KartaProfilu({
           <button
             type="button"
             onClick={onZavrit}
-            className="mt-5 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+            className="mt-5 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-smrk px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           >
             Zavřít
           </button>

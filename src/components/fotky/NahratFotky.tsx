@@ -5,28 +5,33 @@ import {
   type PolozkaStavuFotek,
 } from "../../lib/fotky-operace-stav";
 import FotkyStavPanel from "./FotkyStavPanel";
+import {
+  fotkyHoverBgSmrk,
+  fotkyTlacitkoPrimarni,
+  fotkyTlacitkoSekundarni,
+} from "./fotky-ui";
 
 interface NahratFotkyProps {
   alba: readonly ApiAlbum[];
   vybraneId: string;
   onVyber: (albumId: string) => void;
   onNahrano: () => void;
+  onZrusit: () => void;
 }
 
 /**
- * Multi-file picker plus an album select. Each file is posted on its own
- * so a partial failure still reports how far the batch got.
+ * Upload sheet body: pick files, choose album, confirm with footer actions.
  */
 export default function NahratFotky({
   alba,
   vybraneId,
   onVyber,
   onNahrano,
+  onZrusit,
 }: NahratFotkyProps): JSX.Element {
   const vstupRef = useRef<HTMLInputElement>(null);
-  const [pocet, setPocet] = useState<number>(0);
+  const [vybraneSoubory, setVybraneSoubory] = useState<readonly File[]>([]);
   const [odesila, setOdesila] = useState<boolean>(false);
-  const [hotovoShrnuti, setHotovoShrnuti] = useState<string | null>(null);
   const [chyba, setChyba] = useState<string | null>(null);
   const [operacePolozky, setOperacePolozky] = useState<readonly PolozkaStavuFotek[]>([]);
   const bezAlb = alba.length === 0;
@@ -34,17 +39,14 @@ export default function NahratFotky({
   async function odeslatSoubory(seznam: readonly File[]): Promise<void> {
     if (seznam.length === 0) {
       setChyba("Vyber aspoň jednu fotku.");
-      setHotovoShrnuti(null);
       return;
     }
     if (vybraneId.length === 0) {
       setChyba("Vyber album, do kterého se fotky nahrají.");
-      setHotovoShrnuti(null);
       return;
     }
     setOdesila(true);
     setChyba(null);
-    setHotovoShrnuti(null);
     const radky: PolozkaStavuFotek[] = seznam.map((soubor, index) => ({
       id: `${index}-${soubor.name}`,
       popisek: kratkyNazevSouboru(soubor.name),
@@ -56,17 +58,13 @@ export default function NahratFotky({
     for (let index = 0; index < seznam.length; index += 1) {
       const soubor = seznam[index];
       setOperacePolozky((prev) =>
-        prev.map((radek, i) =>
-          i === index ? { ...radek, stav: "probiha" } : radek,
-        ),
+        prev.map((radek, i) => (i === index ? { ...radek, stav: "probiha" } : radek)),
       );
       const vysledek = await nahrajFotku(vybraneId, soubor);
       if (!vysledek.ok) {
         setOperacePolozky((prev) =>
           prev.map((radek, i) =>
-            i === index
-              ? { ...radek, stav: "chyba", chyba: vysledek.chyba }
-              : radek,
+            i === index ? { ...radek, stav: "chyba", chyba: vysledek.chyba } : radek,
           ),
         );
         setOdesila(false);
@@ -80,27 +78,24 @@ export default function NahratFotky({
       }
       nahrano += 1;
       setOperacePolozky((prev) =>
-        prev.map((radek, i) =>
-          i === index ? { ...radek, stav: "hotovo" } : radek,
-        ),
+        prev.map((radek, i) => (i === index ? { ...radek, stav: "hotovo" } : radek)),
       );
     }
     if (vstupRef.current !== null) vstupRef.current.value = "";
-    setPocet(0);
+    setVybraneSoubory([]);
     setOdesila(false);
-    setHotovoShrnuti(`Nahráno ${popisekPoctuFotek(nahrano)}.`);
     onNahrano();
+    onZrusit();
     window.setTimeout(() => {
       setOperacePolozky([]);
-    }, 2400);
+    }, 400);
   }
 
   function prijmiSoubory(soubory: FileList | null): void {
-    const seznam = soubory === null ? [] : Array.from(soubory).filter((soubor) => soubor.type.startsWith("image/"));
-    setPocet(seznam.length);
+    const seznam =
+      soubory === null ? [] : Array.from(soubory).filter((soubor) => soubor.type.startsWith("image/"));
+    setVybraneSoubory(seznam);
     setChyba(null);
-    setHotovoShrnuti(null);
-    void odeslatSoubory(seznam);
   }
 
   function naPretazeni(udalost: DragEvent<HTMLLabelElement>): void {
@@ -109,14 +104,54 @@ export default function NahratFotky({
     prijmiSoubory(udalost.dataTransfer.files);
   }
 
+  const pocet = vybraneSoubory.length;
+  const popisekOdeslat =
+    pocet === 0
+      ? "Nahrát"
+      : pocet === 1
+        ? "Nahrát 1 fotku"
+        : pocet < 5
+          ? `Nahrát ${pocet} fotky`
+          : `Nahrát ${pocet} fotek`;
+
   return (
-    <>
-      <div className="flex flex-col gap-3">
-        <div className="min-w-0">
-          <label htmlFor="fotky-album" className="text-sm font-bold tracking-tight">
-            Uložit do alba
-          </label>
-          <div className="fotky-album-vyber mt-1">
+    <div className="flex flex-col gap-4 pb-1">
+      <p className="text-sm text-mech">
+        {alba.find((polozka) => polozka.id === vybraneId)?.nazev ?? "Vyber album níže."}
+      </p>
+
+      <label
+        htmlFor="fotky-soubory"
+        onDragOver={(udalost) => {
+          udalost.preventDefault();
+        }}
+        onDrop={naPretazeni}
+        className={`flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-pole bg-papir px-4 py-6 text-center ${
+          odesila || bezAlb ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
+        <span className="text-sm font-semibold text-inkoust">Vyber fotky z telefonu</span>
+        <span className="text-[12.5px] text-ink-3">JPG nebo PNG, max. 8 MB na fotku</span>
+        <input
+          ref={vstupRef}
+          id="fotky-soubory"
+          name="soubor"
+          type="file"
+          accept="image/jpeg,image/png,image/*"
+          multiple
+          disabled={odesila || bezAlb}
+          onChange={(udalost) => {
+            prijmiSoubory(udalost.target.files);
+          }}
+          className="sr-only"
+        />
+      </label>
+
+      <div className="min-w-0">
+        <label htmlFor="fotky-album" className="text-[11.5px] font-medium text-mech">
+          Album
+        </label>
+        <div className="fotky-album-vyber mt-1">
           <select
             id="fotky-album"
             name="album"
@@ -125,7 +160,7 @@ export default function NahratFotky({
             onChange={(udalost) => {
               onVyber(udalost.target.value);
             }}
-            className="block min-h-[44px] w-full rounded-md border-2 border-inkoust bg-papir px-3 text-base font-bold text-inkoust"
+            className="block min-h-11 w-full rounded-[11px] border border-pole bg-papir px-3.5 text-base text-inkoust"
           >
             {bezAlb ? <option value="">Žádné album</option> : null}
             {alba.map((album) => (
@@ -134,50 +169,20 @@ export default function NahratFotky({
               </option>
             ))}
           </select>
-          </div>
         </div>
-        <label
-          htmlFor="fotky-soubory"
-          onDragOver={(udalost) => {
-            udalost.preventDefault();
-          }}
-          onDrop={naPretazeni}
-          className={`flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-1 border-2 border-dashed border-inkoust bg-papir px-4 py-4 text-center ${
-            odesila || bezAlb ? "pointer-events-none opacity-60" : ""
-          }`}
-        >
-          <span className="text-sm font-extrabold text-inkoust">
-            {odesila ? "Nahrávám…" : "Přetáhni fotky sem"}
-          </span>
-          <span className="text-sm text-inkoust/70">nebo klepni a vyber je</span>
-          <input
-            ref={vstupRef}
-            id="fotky-soubory"
-            name="soubor"
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={odesila || bezAlb}
-            onChange={(udalost) => {
-              prijmiSoubory(udalost.target.files);
-            }}
-            className="sr-only"
-          />
-        </label>
-        <p role="status" className="text-sm text-inkoust/70">
-          {hotovoShrnuti ??
-            (pocet === 0
-              ? "Můžeš vybrat celý víkend najednou. Fotky se nahrají hned po výběru."
-              : odesila
-                ? `Nahrávám ${pocet}…`
-                : `Vybráno: ${pocet}.`)}
-        </p>
-        {chyba !== null ? (
-          <p role="alert" className="text-sm font-semibold text-red-800">
-            {chyba}
-          </p>
-        ) : null}
       </div>
+
+      {pocet > 0 ? (
+        <p role="status" className="text-sm text-mech">
+          Vybráno: {popisekPoctuFotek(pocet)}.
+        </p>
+      ) : null}
+
+      {chyba !== null ? (
+        <p role="alert" className="text-sm font-semibold text-akcent">
+          {chyba}
+        </p>
+      ) : null}
 
       <FotkyStavPanel
         rezim="nahravani"
@@ -185,6 +190,31 @@ export default function NahratFotky({
         viditelny={operacePolozky.length > 0}
         probiha={odesila}
       />
-    </>
+
+      <div
+        className="sticky bottom-0 -mx-4 flex gap-2 border-t border-pole bg-povrch px-4 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-3"
+        role="group"
+        aria-label="Akce nahrání"
+      >
+        <button
+          type="button"
+          disabled={odesila}
+          onClick={onZrusit}
+          className={`${fotkyTlacitkoSekundarni} min-h-11 flex-1`}
+        >
+          Zrušit
+        </button>
+        <button
+          type="button"
+          disabled={odesila || pocet === 0 || bezAlb}
+          onClick={() => {
+            void odeslatSoubory(vybraneSoubory);
+          }}
+          className={`${fotkyTlacitkoPrimarni} ${fotkyHoverBgSmrk} min-h-11 flex-1`}
+        >
+          {odesila ? "Nahrávám…" : popisekOdeslat}
+        </button>
+      </div>
+    </div>
   );
 }

@@ -9,10 +9,10 @@ export default function ExpeditionSkeleton(): JSX.Element {
   return (
     <div
       aria-hidden="true"
-      className="flex h-full flex-col overflow-hidden rounded-lg border-2 border-inkoust bg-white/60 shadow-denik motion-safe:animate-pulse"
+      className="flex h-full flex-col overflow-hidden rounded-lg border border-linka bg-povrch shadow-denik motion-safe:animate-pulse"
     >
       {/* Foto / linkovaný podklad */}
-      <div className="relative aspect-[16/9] w-full border-b-2 border-inkoust bg-linka/70">
+      <div className="relative aspect-[16/9] w-full border-b border-linka bg-linka/70">
         <div
           className="absolute inset-0"
           style={{

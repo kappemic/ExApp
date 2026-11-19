@@ -38,6 +38,8 @@ import {
 interface ProfileFormProps {
   pocatecni: ApiUser;
   onUlozeno: (novy: ApiUser) => void;
+  /** Cream rows matching pen Profil; hides avatar block (hero avatar is outside). */
+  variant?: "vychozi" | "radky";
 }
 
 interface FormHodnoty {
@@ -110,7 +112,11 @@ function telefonSeLisi(narodni: string, kod: KodZeme, ulozeny: string | null): b
   return vlevo !== vpravo;
 }
 
-export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps): JSX.Element {
+export default function ProfileForm({
+  pocatecni,
+  onUlozeno,
+  variant = "vychozi",
+}: ProfileFormProps): JSX.Element {
   const [form, setForm] = useState<FormHodnoty>(() => zApi(pocatecni));
   const [kodZeme, setKodZeme] = useState<KodZeme>(() => kodZemeZTelefonu(pocatecni.telefon));
   const [chyby, setChyby] = useState<Partial<Record<FormPole | "avatar", string>>>({});
@@ -404,8 +410,10 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
     );
   }
 
-  const vstupTrida =
-    "min-h-[44px] w-full rounded border-2 border-inkoust bg-white px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir disabled:opacity-50";
+  const radky = variant === "radky";
+  const vstupTrida = radky
+    ? "min-h-11 w-full rounded-2xl border border-pole bg-povrch px-4 py-2 text-base text-inkoust placeholder:text-mech focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/30 disabled:opacity-50"
+    : "min-h-[44px] w-full rounded border border-pole bg-white px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir disabled:opacity-50";
 
   function onInput(poleJmeno: FormPole) {
     return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
@@ -420,18 +428,20 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       aria-label="Osobní údaje"
       className="mx-auto w-full max-w-2xl text-left lg:mx-0 lg:max-w-none"
     >
-      <div className="flex flex-col gap-4">
-        <AvatarUpload
-          hodnota={form.avatarUrl.trim().length === 0 ? null : form.avatarUrl}
-          jmeno={form.jmeno}
-          prijmeni={form.prijmeni}
-          disabled={uklada}
-          chyba={chyby["avatar"]}
-          onZmena={(url) => nastav("avatarUrl", url ?? "")}
-          onSouborZmena={setSouborAvatar}
-        />
+      <div className={`flex flex-col ${radky ? "gap-2" : "gap-4"}`}>
+        {radky ? null : (
+          <AvatarUpload
+            hodnota={form.avatarUrl.trim().length === 0 ? null : form.avatarUrl}
+            jmeno={form.jmeno}
+            prijmeni={form.prijmeni}
+            disabled={uklada}
+            chyba={chyby["avatar"]}
+            onZmena={(url) => nastav("avatarUrl", url ?? "")}
+            onSouborZmena={setSouborAvatar}
+          />
+        )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-4 ${radky ? "" : "sm:grid-cols-2"}`}>
           {pole(
             "Jméno *",
             "profil-jmeno",
@@ -565,6 +575,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
           )}
         </div>
 
+        {radky ? null : (
         <div className="flex flex-col gap-1.5">
           <span id="profil-oblibena-barva-popisek" className="text-sm font-bold">
             Oblíbená barva
@@ -589,7 +600,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
                 <>
                   <span
                     aria-hidden="true"
-                    className="h-6 w-6 shrink-0 rounded-full border-2 border-inkoust"
+                    className="h-6 w-6 shrink-0 rounded-full border border-linka"
                     style={{
                       backgroundColor: OBLIBENE_BARVY.find(
                         (barva) => barva.nazev === form.oblibenaBarva,
@@ -608,7 +619,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
                 id="profil-oblibena-barva-nabidka"
                 role="listbox"
                 aria-labelledby="profil-oblibena-barva-popisek"
-                className="registrace-nabidka absolute top-[calc(100%+4px)] right-0 left-0 z-20 max-h-60 overflow-y-auto rounded-md border-2 border-inkoust bg-papir py-1 shadow-denik"
+                className="registrace-nabidka absolute top-[calc(100%+4px)] right-0 left-0 z-20 max-h-60 overflow-y-auto rounded-md border border-linka bg-papir py-1 shadow-denik"
               >
                 {OBLIBENE_BARVY.map((barva) => {
                   const vybrana = form.oblibenaBarva === barva.nazev;
@@ -627,7 +638,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
                       >
                         <span
                           aria-hidden="true"
-                          className="h-6 w-6 shrink-0 rounded-full border-2 border-inkoust"
+                          className="h-6 w-6 shrink-0 rounded-full border border-linka"
                           style={{ backgroundColor: barva.hex }}
                         />
                         {barva.nazev.charAt(0).toLocaleUpperCase("cs-CZ") + barva.nazev.slice(1)}
@@ -644,6 +655,7 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             </p>
           )}
         </div>
+        )}
 
         {pole(
           "Datum narození",
@@ -749,7 +761,11 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
       </div>
 
       <div
-        className="sticky bottom-0 z-10 -mx-1 mt-2 border-t-2 border-inkoust bg-papir/95 px-1 py-3 backdrop-blur"
+        className={
+          radky
+            ? "sticky bottom-0 z-10 -mx-1 mt-3 border-t border-linka bg-papir/95 px-1 py-3 backdrop-blur"
+            : "sticky bottom-0 z-10 -mx-1 mt-2 border-t border-linka bg-papir/95 px-1 py-3 backdrop-blur"
+        }
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -760,7 +776,11 @@ export default function ProfileForm({ pocatecni, onUlozeno }: ProfileFormProps):
             type="submit"
             disabled={uklada || !maZmeny}
             aria-busy={uklada}
-            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border-2 border-inkoust bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
+            className={
+              radky
+                ? "min-h-11 w-full rounded-2xl bg-smrk px-6 text-base font-bold text-papir disabled:opacity-50 sm:w-auto"
+                : "nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
+            }
           >
             {uklada ? "Ukládám…" : "Uložit změny"}
           </button>

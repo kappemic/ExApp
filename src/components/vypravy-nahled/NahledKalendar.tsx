@@ -51,7 +51,6 @@ export default function NahledKalendar({
       ]}
       aktivni={rezim}
       onZmena={onRezim}
-      roztahnout={false}
     />
   );
   return rezim === "mesic" ? (

@@ -1,6 +1,10 @@
 import { useEffect, useState, type FormEvent, type JSX } from "react";
 import { useAuth, type DemoKod } from "../../hooks/useAuth";
-import { VALIDACE } from "../../shared/api-types";
+import { apiBase } from "../../lib/api-base";
+import { ADMIN_CODES_PATH, VALIDACE, type ZivyKodPolozka } from "../../shared/api-types";
+import PrazdnyStav from "../PrazdnyStav";
+import { SEZNAM_KARTA_TRIDA, SeznamIkona } from "../SeznamKarta";
+import { IkonaKlic } from "../SeznamIkony";
 
 function formatZbyva(ms: number): string {
   if (ms <= 0) return "0:00";
@@ -12,6 +16,29 @@ function formatZbyva(ms: number): string {
 
 function jePlatny(kod: DemoKod, ted: number): boolean {
   return Date.parse(kod.expiresAt) > ted;
+}
+
+function jeSeznamZivychKodu(telo: unknown): telo is { kody: ZivyKodPolozka[] } {
+  if (typeof telo !== "object" || telo === null) return false;
+  const kody = (telo as { kody?: unknown }).kody;
+  if (!Array.isArray(kody)) return false;
+  return kody.every((polozka) => {
+    if (typeof polozka !== "object" || polozka === null) return false;
+    const zaznam = polozka as Record<string, unknown>;
+    return typeof zaznam["code"] === "string" && typeof zaznam["expiresAt"] === "string";
+  });
+}
+
+async function nactiZiveKody(): Promise<ZivyKodPolozka[]> {
+  const zaklad = apiBase();
+  if (zaklad.length === 0) return [];
+  const odpoved = await fetch(`${zaklad}${ADMIN_CODES_PATH}`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  const telo: unknown = await odpoved.json();
+  if (!odpoved.ok || !jeSeznamZivychKodu(telo)) return [];
+  return telo.kody;
 }
 
 async function zkopiruj(text: string): Promise<boolean> {
@@ -51,10 +78,12 @@ async function zkopiruj(text: string): Promise<boolean> {
 export default function CodesPanel(): JSX.Element {
   const { kody, generujKod } = useAuth();
   const [poznamka, setPoznamka] = useState("");
+  const [roleNavrh, setRoleNavrh] = useState("clen");
   const [ted, setTed] = useState<number>(() => Date.now());
   const [zkopirovanoId, setZkopirovanoId] = useState<string | null>(null);
   const [kopieChyba, setKopieChyba] = useState<string | null>(null);
   const [generuji, setGeneruji] = useState(false);
+  const [zive, setZive] = useState<ZivyKodPolozka[] | null>(null);
 
   // Odpočet platnosti — textový, bez animací.
   useEffect(() => {
@@ -69,10 +98,35 @@ export default function CodesPanel(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [zkopirovanoId]);
 
-  // Vypršelé se mažou v useAuth (purge) — list ukazuje jen platné.
-  const serazene = [...kody]
-    .filter((k) => jePlatny(k, ted))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  useEffect(() => {
+    let ziveVolani = true;
+    void nactiZiveKody()
+      .then((radky) => {
+        if (ziveVolani) setZive(radky);
+      })
+      .catch(() => {
+        if (ziveVolani) setZive([]);
+      });
+    return () => {
+      ziveVolani = false;
+    };
+  }, []);
+
+  // Server list is the source of truth. Local rows fill the gap until reload.
+  const serazene = ((): DemoKod[] => {
+    const zeServeru: DemoKod[] = (zive ?? []).map((polozka) => ({
+      id: polozka.code,
+      kod: polozka.code,
+      createdAt: polozka.expiresAt,
+      expiresAt: polozka.expiresAt,
+      poznamka: kody.find((lokalni) => lokalni.kod === polozka.code)?.poznamka ?? null,
+    }));
+    const kodyServeru = new Set(zeServeru.map((polozka) => polozka.kod));
+    const zPameti = [...kody]
+      .filter((kod) => jePlatny(kod, ted) && !kodyServeru.has(kod.kod))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...zeServeru, ...zPameti].filter((kod) => jePlatny(kod, ted));
+  })();
 
   async function onGeneruj(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -82,6 +136,11 @@ export default function CodesPanel(): JSX.Element {
     try {
       await generujKod(poznamka);
       setPoznamka("");
+      try {
+        setZive(await nactiZiveKody());
+      } catch {
+        setZive([]);
+      }
     } catch (err) {
       setKopieChyba(
         err instanceof Error
@@ -108,35 +167,44 @@ export default function CodesPanel(): JSX.Element {
       <form
         onSubmit={(e) => void onGeneruj(e)}
         aria-busy={generuji}
-        className="rounded-lg border-2 border-inkoust bg-white/60 p-5 shadow-denik"
+        className="rounded-2xl border border-linka bg-povrch p-4"
       >
-        <label htmlFor="kody-poznamka" className="block text-sm font-bold">
-          Poznámka ke kódu <span className="font-normal text-inkoust/60">(nepovinná)</span>
+        <h2 className="font-display text-lg font-bold text-inkoust">Nový kód</h2>
+        <label htmlFor="kody-popisek" className="mt-3 block text-sm font-bold text-inkoust">
+          Popisek
         </label>
-        <div className="mt-1.5 flex flex-col gap-2.5 sm:flex-row">
-          <input
-            id="kody-poznamka"
-            name="poznamka"
-            type="text"
-            value={poznamka}
-            onChange={(e) => setPoznamka(e.target.value)}
-            placeholder="Třeba Nováčci – říjen"
-            maxLength={VALIDACE.poznamkaMaxDelka}
-            className="min-h-[44px] w-full flex-1 rounded-xl border border-pole bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none"
-          />
-          <button
-            type="submit"
-            disabled={generuji}
-            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 py-2.5 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
-          >
-            {generuji ? "Generuji…" : "Vygenerovat kód"}
-          </button>
-        </div>
-        <p className="mt-1.5 text-xs leading-relaxed text-inkoust/65">
-          Každý kód platí 10 minut pro všechny a lze ho použít opakovaně, dokud
-          nevyprší. Po vypršení vygeneruj nový. Kódy ze serveru platí pro všechna
-          zařízení; bez spojení se serverem vznikají jen v tomto prohlížeči.
+        <input
+          id="kody-popisek"
+          name="popisek"
+          type="text"
+          value={poznamka}
+          onChange={(e) => setPoznamka(e.target.value)}
+          placeholder="Třeba Nováčci – říjen"
+          maxLength={VALIDACE.poznamkaMaxDelka}
+          className="mt-1 min-h-11 w-full rounded-xl border border-pole bg-povrch-2 px-4 text-base text-inkoust placeholder:text-mech"
+        />
+        <label htmlFor="kody-role" className="mt-3 block text-sm font-bold text-inkoust">
+          Role
+        </label>
+        <select
+          id="kody-role"
+          value={roleNavrh}
+          onChange={(e) => setRoleNavrh(e.target.value)}
+          className="mt-1 min-h-11 w-full rounded-xl border border-pole bg-povrch-2 px-4 text-base text-inkoust"
+        >
+          <option value="clen">Člen</option>
+        </select>
+        <p className="mt-2 text-xs text-ink-3">
+          Role u kódu se na server neukládá — registrace vždy začíná jako člen.
         </p>
+        <button
+          type="submit"
+          disabled={generuji}
+          className="nahled-press mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-smrk px-4 text-[15px] font-semibold text-papir disabled:opacity-60"
+        >
+          <IkonaKlic />
+          {generuji ? "Vytvářím…" : "Vytvořit kód"}
+        </button>
       </form>
 
       <div aria-live="polite">
@@ -147,62 +215,84 @@ export default function CodesPanel(): JSX.Element {
         )}
       </div>
 
+      <section className="mt-2">
+        <h2 className="font-display text-lg font-bold text-inkoust">Aktivní kódy</h2>
       {serazene.length === 0 ? (
-        <div
-          role="status"
-          className="rounded-lg border-2 border-inkoust/30 bg-white/60 px-6 py-10 text-center shadow-denik"
-        >
-          <h2 className="text-base font-bold">Zatím žádný kód</h2>
-          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
-            Vygeneruj první pozvánkový kód tlačítkem výše a pošli ho nováčkovi.
-          </p>
-        </div>
+        <PrazdnyStav
+          className="mt-3"
+          ikona={<IkonaKlic />}
+          nadpis="Zatím žádný kód"
+          text="Vytvoř první pozvánkový kód výše a pošli ho nováčkovi."
+        />
       ) : (
-        <ul aria-label="Vygenerované pozvánkové kódy" className="flex flex-col gap-3">
+        <ul aria-label="Vygenerované pozvánkové kódy" className={`mt-3 ${SEZNAM_KARTA_TRIDA}`}>
           {serazene.map((kod) => {
             const zbyva = Date.parse(kod.expiresAt) - ted;
             const zkopirovano = zkopirovanoId === kod.id;
+            const podtitul = [
+              "Člen",
+              kod.poznamka !== null && kod.poznamka.length > 0 ? kod.poznamka : null,
+              `zbývá ${formatZbyva(zbyva)}`,
+            ]
+              .filter((cast): cast is string => cast !== null)
+              .join(" · ");
             return (
-              <li
-                key={kod.id}
-                className="flex flex-col gap-3 rounded-lg border-2 border-inkoust bg-white/60 p-4 shadow-denik sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <p className="font-mono text-xl font-extrabold tracking-[0.12em]" aria-label={`Kód ${kod.kod}`}>
+              <li key={kod.id} className="flex min-h-[64px] items-center gap-3 px-3.5 py-2.5">
+                <SeznamIkona>
+                  <IkonaKlic />
+                </SeznamIkona>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="font-mono text-[17px] font-bold tracking-[0.08em] text-inkoust"
+                    aria-label={`Kód ${kod.kod}`}
+                  >
                     {kod.kod}
                   </p>
-                  <p className="mt-1 text-xs text-inkoust/65">
-                    {kod.poznamka !== null && kod.poznamka.length > 0 ? (
-                      <>{kod.poznamka} · </>
-                    ) : null}
-                    <time dateTime={kod.createdAt}>
-                      Vytvořen {new Date(kod.createdAt).toLocaleString("cs-CZ")}
-                    </time>
-                  </p>
-                  <p className="mt-1.5">
-                    <span
-                      className="inline-flex min-h-[28px] items-center rounded border border-smrk bg-smrk/10 px-2 py-0.5 text-xs font-bold text-smrk"
-                    >
-                      Platný
-                      <span aria-label={`Zbývá ${formatZbyva(zbyva)}`}>
-                        {" "}· zbývá {formatZbyva(zbyva)}
-                      </span>
-                    </span>
-                  </p>
+                  <p className="truncate text-[13px] text-ink-3">{podtitul}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => void onKopiruj(kod)}
-                  aria-label={`Kopírovat kód ${kod.kod}`}
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-linka bg-papir px-4 py-2 text-sm font-bold transition-colors hover:border-inkoust motion-reduce:transition-none sm:shrink-0"
+                  aria-label={zkopirovano ? `Kód ${kod.kod} zkopírován` : `Kopírovat kód ${kod.kod}`}
+                  className={`nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-xl border transition-colors motion-reduce:transition-none ${
+                    zkopirovano
+                      ? "border-smrk bg-mlha text-smrk"
+                      : "border-linka bg-povrch text-inkoust hover:bg-mlha/60"
+                  }`}
                 >
-                  {zkopirovano ? "Zkopírováno ✓" : "Kopírovat"}
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-[18px] w-[18px]"
+                  >
+                    {zkopirovano ? (
+                      <path d="m5 12.5 4.5 4.5L19 7.5" />
+                    ) : (
+                      <>
+                        <rect x="8" y="8" width="12" height="12" rx="2.5" />
+                        <path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8" />
+                      </>
+                    )}
+                  </svg>
                 </button>
               </li>
             );
           })}
         </ul>
       )}
+      </section>
+
+      <section className="mt-6">
+        <h2 className="font-display text-lg font-bold text-inkoust">Použité</h2>
+        <p className="mt-2 px-1 text-sm text-ink-3">
+          Historii použitých kódů aplikace zatím neukládá.
+        </p>
+      </section>
     </div>
   );
 }

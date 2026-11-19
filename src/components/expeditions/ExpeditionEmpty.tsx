@@ -8,7 +8,7 @@ export default function ExpeditionEmpty(): JSX.Element {
     >
       <div
         aria-hidden="true"
-        className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-inkoust bg-papir shadow-razitko"
+        className="flex h-14 w-14 items-center justify-center rounded-full border border-linka bg-papir shadow-razitko"
       >
         <svg
           viewBox="0 0 24 24"

@@ -202,7 +202,7 @@ export default function ChatLightroom({
           <p
             role={chyba !== null ? "alert" : "status"}
             onMouseDown={zastav}
-            className="rounded-md border-2 border-inkoust bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
+            className="rounded-md border border-linka bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
           >
             {hlaska ?? "Načítám fotky z chatu…"}
           </p>

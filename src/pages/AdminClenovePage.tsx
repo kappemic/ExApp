@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
+import { Link } from "react-router-dom";
 import {
   mapujRoliNaProfil,
   type ClenskyProfil,
 } from "../config/roles";
-import AdminTaby, {
-  type ClenoveTabId,
-  type PoctyTabu,
-} from "../components/Admin/AdminTaby";
 import ClenDetailModal from "../components/Admin/ClenDetailModal";
 import ClenoveTable from "../components/Admin/ClenoveTable";
 import {
@@ -19,13 +16,13 @@ import { KostraRadky } from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
 import type { UserListItem } from "../shared/api-types";
 
-const POPISKY_PANELU: Record<ClenoveTabId, string> = {
-  vsichni: "Všichni členové klubu.",
-  aktivni: "Členové s aktivní účastí.",
-  rada: "Členové klubové rady.",
-  vedeni: "Vedoucí klubu.",
-  clenove: "Základní členové bez aktivní účasti.",
-};
+type FiltrChip = "vsichni" | "aktivni" | "rada";
+
+const CHIPY: ReadonlyArray<{ id: FiltrChip; popisek: string }> = [
+  { id: "vsichni", popisek: "Všichni" },
+  { id: "aktivni", popisek: "Aktivní" },
+  { id: "rada", popisek: "Rada" },
+];
 
 type StavNacteni = "nacteni" | "hotovo" | "chyba";
 
@@ -65,8 +62,9 @@ function jeAktivni(profil: ClenskyProfil): boolean {
  * samotný admin je vidět jen ve „Všichni".
  */
 export default function AdminClenovePage(): JSX.Element {
-  const { isSuperadmin } = useAuth();
-  const [aktivniTab, setAktivniTab] = useState<ClenoveTabId>("vsichni");
+  const { isAdmin, isSuperadmin } = useAuth();
+  const [aktivniTab, setAktivniTab] = useState<FiltrChip>("vsichni");
+  const [hledani, setHledani] = useState("");
   const [vybranyId, setVybranyId] = useState<string | null>(null);
   const [clenove, setClenove] = useState<UserListItem[]>([]);
   const [stav, setStav] = useState<StavNacteni>("nacteni");
@@ -117,32 +115,25 @@ export default function AdminClenovePage(): JSX.Element {
     return null;
   }
 
-  const pocty: PoctyTabu = useMemo(
-    () => ({
-      vsichni: clenove.length,
-      aktivni: clenove.filter((c) => jeAktivni(profilClena(c))).length,
-      rada: clenove.filter((c) => profilClena(c).funkce === "rada").length,
-      vedeni: clenove.filter((c) => profilClena(c).funkce === "vedeni").length,
-      clenove: clenove.filter((c) => !jeAktivni(profilClena(c))).length,
-    }),
-    [clenove],
-  );
-
   const filtrovani = useMemo(() => {
-    switch (aktivniTab) {
-      case "aktivni":
-        return clenove.filter((c) => jeAktivni(profilClena(c)));
-      case "rada":
-        return clenove.filter((c) => profilClena(c).funkce === "rada");
-      case "vedeni":
-        return clenove.filter((c) => profilClena(c).funkce === "vedeni");
-      case "clenove":
-        return clenove.filter((c) => !jeAktivni(profilClena(c)));
-      case "vsichni":
-      default:
-        return clenove;
-    }
-  }, [aktivniTab, clenove]);
+    const dotaz = hledani.trim().toLowerCase();
+  const podleChipu = ((): UserListItem[] => {
+      switch (aktivniTab) {
+        case "aktivni":
+          return clenove.filter((c) => jeAktivni(profilClena(c)));
+        case "rada":
+          return clenove.filter((c) => profilClena(c).funkce === "rada");
+        case "vsichni":
+        default:
+          return clenove;
+      }
+    })();
+    if (dotaz.length === 0) return podleChipu;
+    return podleChipu.filter((c) => {
+      const haystack = `${c.jmeno} ${c.email} ${c.skola} ${c.trida}`.toLowerCase();
+      return haystack.includes(dotaz);
+    });
+  }, [aktivniTab, clenove, hledani]);
 
   /** Vybraný člen napříč taby — dialog zůstane otevřený i po přepnutí tabu. */
   const vybrany: UserListItem | null = useMemo(
@@ -151,21 +142,52 @@ export default function AdminClenovePage(): JSX.Element {
   );
 
   return (
-    <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
-      <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Klub</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Členové
-        </h1>
-        <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Kontakty a zařazení členů klubu.
+    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:max-w-2xl">
+      <header className="border-b border-linka pb-4">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-inkoust">Členové</h1>
+        <p className="mt-1 text-base text-mech">
+          {stav === "hotovo" ? `${clenove.length} členů` : "Načítám seznam…"}
         </p>
-
-        <AdminTaby
-          aktivniTab={aktivniTab}
-          pocty={pocty}
-          onZmena={setAktivniTab}
-        />
+        {isAdmin ? (
+          <Link
+            to="/admin/kody"
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-2xl bg-smrk px-5 text-base font-bold text-papir"
+          >
+            Pozvat
+          </Link>
+        ) : null}
+        <div className="mt-4">
+          <label htmlFor="clenove-hledani" className="sr-only">
+            Hledat členy
+          </label>
+          <input
+            id="clenove-hledani"
+            type="search"
+            value={hledani}
+            onChange={(e) => setHledani(e.target.value)}
+            placeholder="Hledat jméno, e-mail…"
+            className="min-h-11 w-full rounded-2xl border border-pole bg-povrch px-4 text-base text-inkoust placeholder:text-mech"
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Filtr členů">
+          {CHIPY.map((chip) => {
+            const aktivni = aktivniTab === chip.id;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                role="tab"
+                aria-selected={aktivni}
+                onClick={() => setAktivniTab(chip.id)}
+                className={`min-h-9 rounded-full px-4 text-sm font-bold ${
+                  aktivni ? "bg-inkoust text-papir" : "border border-pole bg-papir text-inkoust"
+                }`}
+              >
+                {chip.popisek}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <div className="pt-6">
@@ -176,7 +198,7 @@ export default function AdminClenovePage(): JSX.Element {
         {stav === "chyba" && (
           <div
             role="alert"
-            className="rounded-lg border-2 border-inkoust bg-white/60 px-5 py-8 text-center shadow-denik"
+            className="rounded-lg border border-linka bg-povrch px-5 py-8 text-center shadow-denik"
           >
             <p className="text-base font-bold">Seznam se nepodařilo načíst</p>
             <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-inkoust/70">
@@ -185,7 +207,7 @@ export default function AdminClenovePage(): JSX.Element {
             <button
               type="button"
               onClick={() => void nacist()}
-              className="nahled-press nahled-prejeti mt-4 inline-flex min-h-[44px] items-center justify-center rounded border-2 border-inkoust bg-papir px-5 font-bold text-inkoust"
+              className="nahled-press nahled-prejeti mt-4 inline-flex min-h-[44px] items-center justify-center rounded border border-linka bg-papir px-5 font-bold text-inkoust"
             >
               Zkusit znovu
             </button>
@@ -196,17 +218,14 @@ export default function AdminClenovePage(): JSX.Element {
           <div
             role="tabpanel"
             id={`clenove-panel-${aktivniTab}`}
-            aria-labelledby={`clenove-tab-${aktivniTab}`}
+            aria-labelledby={`clenove-chip-${aktivniTab}`}
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mech">
-              {POPISKY_PANELU[aktivniTab]} Položek: {pocty[aktivniTab]}
-            </p>
             <div className="mt-3">
               <ClenoveTable
                 clenove={[...filtrovani]}
                 vybranyId={vybranyId}
                 onVyber={(clen) => setVybranyId(clen.id)}
-                popisek={`Seznam členů — ${POPISKY_PANELU[aktivniTab]}`}
+                popisek={`Seznam členů — ${CHIPY.find((c) => c.id === aktivniTab)?.popisek ?? "Všichni"}`}
               />
             </div>
           </div>

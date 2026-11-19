@@ -33,6 +33,7 @@ function bezAny(zdroj: string): void {
 const POMOCNICI = "src/lib/vyprava-deep-link.ts";
 const NASTENKA = "src/pages/ChatPage.tsx";
 const STRANKA = "src/pages/VypravyNahledPage.tsx";
+const DETAIL = "src/pages/VypravaDetailPage.tsx";
 const MODAL = "src/components/expeditions/ExpeditionModal.tsx";
 
 describe("deep-link pomocníci (čistí, bez jsdom)", () => {
@@ -108,36 +109,33 @@ describe("Nástěnka → thread (Step 3: klik = detail konverzace v URL)", () =>
   });
 });
 
-describe("VypravyPage — URL je sdílená pravda pro modal", () => {
-  it("čte ?vyprava= a zapisuje merge (zobrazeni zůstává)", () => {
+describe("VypravyPage — deep-link ?vyprava= přesměruje na stránku detailu", () => {
+  it("seznam čte param a otevření jde na /vypravy/:id", () => {
     const stranka: string = ctiZdroj(STRANKA);
     expect(stranka).toContain("VYPRAVA_PARAM");
     expect(stranka).toContain("parseVypravaId");
-    expect(stranka).toContain("sVypravouVUrl");
     expect(stranka).toContain("otevriVypravu");
-    // Žádné slepé nastavování bez URL — všechny cesty otevření zapisují.
-    expect(stranka).not.toContain("onDetail={setVybrana}");
+    expect(stranka).toContain("navigate(`/vypravy/${");
+    expect(stranka).not.toContain("ExpeditionModal");
     bezAny(stranka);
   });
 
-  it("mount lookup přes mapu + fallback GET detail (přímé URL funguje)", () => {
+  it("mount redirect zachová ostatní query + nastaví diskuze", () => {
     const stranka: string = ctiZdroj(STRANKA);
-    expect(stranka).toContain("vypravaPodleId");
-    expect(stranka).toContain("nactiDetailVypravy");
-    expect(stranka).toContain("expediceDetailPath");
-    expect(stranka).toContain("jeApiExpedice");
+    expect(stranka).toContain('next.set("diskuze", "1")');
   });
+});
 
-  it("nevalidní id ignoruje + param maže, zavření param maže", () => {
-    const stranka: string = ctiZdroj(STRANKA);
-    expect(stranka).toContain("sVypravouVUrl(prev, null)");
-  });
-
-  it("modal dostává sdílenou tečku + cíl Diskuze, key drží remount", () => {
-    const stranka: string = ctiZdroj(STRANKA);
-    expect(stranka).toContain("neprectenaDiskuze={neprecteneMapa.get(vybrana.id) === true}");
-    expect(stranka).toContain("startNaDiskuzi={cilDiskuze}");
-    expect(stranka).toContain("key={vybrana.id}");
+describe("VypravaDetailPage — mount detail + deep-link Diskuze", () => {
+  it("fallback GET detail a ExpeditionModal jako stránka", () => {
+    const detail: string = ctiZdroj(DETAIL);
+    expect(detail).toContain("expediceDetailPath");
+    expect(detail).toContain("ExpeditionModal");
+    expect(detail).toContain("stranka");
+    expect(detail).toContain("neprectenaDiskuze={neprecteneVypravy.get(expedice.id) === true}");
+    expect(detail).toContain("startNaDiskuzi={startNaDiskuzi}");
+    expect(detail).toContain("key={expedice.id}");
+    bezAny(detail);
   });
 });
 

@@ -16,6 +16,11 @@ interface FotkyRadkovaMrizkaProps<
 > {
   fotky: readonly T[];
   className?: string;
+  /**
+   * Vzhled podle ExApp.pen (album): mezery 8 / 14 px, rohy 14 px, vyšší řádky.
+   * Bez něj zůstanou dlaždice od kraje ke kraji s 2px mezerou.
+   */
+  karty?: boolean;
   render: (
     fotka: T,
     rozmer: DlazdiceRadku,
@@ -32,6 +37,7 @@ export default function FotkyRadkovaMrizka<
 >({
   fotky,
   className = "",
+  karty = false,
   render,
 }: FotkyRadkovaMrizkaProps<T>): JSX.Element {
   const obalRef = useRef<HTMLDivElement>(null);
@@ -73,9 +79,10 @@ export default function FotkyRadkovaMrizka<
           pomer: pomery[fotka.id] ?? pomerZRozmeru(fotka.sirka, fotka.vyska),
         })),
         sirka,
-        cilovaVyskaRadku(sirka),
+        karty ? (sirka >= 900 ? 240 : 150) : cilovaVyskaRadku(sirka),
+        karty ? (sirka >= 900 ? 14 : 8) : undefined,
       ),
-    [fotky, pomery, sirka],
+    [fotky, pomery, sirka, karty],
   );
 
   const podleId = useMemo(() => {
@@ -88,7 +95,7 @@ export default function FotkyRadkovaMrizka<
 
   return (
     <div ref={obalRef} className={`min-w-0 ${className.length > 0 ? className : "w-full"}`}>
-      <ul className="m-0 flex list-none flex-wrap gap-[2px] p-0">
+      <ul className={`m-0 flex list-none flex-wrap p-0 ${karty ? (sirka >= 900 ? "gap-[14px]" : "gap-2") : "gap-[2px]"}`}>
         {radky.map((radek, indexRadku) =>
           radek.dlazdice.map((dlazdice) => {
             const fotka = podleId.get(dlazdice.id);
@@ -105,7 +112,7 @@ export default function FotkyRadkovaMrizka<
             return (
               <li
                 key={dlazdice.id}
-                className="relative shrink-0 overflow-hidden"
+                className={`relative shrink-0 overflow-hidden ${karty ? "rounded-[14px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[14px] after:border after:border-black/[0.08]" : ""}`}
                 style={styl}
               >
                 {render(fotka, dlazdice, (prirozenaSirka, prirozenaVyska) => {

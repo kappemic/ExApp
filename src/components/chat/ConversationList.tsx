@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useId, useRef, useState, type JSX, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type JSX,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { ApiKonverzace, KanalDiskuze, UserListItem } from "../../shared/api-types";
 import { formatCasKratce } from "../../lib/format-cas";
 import type { PravoSkupiny } from "../../lib/skupiny-pristup";
 import { KostraRadky } from "../StrankaKostra";
 import AvatarKruh from "../AvatarKruh";
+import PrazdnyStav from "../PrazdnyStav";
+import { SEZNAM_KARTA_TRIDA } from "../SeznamKarta";
+import { IkonaBublina, IkonaLupa } from "../SeznamIkony";
 import NeprectenaTecka from "./NeprectenaTecka";
 import SkupinaForm from "./SkupinaForm";
 
@@ -41,8 +53,8 @@ export interface ConversationListProps {
   clenove?: readonly UserListItem[];
   jaId?: string | null;
   onZacitSClenem?: (clen: UserListItem) => void;
-  zalozka: ZalozkaChatu;
-  onZalozka: (zalozka: ZalozkaChatu) => void;
+  segment: SegmentChatu;
+  onSegment: (segment: SegmentChatu) => void;
   /** Leadership may create, edit access, and delete custom groups. */
   muzeSpravovatSkupiny?: boolean;
   onNovaSkupina?: () => void;
@@ -73,7 +85,7 @@ export function vyberNazevKonverzace(
   nazevVypravy: string | null,
 ): string {
   if (konverzace.channel === "dulezite") return "Důležité";
-  if (konverzace.channel === "general") return "General";
+  if (konverzace.channel === "general") return "Obecný";
   if (konverzace.channel === "skupina") {
     const jmeno = (konverzace.nazev ?? "").trim();
     return jmeno.length > 0 ? jmeno : "Skupina";
@@ -90,7 +102,7 @@ export function vyberNazevKonverzace(
   return konverzace.key;
 }
 
-/** Pinned = právě dva globály (Důležité, General) — vždy nahoře. */
+/** Pinned = the two global channels (Důležité, Obecný) — always on top. */
 export function jePinnedKanal(channel: KanalDiskuze): boolean {
   return channel === "dulezite" || channel === "general";
 }
@@ -168,6 +180,44 @@ export function maNeprecteneVZalozce(
   return filtrujPolozkyZalozky(polozky, zalozka).some(
     (polozka) => polozka.unreadCount > 0,
   );
+}
+
+/** Segments filter the list the API already returned. */
+export type SegmentChatu = "vse" | "globalni" | "vypravy" | "soukrome";
+
+/** Case-insensitive filter on list rows (name + preview). */
+export function filtrujPolozkyHledanim(
+  polozky: readonly PolozkaSeznamu[],
+  dotaz: string,
+): PolozkaSeznamu[] {
+  const q: string = normalizovanyDotaz(dotaz);
+  if (q.length === 0) return [...polozky];
+  return polozky.filter((polozka) => {
+    const nahled = textNahleduKonverzace(polozka).toLowerCase();
+    return polozka.nazev.toLowerCase().includes(q) || nahled.includes(q);
+  });
+}
+
+export function filtrujPolozkySegmentu(
+  polozky: readonly PolozkaSeznamu[],
+  segment: SegmentChatu,
+): PolozkaSeznamu[] {
+  if (segment === "vse") return [...polozky];
+  if (segment === "vypravy") return polozky.filter((polozka) => polozka.channel === "expedice");
+  if (segment === "soukrome") return polozky.filter((polozka) => polozka.channel === "soukrome");
+  return polozky.filter(
+    (polozka) =>
+      polozka.channel === "dulezite" ||
+      polozka.channel === "general" ||
+      polozka.channel === "skupina",
+  );
+}
+
+export function maNeprecteneVSegmentu(
+  polozky: readonly PolozkaSeznamu[],
+  segment: SegmentChatu,
+): boolean {
+  return filtrujPolozkySegmentu(polozky, segment).some((polozka) => polozka.unreadCount > 0);
 }
 
 /**
@@ -310,12 +360,12 @@ function RadekKonverzace({
         aria-label={`${polozka.nazev} — ${maNeprectene ? popisekNeprectenychKonverzace(polozka.unreadCount) : "přečteno"}`}
         title={polozka.nazev}
         onClick={() => onVybrat(polozka.key)}
-        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left shadow-denik [touch-action:pan-y] motion-safe:transition-colors ${
+        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-inkoust [touch-action:pan-y] motion-safe:transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk ${
           onUpravit !== undefined ? "pr-12" : ""
         } ${
           vybrana
-            ? "border-inkoust bg-smrk text-papir"
-            : "border-inkoust bg-papir text-inkoust motion-safe:hover:bg-linka/50"
+            ? "bg-mlha"
+            : "motion-safe:hover:bg-mlha/50"
         }`}
       >
         {clen !== null ? (
@@ -327,11 +377,9 @@ function RadekKonverzace({
             aria-hidden="true"
             title={znacka.popis}
             className={`flex h-10 w-10 shrink-0 grow-0 basis-10 select-none items-center justify-center rounded-full border-2 text-base font-extrabold ${
-              vybrana
-                ? "border-papir bg-papir text-inkoust"
-                : polozka.channel === "dulezite"
-                  ? "border-inkoust bg-jantar text-papir"
-                  : "border-inkoust bg-linka/70 text-inkoust"
+              polozka.channel === "dulezite"
+                ? "border-jantar bg-jantar text-papir"
+                : "border-smrk bg-smrk text-papir"
             }`}
           >
             {znacka.znak}
@@ -350,9 +398,7 @@ function RadekKonverzace({
             {cas.length > 0 && (
               <time
                 dateTime={polozka.lastMessageAt ?? undefined}
-                className={`shrink-0 whitespace-nowrap text-[11px] tabular-nums ${
-                  vybrana ? "text-papir/80" : "text-inkoust/55"
-                }`}
+                className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-ink-3"
               >
                 {cas}
               </time>
@@ -360,9 +406,7 @@ function RadekKonverzace({
           </span>
           <span
             title={nahled}
-            className={`mt-0.5 block min-w-0 break-words text-[13px] leading-snug [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden ${
-              vybrana ? "text-papir/85" : "text-inkoust/70"
-            }`}
+            className="mt-0.5 block min-w-0 break-words text-[13px] leading-snug text-mech [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden"
             style={{ overflowWrap: "anywhere" }}
           >
             {nahled}
@@ -373,11 +417,7 @@ function RadekKonverzace({
             role="status"
             aria-label={popisekNeprectenychKonverzace(polozka.unreadCount)}
             title={popisekNeprectenychKonverzace(polozka.unreadCount)}
-            className={`inline-flex h-7 min-w-7 shrink-0 items-center justify-center whitespace-nowrap rounded-full border-2 px-2 text-[12px] font-extrabold tabular-nums ${
-              vybrana
-                ? "border-papir bg-papir text-inkoust"
-                : "border-inkoust bg-red-800 text-papir"
-            }`}
+            className={`inline-flex h-7 min-w-7 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-akcent px-2 text-[12px] font-extrabold tabular-nums text-papir`}
           >
             {polozka.unreadCount > 99 ? "99+" : String(polozka.unreadCount)}
           </span>
@@ -390,9 +430,7 @@ function RadekKonverzace({
           aria-controls={panelId}
           aria-label={`Upravit přístup skupiny ${polozka.nazev}`}
           onClick={() => onUpravit(polozka.key)}
-          className={`bez-prejeti nahled-press absolute top-1/2 right-1.5 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full [touch-action:pan-y] ${
-            vybrana ? "text-papir" : "text-inkoust"
-          }`}
+          className={`bez-prejeti nahled-press absolute top-1/2 right-1.5 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-inkoust [touch-action:pan-y]`}
         >
           <span aria-hidden="true" className="flex flex-col items-center gap-[3px]">
             <span className="h-1 w-1 rounded-full bg-current" />
@@ -441,7 +479,7 @@ function RadekNovehoClena({ clen, onZacit }: RadekNovehoClenaProps): JSX.Element
         onClick={() => {
           if (onZacit !== undefined) onZacit(clen);
         }}
-        className="flex min-h-[64px] w-full min-w-0 items-center gap-3 rounded-2xl border-2 border-inkoust bg-papir px-3 py-2 text-left text-inkoust shadow-denik [touch-action:pan-y] motion-safe:transition-colors motion-safe:hover:bg-linka/50"
+        className="flex min-h-[64px] w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-inkoust [touch-action:pan-y] motion-safe:transition-colors motion-safe:hover:bg-linka/50"
       >
         <span className="shrink-0">
           <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
@@ -467,17 +505,93 @@ function RadekNovehoClena({ clen, onZacit }: RadekNovehoClenaProps): JSX.Element
   );
 }
 
-const ZALOZKY: readonly { id: ZalozkaChatu; nazev: string }[] = [
-  { id: "skupiny", nazev: "Skupiny" },
-  { id: "vypravy", nazev: "Výpravy" },
-  { id: "clenove", nazev: "Členové" },
+interface SekceSeznamuProps {
+  nadpis: string;
+  radky: PolozkaSeznamu[];
+  vybranyKey: string | null;
+  onVybrat: (key: string) => void;
+  clenove: readonly UserListItem[];
+  ukazeSkupiny: boolean;
+  onUpravitSkupinu?: (key: string) => void;
+  upravaSkupiny: UpravaSkupinyVRadku | null;
+  drzenaUprava: UpravaSkupinyVRadku | null;
+  seznamRef?: RefObject<HTMLUListElement | null>;
+  onScroll?: () => void;
+  scrolluje?: boolean;
+}
+
+/** Pen section headers (SKUPINY / K VÝPRAVÁM / SOUKROMÉ) under segment Vše. */
+function SekceSeznamu({
+  nadpis,
+  radky,
+  vybranyKey,
+  onVybrat,
+  clenove,
+  ukazeSkupiny,
+  onUpravitSkupinu,
+  upravaSkupiny,
+  drzenaUprava,
+  seznamRef,
+  onScroll,
+  scrolluje = false,
+}: SekceSeznamuProps): JSX.Element | null {
+  if (radky.length === 0) return null;
+  return (
+    <section className="min-w-0 space-y-2">
+      <h3 className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+        {nadpis}
+      </h3>
+      <ul
+        ref={seznamRef}
+        role="listbox"
+        aria-label={nadpis}
+        onScroll={onScroll}
+        className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
+          scrolluje ? "seznam-scrolluje" : ""
+        }`}
+      >
+        {radky.map((polozka) => {
+          const obsahUpravy =
+            upravaSkupiny?.key === polozka.key
+              ? upravaSkupiny
+              : drzenaUprava?.key === polozka.key
+                ? drzenaUprava
+                : null;
+          return (
+            <RadekKonverzace
+              key={polozka.key}
+              polozka={polozka}
+              vybrana={polozka.key === vybranyKey}
+              onVybrat={onVybrat}
+              clen={polozka.channel === "soukrome" ? clenVlakna(polozka, clenove) : null}
+              onUpravit={
+                ukazeSkupiny &&
+                polozka.channel === "skupina" &&
+                onUpravitSkupinu !== undefined
+                  ? onUpravitSkupinu
+                  : undefined
+              }
+              uprava={obsahUpravy}
+              pristupOtevren={upravaSkupiny?.key === polozka.key}
+            />
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+const SEGMENTY: readonly { id: SegmentChatu; nazev: string }[] = [
+  { id: "vse", nazev: "Vše" },
+  { id: "globalni", nazev: "Globální" },
+  { id: "vypravy", nazev: "K výpravám" },
+  { id: "soukrome", nazev: "Soukromé" },
 ];
 
 /**
  * Seznam konverzací — master sloupec.
  *
- * Tři záložky: Skupiny (Důležité, General), Výpravy, Členové.
- * Řádek zůstává jedna konverzace, nikdy jedna zpráva.
+ * Segmenty filtrují už vrácený seznam. Řádek zůstává jedna konverzace.
  */
 export default function ConversationList({
   polozky,
@@ -489,8 +603,8 @@ export default function ConversationList({
   clenove = [],
   jaId = null,
   onZacitSClenem,
-  zalozka,
-  onZalozka,
+  segment,
+  onSegment,
   muzeSpravovatSkupiny = false,
   onNovaSkupina,
   novaSkupina = null,
@@ -552,7 +666,7 @@ export default function ConversationList({
     const seznam: HTMLUListElement | null = seznamRef.current;
     if (seznam !== null) seznam.scrollTop = 0;
     zmerSeznam();
-  }, [zalozka, zmerSeznam]);
+  }, [segment, zmerSeznam]);
 
   useEffect(() => {
     zmerSeznam();
@@ -571,14 +685,14 @@ export default function ConversationList({
 
   if (stav === "chyba") {
     return (
-      <div className="rounded-2xl border-2 border-inkoust bg-papir p-6 text-center shadow-denik">
+      <div className="rounded-2xl border border-linka bg-papir p-6 text-center shadow-denik">
         <p role="alert" className="text-sm font-semibold">
           {chyba ?? "Konverzace se nepodařilo načíst."}
         </p>
         <button
           type="button"
           onClick={onZkusitZnovu}
-          className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-inkoust px-6 text-sm font-bold text-papir [touch-action:manipulation]"
+          className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-smrk px-6 text-sm font-bold text-papir [touch-action:manipulation]"
         >
           Zkusit znovu
         </button>
@@ -586,17 +700,14 @@ export default function ConversationList({
     );
   }
 
-  const skupiny: PolozkaSeznamu[] = seradKonverzace(
-    filtrujPolozkyZalozky(polozky, "skupiny"),
-  );
-  const vypravy: PolozkaSeznamu[] = seradKonverzace(
-    filtrujPolozkyZalozky(polozky, "vypravy"),
+  const vSegmentu: PolozkaSeznamu[] = seradKonverzace(
+    filtrujPolozkySegmentu(polozky, segment),
   );
   const soukrome: PolozkaSeznamu[] = seradKonverzace(
-    filtrujPolozkyZalozky(polozky, "clenove"),
+    filtrujPolozkySegmentu(polozky, "soukrome"),
   );
   const q: string = normalizovanyDotaz(dotaz);
-  const hleda: boolean = q.length > 0;
+  const hleda: boolean = q.length > 0 && segment === "soukrome";
   const partneriSVlakenem = new Set<string>(
     soukrome
       .map((polozka) => klicUzivatele(polozka.partnerId))
@@ -614,26 +725,56 @@ export default function ConversationList({
         .sort((a, b) => a.jmeno.localeCompare(b.jmeno, "cs"))
     : [];
   const clenovePrazdni: boolean = viditelnaVlakna.length === 0 && noviClenove.length === 0;
+  const ukazeSkupiny: boolean = segment === "globalni" || segment === "vse";
 
   const radkyZalozky: PolozkaSeznamu[] =
-    zalozka === "skupiny" ? skupiny : zalozka === "vypravy" ? vypravy : viditelnaVlakna;
+    segment === "soukrome"
+      ? viditelnaVlakna
+      : filtrujPolozkyHledanim(vSegmentu, dotaz);
+  const skupinyVse: PolozkaSeznamu[] =
+    segment === "vse" && q.length === 0
+      ? radkyZalozky.filter((p) => zalozkaProKanal(p.channel) === "skupiny")
+      : [];
+  const vypravyVse: PolozkaSeznamu[] =
+    segment === "vse" && q.length === 0
+      ? radkyZalozky.filter((p) => p.channel === "expedice")
+      : [];
+  const soukromeVse: PolozkaSeznamu[] =
+    segment === "vse" && q.length === 0
+      ? radkyZalozky.filter((p) => p.channel === "soukrome")
+      : [];
+  const zobrazSekce: boolean =
+    segment === "vse" && q.length === 0 && radkyZalozky.length > 0;
   const prazdnyText: string =
-    zalozka === "skupiny"
-      ? "Zatím žádná skupina."
-      : zalozka === "vypravy"
-        ? "Zatím žádný chat výpravy."
-        : hleda
+    segment === "vypravy"
+      ? "Zatím žádný chat výpravy."
+      : segment === "soukrome"
+        ? hleda
           ? "Nikdo takový v klubu není."
-          : "Ještě sis s nikým nepsal. Najdi člena výše.";
+          : "Ještě sis s nikým nepsal. Najdi člena výše."
+        : segment === "globalni"
+          ? "Zatím žádný obecný chat."
+          : "Zatím žádná konverzace.";
   const seznamPrazdny: boolean =
-    zalozka === "clenove" ? clenovePrazdni : radkyZalozky.length === 0;
+    segment === "soukrome" ? clenovePrazdni : radkyZalozky.length === 0;
 
   return (
     <div className="min-w-0 space-y-3">
-      <div role="tablist" aria-label="Druh konverzací" className="grid grid-cols-3 gap-1">
-        {ZALOZKY.map((polozka) => {
-          const vybrana: boolean = zalozka === polozka.id;
-          const maNeprectene: boolean = maNeprecteneVZalozce(polozky, polozka.id);
+      {segment !== "soukrome" && (
+        <input
+          type="search"
+          value={dotaz}
+          onChange={(udalost) => setDotaz(udalost.target.value)}
+          aria-label="Hledat v konverzacích"
+          placeholder="Hledat v konverzacích"
+          autoComplete="off"
+          className="w-full min-h-[44px] rounded-xl border border-pole bg-povrch px-3.5 text-base text-inkoust outline-none placeholder:text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+        />
+      )}
+      <div role="tablist" aria-label="Druh konverzací" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {SEGMENTY.map((polozka) => {
+          const vybrana: boolean = segment === polozka.id;
+          const maNeprectene: boolean = maNeprecteneVSegmentu(polozky, polozka.id);
           return (
             <button
               key={polozka.id}
@@ -642,14 +783,14 @@ export default function ConversationList({
               id={`zalozka-${polozka.id}`}
               aria-selected={vybrana}
               aria-controls={panelId}
-              onClick={() => onZalozka(polozka.id)}
-              className={`bez-prejeti inline-flex min-h-[44px] min-w-0 touch-manipulation items-center justify-center gap-1.5 rounded-xl border-2 px-2 text-xs font-extrabold select-none transition-colors motion-reduce:transition-none ${
+              onClick={() => onSegment(polozka.id)}
+              className={`bez-prejeti inline-flex min-h-8 shrink-0 whitespace-nowrap touch-manipulation items-center justify-center gap-1.5 rounded-full border px-2.5 text-[13px] font-semibold select-none transition-colors motion-reduce:transition-none ${
                 vybrana
-                  ? "border-inkoust bg-inkoust text-papir"
-                  : "border-inkoust bg-papir text-inkoust hover:bg-linka/60"
+                  ? "border-transparent bg-smrk text-papir"
+                  : "border-linka bg-povrch text-inkoust hover:bg-mlha/60"
               }`}
             >
-              <span className="truncate">{polozka.nazev}</span>
+              <span>{polozka.nazev}</span>
               <span className="relative z-10">
                 <NeprectenaTecka
                   viditelna={maNeprectene}
@@ -665,22 +806,22 @@ export default function ConversationList({
       <div
         role="tabpanel"
         id={panelId}
-        aria-labelledby={`zalozka-${zalozka}`}
+        aria-labelledby={`zalozka-${segment}`}
         className="min-w-0 space-y-2"
       >
-        {zalozka === "skupiny" && muzeSpravovatSkupiny && onNovaSkupina !== undefined && (
+        {ukazeSkupiny && muzeSpravovatSkupiny && onNovaSkupina !== undefined && (
           <button
             type="button"
             onClick={onNovaSkupina}
-            className="nahled-prejeti relative inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-3 text-sm font-extrabold text-inkoust [touch-action:manipulation] motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-denik"
+            className="nahled-prejeti relative inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-linka bg-papir px-3 text-sm font-extrabold text-inkoust [touch-action:manipulation] motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-denik"
           >
             <span className="relative z-10">
               Nová skupina
             </span>
           </button>
         )}
-        {zalozka === "skupiny" && novaSkupina}
-        {zalozka === "clenove" && (
+        {ukazeSkupiny && novaSkupina}
+        {segment === "soukrome" && (
           <input
             type="search"
             value={dotaz}
@@ -688,19 +829,71 @@ export default function ConversationList({
             aria-label="Najít člena"
             placeholder="Najít člena"
             autoComplete="off"
-            className="w-full min-h-[44px] rounded-xl border-2 border-inkoust bg-papir px-3 text-base text-inkoust outline-none placeholder:text-inkoust/45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+            className="w-full min-h-[44px] rounded-xl border border-pole bg-povrch px-3.5 text-base text-inkoust outline-none placeholder:text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
           />
         )}
         {seznamPrazdny ? (
-          <p className="min-w-0 break-words px-2 py-2 text-sm text-inkoust/70">{prazdnyText}</p>
+          <PrazdnyStav
+            ikona={hleda || q.length > 0 ? <IkonaLupa /> : <IkonaBublina />}
+            nadpis={prazdnyText}
+            text={
+              segment === "soukrome" && !hleda
+                ? "Soukromá konverzace začne první zprávou členovi."
+                : undefined
+            }
+            akce={
+              q.length > 0
+                ? { popisek: "Zrušit hledání", onClick: () => setDotaz(""), varianta: "vedlejsi" }
+                : undefined
+            }
+          />
+        ) : zobrazSekce ? (
+          <div className="space-y-4">
+            <SekceSeznamu
+              nadpis="SKUPINY"
+              radky={skupinyVse}
+              seznamRef={seznamRef}
+              onScroll={naScrollSeznamu}
+              scrolluje={scrolluje}
+              vybranyKey={vybranyKey}
+              onVybrat={onVybrat}
+              clenove={clenove}
+              ukazeSkupiny={ukazeSkupiny}
+              onUpravitSkupinu={onUpravitSkupinu}
+              upravaSkupiny={upravaSkupiny}
+              drzenaUprava={drzenaUprava}
+            />
+            <SekceSeznamu
+              nadpis="K VÝPRAVÁM"
+              radky={vypravyVse}
+              vybranyKey={vybranyKey}
+              onVybrat={onVybrat}
+              clenove={clenove}
+              ukazeSkupiny={false}
+              onUpravitSkupinu={onUpravitSkupinu}
+              upravaSkupiny={upravaSkupiny}
+              drzenaUprava={drzenaUprava}
+            />
+            <SekceSeznamu
+              nadpis="SOUKROMÉ"
+              radky={soukromeVse}
+              vybranyKey={vybranyKey}
+              onVybrat={onVybrat}
+              clenove={clenove}
+              ukazeSkupiny={false}
+              onUpravitSkupinu={onUpravitSkupinu}
+              upravaSkupiny={upravaSkupiny}
+              drzenaUprava={drzenaUprava}
+            />
+          </div>
         ) : (
           <div className="relative">
           <ul
             ref={seznamRef}
             role="listbox"
-            aria-label={ZALOZKY.find((z) => z.id === zalozka)?.nazev}
+            aria-label={SEGMENTY.find((z) => z.id === segment)?.nazev}
             onScroll={naScrollSeznamu}
-            className={`seznam-scroll min-w-0 space-y-2 max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
+            className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
               scrolluje ? "seznam-scrolluje" : ""
             }`}
           >
@@ -717,9 +910,9 @@ export default function ConversationList({
                 polozka={polozka}
                 vybrana={polozka.key === vybranyKey}
                 onVybrat={onVybrat}
-                clen={zalozka === "clenove" ? clenVlakna(polozka, clenove) : null}
+                clen={polozka.channel === "soukrome" ? clenVlakna(polozka, clenove) : null}
                 onUpravit={
-                  zalozka === "skupiny" &&
+                  ukazeSkupiny &&
                   polozka.channel === "skupina" &&
                   onUpravitSkupinu !== undefined
                     ? onUpravitSkupinu
@@ -730,7 +923,7 @@ export default function ConversationList({
               />
               );
             })}
-            {zalozka === "clenove" &&
+            {segment === "soukrome" &&
               noviClenove.map((clen) => (
                 <RadekNovehoClena key={clen.id} clen={clen} onZacit={onZacitSClenem} />
               ))}

@@ -25,9 +25,9 @@ export default function SlozkySeznam({ alba, aktivniId }: SlozkySeznamProps): JS
   return (
     <nav
       aria-label="Složky"
-      className="flex min-h-0 flex-col rounded-lg border-2 border-inkoust bg-white/60 shadow-denik"
+      className="flex min-h-0 flex-col rounded-lg border border-linka bg-povrch shadow-denik"
     >
-      <div className="border-b-2 border-inkoust px-3 py-2.5">
+      <div className="border-b border-linka px-3 py-2.5">
         <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-mech">Složky</h2>
       </div>
       <ul className="max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain p-2">
@@ -86,7 +86,7 @@ function PolozkaSlozky({
         aria-current={aktivni ? "page" : undefined}
         className={`${fotkyStisk} flex min-h-[44px] min-w-0 flex-col gap-0.5 rounded-md border-2 px-3 py-2.5 text-left transition-[background-color,border-color,opacity] duration-[160ms] ease-out motion-reduce:transition-none ${FOTKY_FOCUS} ${
           aktivni
-            ? "border-inkoust bg-papir shadow-denik"
+            ? "border-linka bg-povrch shadow-denik"
             : `border-transparent bg-transparent ${fotkyHoverBgLinka} [@media(hover:hover)_and_(pointer:fine)]:hover:border-inkoust/25`
         }`}
       >

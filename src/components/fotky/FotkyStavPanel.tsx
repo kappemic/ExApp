@@ -42,7 +42,7 @@ export default function FotkyStavPanel({
       aria-busy={probiha}
       data-fotky-stav-panel
       data-rezim={rezim}
-      className="fotky-stav-panel pointer-events-none fixed z-50 max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-lg border-2 border-inkoust bg-papir/95 shadow-denik backdrop-blur-sm"
+      className="fotky-stav-panel pointer-events-none fixed z-50 max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-lg border border-linka bg-papir/95 shadow-denik backdrop-blur-sm"
       style={{ backgroundImage: LINIE }}
     >
       <div className="border-b border-inkoust/15 bg-papir/90 px-3 py-2.5">

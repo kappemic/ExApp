@@ -60,6 +60,13 @@ export interface UserListItem {
   avatarUrl?: string | null;
   /** Oblíbená barva — "" nebo chybí = nevyplněno. */
   oblibenaBarva?: string;
+  /**
+   * Narozeniny (YYYY-MM-DD). Stejná větev jako telefon:
+   * null, když divák telefony nevidí, nebo když datum chybí.
+   */
+  narozeniny: string | null;
+  /** Součet fotek z výprav a alb, které člen nahrál. Vidí každý přihlášený. */
+  pocetFotek: number;
 }
 
 export interface UsersListResponse {

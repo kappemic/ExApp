@@ -54,7 +54,7 @@ import Composer from "./Composer";
 
 export interface KonverzaceDetailProps {
   konverzace: ApiKonverzace;
-  /** Vyřešený český název (Důležité / General / název výpravy). */
+  /** Resolved Czech title (Důležité / Obecný / expedition name). */
   nazev: string;
   /** Organizer of this expedition thread. Ignored for other channels. */
   organizatorId?: string | null;
@@ -177,6 +177,13 @@ export function seradVlakno(zpravy: ApiZprava[]): ApiZprava[] {
  * - Offline-friendly: chyba čtení s retry, chyba zápisu bez ztráty textu
  *   (text drží Composer, rollback jen optimistickou bublinu).
  */
+/** Member count for the general channel. Zero means the directory did not load. */
+function tvarClenu(pocet: number): string {
+  if (pocet === 1) return "1 člen";
+  if (pocet >= 2 && pocet <= 4) return `${pocet} členové`;
+  return `${pocet} členů`;
+}
+
 export default function KonverzaceDetail({
   konverzace,
   nazev,
@@ -595,13 +602,13 @@ export default function KonverzaceDetail({
 
   return (
     <section aria-label={`Konverzace ${nazev}`} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-w-0 items-center gap-2 border-b-2 border-inkoust pb-2 lg:pb-3">
+      <header className="flex min-w-0 items-center gap-2 border-b border-linka pb-2 lg:pb-3">
         {onZpet !== undefined && (
           <button
             type="button"
             onClick={onZpet}
             aria-label="Zpět na seznam konverzací"
-            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border-2 border-inkoust bg-papir px-3 text-sm font-bold [touch-action:manipulation] lg:hidden"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-linka bg-papir px-3 text-sm font-bold [touch-action:manipulation] lg:hidden"
           >
             ←
           </button>
@@ -627,6 +634,13 @@ export default function KonverzaceDetail({
                   ? "Připnuté · obecná domluva"
                   : "Vlákno výpravy"}
           </p>
+          {konverzace.channel === "general" && (
+            <p className="mt-0.5 min-w-0 truncate text-[12px] text-mech">
+              {clenove.length > 0
+                ? `${tvarClenu(clenove.length)} · 0 online`
+                : "—"}
+            </p>
+          )}
         </div>
         {jeSkupina && onSmazatSkupinu !== undefined && (
           <button
@@ -654,7 +668,7 @@ export default function KonverzaceDetail({
             <button
               type="button"
               onClick={() => void nacti()}
-              className="mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir [touch-action:manipulation]"
+              className="mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-smrk px-5 text-sm font-bold text-papir [touch-action:manipulation]"
             >
               Zkusit znovu
             </button>
@@ -788,7 +802,7 @@ export default function KonverzaceDetail({
                 >
                   {jeSkupina
                     ? "Do téhle skupiny smíš jen číst. Psát může role, které to vedení povolilo."
-                    : "Důležité čte každý, psát můžou jen vedení, rada nebo admin. Obecnou domluvu piš do Generalu."}
+                    : "Důležité čte každý, psát můžou jen vedení, rada nebo admin. Obecnou domluvu piš do Obecného."}
                 </p>
               ) : (
                 <Composer
@@ -798,7 +812,7 @@ export default function KonverzaceDetail({
                       : jeDulezite
                         ? "Napsat důležité oznámení"
                         : jeSkupina || konverzace.channel === "general"
-                          ? `Napsat do ${konverzace.channel === "general" ? "Generalu" : nazev}`
+                          ? `Napsat do ${konverzace.channel === "general" ? "Obecného" : nazev}`
                           : `Napsat do ${nazev}`
                   }
                   placeholder={

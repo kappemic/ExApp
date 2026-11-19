@@ -1,14 +1,8 @@
-import { useEffect, useId, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { type ApiAlbum } from "../../lib/alba-api";
-import {
-  fotkyDisclosureObsah,
-  fotkyDisclosurePopover,
-  fotkyDisclosureSpoustec,
-  fotkyNahravaciObalRozbaleny,
-  fotkyNahravaciObalSbaleny,
-  fotkyNahravaciSpoustice,
-  fotkySmazatAlbumDiscreet,
-} from "./fotky-ui";
+import { useAuth } from "../../hooks/useAuth";
+import SpodniSheet from "../shell/SpodniSheet";
+import { fotkyNahravaciObalSbaleny, fotkySmazatAlbumDiscreet } from "./fotky-ui";
 import NahratFotky from "./NahratFotky";
 import NoveAlbumForm from "./NoveAlbumForm";
 
@@ -21,19 +15,19 @@ interface FotkyNahravaciPanelProps {
   onVyber: (albumId: string) => void;
   onNahrano: () => void;
   onVytvoreno: (album: ApiAlbum | null, nazev: string) => void;
-  /** One-shot expand after navigating from album detail (desktop „Nahrát do alba"). */
   rozbalitSekci?: SekceNahravani | null;
   onRozbaleno?: () => void;
-  /** When set (vlastni album), admin sees a discreet delete control under upload actions. */
   albumKeSmazani?: ApiAlbum | null;
   onSmazatAlbum?: (spoustec: HTMLElement) => void;
+  nahravaniOtevreno?: boolean;
+  onNahravaniOtevreno?: (otevreno: boolean) => void;
+  albumFormOtevreno?: boolean;
+  onAlbumFormOtevreno?: (otevreno: boolean) => void;
 }
 
-/**
- * Collapsed-by-default upload / create album controls on /fotky (progressive disclosure).
- */
+/** Sheets for upload and new album; triggers live in FotkyPage header. */
 export default function FotkyNahravaciPanel({
-  isAdmin,
+  isAdmin: _isAdmin,
   alba,
   vybraneId,
   onVyber,
@@ -43,92 +37,82 @@ export default function FotkyNahravaciPanel({
   onRozbaleno,
   albumKeSmazani = null,
   onSmazatAlbum,
+  nahravaniOtevreno: nahravaniVne,
+  onNahravaniOtevreno,
+  albumFormOtevreno: albumFormVne,
+  onAlbumFormOtevreno,
 }: FotkyNahravaciPanelProps): JSX.Element {
-  const [rozbalena, setRozbalena] = useState<SekceNahravani | null>(null);
+  const { user } = useAuth();
+  const prihlasen = user !== null;
+  const [nahravaniVnitr, setNahravaniVnitr] = useState(false);
+  const [albumFormVnitr, setAlbumFormVnitr] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
-  const albumObsahId = useId();
-  const nahravaniObsahId = useId();
+
+  const nahravaniOtevreno = nahravaniVne ?? nahravaniVnitr;
+  const setNahravaniOtevreno = onNahravaniOtevreno ?? setNahravaniVnitr;
+  const albumFormOtevreno = albumFormVne ?? albumFormVnitr;
+  const setAlbumFormOtevreno = onAlbumFormOtevreno ?? setAlbumFormVnitr;
 
   useEffect(() => {
     if (rozbalitSekci === null || rozbalitSekci === undefined) return;
-    setRozbalena(rozbalitSekci);
+    if (rozbalitSekci === "nahravani" && !prihlasen) return;
+    if (rozbalitSekci === "nahravani") {
+      setNahravaniOtevreno(true);
+    } else {
+      setAlbumFormOtevreno(true);
+    }
     onRozbaleno?.();
     window.requestAnimationFrame(() => {
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [rozbalitSekci, onRozbaleno]);
-
-  function prepni(sekce: SekceNahravani): void {
-    setRozbalena((aktualni) => (aktualni === sekce ? null : sekce));
-  }
+  }, [onRozbaleno, prihlasen, rozbalitSekci, setAlbumFormOtevreno, setNahravaniOtevreno]);
 
   return (
     <section
       ref={panelRef}
       id="fotky-nahravani"
       data-fotky-nahravaci-panel
-      data-fotky-nahravaci-sbaleno={rozbalena === null ? "true" : "false"}
-      className={
-        rozbalena === null
-          ? fotkyNahravaciObalSbaleny
-          : `${fotkyNahravaciObalRozbaleny}${rozbalena === "album" ? " relative pb-[9.5rem] sm:pb-[8.75rem]" : ""}`
-      }
+      data-fotky-nahravaci-sbaleno={!nahravaniOtevreno && !albumFormOtevreno ? "true" : "false"}
+      className={fotkyNahravaciObalSbaleny}
     >
-      <div className={fotkyNahravaciSpoustice} data-fotky-nahravaci-spoustice>
-        {isAdmin ? (
-          <div className="relative shrink-0" data-fotky-nove-album-blok>
-            <button
-              type="button"
-              data-fotky-rozbal-nove-album
-              aria-expanded={rozbalena === "album"}
-              aria-controls={albumObsahId}
-              onClick={() => {
-                prepni("album");
-              }}
-              className={fotkyDisclosureSpoustec}
-            >
-              <span>Nové album</span>
-              <span aria-hidden="true">{rozbalena === "album" ? "▾" : "▸"}</span>
-            </button>
-            {rozbalena === "album" ? (
-              <div id={albumObsahId} className={fotkyDisclosurePopover}>
-                <NoveAlbumForm onVytvoreno={onVytvoreno} />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          data-fotky-rozbal-nahravani
-          aria-expanded={rozbalena === "nahravani"}
-          aria-controls={nahravaniObsahId}
-          onClick={() => {
-            prepni("nahravani");
+      <SpodniSheet
+        otevreno={albumFormOtevreno}
+        titulek="Přidat album"
+        onZavrit={() => {
+          setAlbumFormOtevreno(false);
+        }}
+      >
+        <NoveAlbumForm
+          onVytvoreno={(album, nazev) => {
+            setAlbumFormOtevreno(false);
+            onVytvoreno(album, nazev);
           }}
-          className={fotkyDisclosureSpoustec}
-        >
-          <span>Nahrát fotky</span>
-          <span aria-hidden="true">{rozbalena === "nahravani" ? "▾" : "▸"}</span>
-        </button>
-      </div>
+        />
+      </SpodniSheet>
 
-      {rozbalena === "nahravani" ? (
-        <div id={nahravaniObsahId} className={fotkyDisclosureObsah}>
-          <NahratFotky
-            alba={alba}
-            vybraneId={vybraneId}
-            onVyber={onVyber}
-            onNahrano={onNahrano}
-          />
-        </div>
-      ) : null}
-      {isAdmin &&
-      albumKeSmazani !== null &&
+      <SpodniSheet
+        otevreno={nahravaniOtevreno}
+        titulek="Nahrát fotky"
+        onZavrit={() => {
+          setNahravaniOtevreno(false);
+        }}
+      >
+        <NahratFotky
+          alba={alba}
+          vybraneId={vybraneId}
+          onVyber={onVyber}
+          onNahrano={onNahrano}
+          onZrusit={() => {
+            setNahravaniOtevreno(false);
+          }}
+        />
+      </SpodniSheet>
+
+      {albumKeSmazani !== null &&
       albumKeSmazani !== undefined &&
       albumKeSmazani.druh === "vlastni" &&
       onSmazatAlbum !== undefined ? (
-        <div className="mt-1 border-t border-inkoust/10 pt-1.5" data-fotky-smazat-album-blok>
+        <div className="mt-1 border-t border-pole pt-1.5" data-fotky-smazat-album-blok>
           <button
             type="button"
             data-smazat-album

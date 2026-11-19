@@ -45,11 +45,13 @@ Není tu `drizzle.config` ani `db:migrate`. Změna schématu znamená:
 
 Aplikace má dva vizuální systémy, nejdřív urči, do kterého změna patří:
 
-- **Redesign C2, paleta 12f (probíhá):** bílé pozadí, olivová značka, okrová tlačítka s tmavým textem, písma Onest a Bricolage Grotesque (self-hosted), zaoblené tvary. `/vypravy` včetně detailu, kalendáře a formulářů už je v C2. Stav popisuje začátek `docs/navrhy-vypravy/DESIGN.md`.
+- **Redesign C2, paleta 12f (probíhá):** krémové pozadí `papir`, karty `povrch` s vlasovou linkou `linka` (žádný tmavý okraj `border-inkoust`), primární tlačítka tmavě olivová `bg-smrk text-papir`, sekundární `bg-povrch border-linka`. Terakota `akcent` jen pro mazání a od 1440 px pro přihlášení na výpravu a odeslání zprávy. Písma Onest a Bricolage Grotesque (self-hosted), zaoblené tvary. Předlohou je návrh `ExApp.pen` (pen.dev, čte se přes Pencil MCP), rozdíly proti aplikaci jsou v `docs/navrhy-vypravy/AUDIT-PEN.md`. Stav popisuje i začátek `docs/navrhy-vypravy/DESIGN.md`.
 - **`.nocturne`:** obaluje celou aplikaci (`DenikPlocha`), drží jen proměnné v paletě 12f a přechody dialogů. Styly jsou v `src/components/vypravy-nahled/nocturne.css`. `tokens.md` a HTML makety ve stejné složce jsou archiv.
 - **Tokeny:** `src/index.css` (`papir`, `inkoust`, `smrk`, `jantar`, `mech`, `linka`, nově `okr`, `okr-tmavy`, `mlha`, `pole`). Na `bg-okr` patří vždy `text-inkoust`, bílý text tam nemá kontrast. Okraj polí formulářů je `border-pole`, `linka` je na to moc světlá.
 
 Všude platí mobile-first, dotykové cíle 44 px, vstupy `16px` (bez zoomu na iOS) a podpora `prefers-reduced-motion`.
+
+Počítačová verze začíná na 1440 px a píše se `min-[90rem]:` / `max-[90rem]:`. Nepoužívej `min-[1440px]:`: Tailwind řadí arbitrární px hodnoty před `sm:`–`xl:` (rem), takže `lg:block min-[1440px]:hidden` na 1440 px vyhraje `lg:block`. Ikony jsou Lucide v `src/components/Ikona.tsx` (stejná sada jako návrh).
 
 ## Pravidla
 

@@ -96,7 +96,7 @@ export default function TelefonPole({
           aria-controls={seznamId}
           aria-label={`Předvolba, ${nazev} ${predvolba}`}
           onClick={() => setOtevreno((stav) => !stav)}
-          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md border-2 border-inkoust bg-white px-3 text-base font-bold text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-50 [touch-action:manipulation]"
+          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md border border-pole bg-white px-3 text-base font-bold text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-50 [touch-action:manipulation]"
         >
           <span aria-hidden="true">{vlajka(kod)}</span>
           <span>{predvolba}</span>
@@ -118,7 +118,7 @@ export default function TelefonPole({
         />
       </div>
       {otevreno && (
-        <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border-2 border-inkoust bg-white shadow-denik">
+        <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-linka bg-white shadow-denik">
           <div className="border-b border-inkoust/15 p-2">
             <input
               ref={hledaniRef}

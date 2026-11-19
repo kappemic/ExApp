@@ -102,13 +102,14 @@ describe("Navbar zdroj-kontrakt — badge na živých datech", () => {
   it("dynamický aria-label (Chat vs Chat + počet)", () => {
     expect(navbar).toContain("popisekChat(pocetNeprectenych)");
     expect(navbar).toContain('aria-label={jeChat ? label : undefined}');
-    expect(navbar).toContain("aria-label={popisekChat(pocetNeprectenych)}");
+    expect(navbar).toContain("aria-label={jeChat ? popisekChat(pocetNeprectenych) : undefined}");
   });
 
   it("desktop TopBar i mobilní zvonek sdílí stejný počet", () => {
-    expect(navbar).toContain("TopBar pocetNeprectenych");
+    expect(navbar).toContain("<TopBar");
+    expect(navbar).toContain("pocetNeprectenych={pocetNeprectenych}");
     expect(navbar).toContain("pocetNeprectenych?: number");
-    expect(navbar).toContain("lg:hidden");
+    expect(navbar).toContain("min-[90rem]:hidden");
   });
 
   it("mobilní tečka drží 44px target (pointer-events-none + touch-action)", () => {

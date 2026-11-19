@@ -28,6 +28,17 @@ export interface VytvoritKodResponse {
   expiresAt: string;
 }
 
+/** Live invite code. Never carries usedBy, a hash, or a webhook. */
+export interface ZivyKodPolozka {
+  code: string;
+  expiresAt: string;
+}
+
+/** GET /api/admin/codes — non-expired rows only. Admin guard stays on the route. */
+export interface ZiveKodyResponse {
+  kody: ZivyKodPolozka[];
+}
+
 /* ------------------------------------------------------------------ */
 /* 2) POST /api/register — veřejné, platný kód povinný                  */
 /* Platný kód = expires_at > now() (sdílený, opakovaně použitelný).    */
@@ -68,9 +79,22 @@ export interface RegistraceResponse {
 
 export const LOGIN_PATH = "/api/login" as const;
 
+export const OVERENI_KODU_PATH = "/api/kody/overit" as const;
+
+export interface OvereniKoduRequest {
+  kod: string;
+}
+
+export interface OvereniKoduResponse {
+  platny: true;
+  expiresAt: string;
+}
+
 export interface PrihlaseniRequest {
   email: string;
   heslo: string;
+  /** true = cookie na 7 dní. false nebo chybějící pole = session cookie. */
+  zustat?: boolean;
 }
 
 export interface PrihlaseniResponse {

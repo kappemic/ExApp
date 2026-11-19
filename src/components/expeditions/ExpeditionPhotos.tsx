@@ -300,13 +300,13 @@ export default function ExpeditionPhotos({
               aria-modal="true"
               aria-labelledby={dialogNadpisId}
               onMouseDown={(e) => e.stopPropagation()}
-              className="max-h-[92vh] w-full max-w-lg touch-manipulation overflow-y-auto overscroll-contain rounded-lg border-2 border-inkoust bg-papir shadow-denik"
+              className="max-h-[92vh] w-full max-w-lg touch-manipulation overflow-y-auto overscroll-contain rounded-lg border border-linka bg-papir shadow-denik"
             >
               <div
                 className={`sticky top-0 z-10 flex gap-2 border-b-2 bg-papir/95 px-3 py-2.5 shadow-denik backdrop-blur-sm sm:px-4 sm:py-3 ${
                   mazani.mazaciRezim
                     ? "flex-col items-stretch border-jantar/60 bg-jantar/5"
-                    : "flex-wrap items-center justify-between border-inkoust"
+                    : "flex-wrap items-center justify-between border-linka"
                 }`}
               >
                 <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ export default function ExpeditionPhotos({
                       type="button"
                       onClick={zavriGaleriiNatvrdo}
                       aria-label="Zavřít galerii"
-                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust`}
+                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border border-linka bg-papir px-3 text-sm font-bold text-inkoust`}
                     >
                       Zavřít
                     </button>
@@ -480,7 +480,7 @@ export default function ExpeditionPhotos({
                       }}
                       aria-invalid={chybaSouboru !== null}
                       aria-describedby={chybaSouboru !== null ? `${souborPoleId}-chyba` : undefined}
-                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-xl file:border-2 file:border-inkoust file:bg-papir file:px-4 file:text-sm file:font-bold"
+                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-xl file:border file:border-linka file:bg-papir file:px-4 file:text-sm file:font-bold"
                     />
                     {soubory.length > 0 && (
                       <p className="mt-1 text-[13px] text-inkoust/70">
@@ -544,7 +544,7 @@ export default function ExpeditionPhotos({
           <button
             type="button"
             onClick={() => void nacist()}
-            className={`${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} mt-3 rounded-full border-2 border-inkoust bg-inkoust px-5 text-sm font-bold text-papir [@media(hover:hover)_and_(pointer:fine)]:hover:bg-inkoust/90`}
+            className={`${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} mt-3 rounded-full bg-smrk px-5 text-sm font-bold text-papir [@media(hover:hover)_and_(pointer:fine)]:hover:bg-inkoust/90`}
           >
             Zkusit znovu
           </button>

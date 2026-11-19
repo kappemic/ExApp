@@ -292,10 +292,12 @@ describe("klientský bundle nikdy nenese SECRET (aditivně)", () => {
     expect(obsah.toLowerCase()).not.toContain("client_secret");
   });
 
-  it("ProfilPage tab statistiky ukazuje karty čísel + seznam (bez live Stravy)", () => {
-    const obsah = cti("src/pages/ProfilPage.tsx");
-    expect(obsah).toContain("getMojeStatistiky");
-    expect(obsah).not.toContain("access_token");
-    expect(obsah.toLowerCase()).not.toContain("refresh_token");
+  it("ProfilPage tab statistiky mountuje StatistikyPlocha (fetch v ploše)", () => {
+    const profil = cti("src/pages/ProfilPage.tsx");
+    expect(profil).toContain("StatistikyPlocha");
+    const plocha = cti("src/components/statistiky/StatistikyPlocha.tsx");
+    expect(plocha).toContain("getMojeStatistiky");
+    expect(plocha).not.toContain("access_token");
+    expect(plocha.toLowerCase()).not.toContain("refresh_token");
   });
 });

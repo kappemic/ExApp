@@ -56,7 +56,7 @@ export default function AdminTaby({
       role="tablist"
       aria-label="Skupiny členů"
       onKeyDown={onKeyDown}
-      className="mt-4 flex max-w-full items-stretch gap-1 overflow-x-auto rounded-md border-2 border-inkoust bg-white/60 p-1 shadow-denik sm:flex-wrap"
+      className="mt-4 flex max-w-full items-stretch gap-1 overflow-x-auto rounded-md border border-linka bg-povrch p-1 shadow-denik sm:flex-wrap"
     >
       {CLENOVE_TABY.map((tab) => {
         const aktivni = aktivniTab === tab.id;

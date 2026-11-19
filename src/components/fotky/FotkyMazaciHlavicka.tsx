@@ -38,10 +38,10 @@ export default function FotkyMazaciHlavicka({
 }: FotkyMazaciHlavickaProps): JSX.Element | null {
   if (!isAdmin || !maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} border-2 px-3 text-sm font-bold disabled:opacity-60`;
-  const destruktivni = `${zaklad} rounded-lg border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
-  const destruktivniPlne = `${zaklad} rounded-lg border-inkoust bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
-  const neutralni = `${zaklad} rounded-lg border-inkoust bg-papir text-inkoust shadow-denik`;
+  const zaklad = `${fotkyTlacitkoZaklad} border px-3 text-sm font-bold disabled:opacity-60`;
+  const destruktivni = `${zaklad} rounded-lg border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
+  const destruktivniPlne = `${zaklad} rounded-lg border-jantar bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
+  const neutralni = `${zaklad} rounded-lg border-linka bg-povrch text-inkoust shadow-denik`;
 
   if (!mazaciRezim) {
     return (
@@ -53,7 +53,7 @@ export default function FotkyMazaciHlavicka({
         className={
           bezRamce
             ? fotkyLightboxIkona
-            : `${fotkyTlacitkoZaklad} nahled-press h-11 w-11 rounded-lg border-2 border-okr bg-okr p-0 text-inkoust shadow-denik`
+            : `${fotkyTlacitkoZaklad} nahled-press h-11 w-11 rounded-xl border border-pole bg-povrch p-0 text-inkoust`
         }
       >
         <IkonaKos />

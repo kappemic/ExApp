@@ -502,7 +502,7 @@ export default function ZpravaBublina({
               ? `w-fit max-w-full rounded-2xl text-inkoust ${
                   jeMoje ? "bg-okr/25" : "border border-pole bg-papir"
                 } ${jenFotky ? "p-1" : "px-3 py-2"} ${jeOptimisticka ? "opacity-70" : ""}`
-              : `rounded-2xl border-2 border-inkoust shadow-denik ${
+              : `rounded-2xl border border-linka shadow-denik ${
                   jenFotky ? "px-1.5 py-1.5" : "px-3 py-2"
                 } ${jeMoje ? "bg-smrk text-papir" : "bg-papir text-inkoust"} ${
                   jeOptimisticka ? "opacity-70" : ""

@@ -46,7 +46,7 @@ export default function SkupinaForm({
 
   return (
     <form
-      className="mb-3 space-y-3 rounded-2xl border-2 border-inkoust bg-papir p-3 shadow-denik"
+      className="mb-3 space-y-3 rounded-2xl border border-linka bg-papir p-3 shadow-denik"
       onSubmit={(udalost) => {
         udalost.preventDefault();
         onUlozit(jmeno, pravaForm);
@@ -60,7 +60,7 @@ export default function SkupinaForm({
           onChange={(udalost) => setJmeno(udalost.target.value)}
           maxLength={80}
           required
-          className="mt-1 w-full min-h-[44px] rounded-xl border-2 border-inkoust bg-papir px-3 text-base outline-none"
+          className="mt-1 w-full min-h-[44px] rounded-xl border border-pole bg-papir px-3 text-base outline-none"
         />
       </label>
       <fieldset className="min-w-0 space-y-2">
@@ -102,14 +102,14 @@ export default function SkupinaForm({
         <button
           type="submit"
           disabled={ukladaSe}
-          className="inline-flex min-h-[44px] items-center rounded-xl border-2 border-inkoust bg-inkoust px-4 text-sm font-bold text-papir disabled:opacity-60 [touch-action:manipulation]"
+          className="inline-flex min-h-[44px] items-center rounded-xl bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60 [touch-action:manipulation]"
         >
           {ukladaSe ? "Ukládám…" : "Uložit skupinu"}
         </button>
         <button
           type="button"
           onClick={onZrusit}
-          className="bez-prejeti inline-flex min-h-[44px] items-center rounded-xl border-2 border-inkoust bg-papir px-4 text-sm font-bold text-inkoust transition-[transform,background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-linka/60 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 [touch-action:manipulation]"
+          className="bez-prejeti inline-flex min-h-[44px] items-center rounded-xl border border-linka bg-papir px-4 text-sm font-bold text-inkoust transition-[transform,background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-linka/60 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 [touch-action:manipulation]"
         >
           Zrušit
         </button>

@@ -248,7 +248,7 @@ export default function FotkyLightbox({
         <div
           className={
             mazaciRezim
-              ? "pointer-events-auto flex w-full min-w-0 flex-col gap-2 border-2 border-inkoust bg-papir p-2 shadow-denik sm:w-auto"
+              ? "pointer-events-auto flex w-full min-w-0 flex-col gap-2 border border-linka bg-papir p-2 shadow-denik sm:w-auto"
               : "pointer-events-auto flex min-w-0 flex-col items-end gap-1"
           }
         >
@@ -305,7 +305,7 @@ export default function FotkyLightbox({
         <p
           role="alert"
           onMouseDown={zastav}
-          className="border-b-2 border-inkoust bg-papir px-3 py-2 text-sm font-semibold text-red-800"
+          className="border-b border-linka bg-papir px-3 py-2 text-sm font-semibold text-red-800"
         >
           {nahledChyba}
         </p>
@@ -319,7 +319,7 @@ export default function FotkyLightbox({
           <p
             role="status"
             onMouseDown={zastav}
-            className="rounded-md border-2 border-inkoust bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
+            className="rounded-md border border-linka bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
           >
             Fotku se nepodařilo načíst.
           </p>

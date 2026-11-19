@@ -1,34 +1,29 @@
-import type { JSX, ReactNode } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import Ikona, { type NazevIkony } from "../Ikona";
+import type { RazeniVyprav } from "../../lib/expedice-filtr";
 
 type Zobrazeni = "seznam" | "kalendar";
+export type FiltrVypravHlavicky = "vse" | "nejblizsi" | "neuzavrene";
 
-const VOLBY: Array<{ id: Zobrazeni; popisek: string; ikona: ReactNode }> = [
-  {
-    id: "seznam",
-    popisek: "Seznam",
-    ikona: (
-      <>
-        <path d="M8 6h12M8 12h12M8 18h12" />
-        <path d="M4 6h.01M4 12h.01M4 18h.01" />
-      </>
-    ),
-  },
-  {
-    id: "kalendar",
-    popisek: "Kalendář",
-    ikona: (
-      <>
-        <rect width="18" height="18" x="3" y="4" rx="2" />
-        <path d="M16 2v4M8 2v4M3 10h18" />
-      </>
-    ),
-  },
+const VOLBY: Array<{ id: Zobrazeni; popisek: string; ikona: NazevIkony }> = [
+  { id: "seznam", popisek: "Seznam", ikona: "list" },
+  { id: "kalendar", popisek: "Kalendář", ikona: "calendar-days" },
 ];
 
+const FILTRY: Array<{ id: FiltrVypravHlavicky; popisek: string }> = [
+  { id: "vse", popisek: "Vše" },
+  { id: "nejblizsi", popisek: "Nejbližší" },
+  { id: "neuzavrene", popisek: "Neuzavřené" },
+];
+
+const FOKUS =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk";
+
 /**
- * Hlavička stránky Výpravy (C2): nadpis, hledání, nová výprava a pod nimi
- * záložky Seznam / Kalendář s olivovou linkou. V kalendáři se hledání
- * schová, kalendář ho nefiltruje.
+ * Hlavička stránky Výpravy podle ExApp.pen („Telefon · Výpravy“ a „ExApp · Výpravy“).
+ * Telefon: nadpis + podtitul, vpravo lupa a „Nová“; pod tím přepínač
+ * Seznam / Kalendář a řádek čipů. Počítač (1440+): nadpis 46 px, vpravo pole
+ * hledání a „Nová výprava“; přepínač vlevo, čipy a řazení vpravo v jednom řádku.
  */
 export default function NahledHlavicka({
   zobrazeni,
@@ -38,6 +33,11 @@ export default function NahledHlavicka({
   onDotaz,
   hlaseni,
   novaVyprava,
+  filtr,
+  onFiltr,
+  razeni,
+  onRazeni,
+  kalendarOvladani,
 }: {
   zobrazeni: Zobrazeni;
   onZobrazeni: (zobrazeni: Zobrazeni) => void;
@@ -47,110 +47,167 @@ export default function NahledHlavicka({
   hlaseni: ReactNode;
   /** Shown only to people who may create a trip. */
   novaVyprava?: () => void;
+  filtr: FiltrVypravHlavicky;
+  onFiltr: (filtr: FiltrVypravHlavicky) => void;
+  razeni: RazeniVyprav;
+  onRazeni: (razeni: RazeniVyprav) => void;
+  /** Navigace měsíce a legenda, v kalendáři na počítači vpravo v liště. */
+  kalendarOvladani?: ReactNode;
 }): JSX.Element {
   const maDotaz = dotaz.trim().length > 0;
   const vKalendari = zobrazeni === "kalendar";
+  const [hledaniMobil, setHledaniMobil] = useState<boolean>(maDotaz);
+  const poleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (hledaniMobil) poleRef.current?.focus();
+  }, [hledaniMobil]);
+
+  const pole = (
+    <div role="search" className="relative w-full min-w-0">
+      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
+        <Ikona nazev="search" className="size-[17px]" />
+      </span>
+      <input
+        ref={poleRef}
+        id={hledaniId}
+        type="search"
+        name="nazev"
+        value={dotaz}
+        onChange={(e) => onDotaz(e.target.value)}
+        aria-label="Hledat podle jména"
+        placeholder="Hledat výpravu"
+        autoComplete="off"
+        spellCheck={false}
+        enterKeyHint="search"
+        className={`h-[46px] w-full rounded-xl border border-linka bg-povrch py-2 pl-[40px] text-base text-inkoust outline-none placeholder:text-ink-3 focus:border-pole min-[90rem]:text-sm ${
+          maDotaz ? "pr-12" : "pr-3.5"
+        }`}
+      />
+      {maDotaz ? (
+        <button
+          type="button"
+          onClick={() => onDotaz("")}
+          aria-label="Zrušit hledání"
+          className={`absolute right-0.5 top-1/2 flex size-11 -translate-y-1/2 touch-manipulation items-center justify-center rounded-lg text-ink-3 hover:text-inkoust ${FOKUS}`}
+        >
+          <Ikona nazev="x" className="size-4" />
+        </button>
+      ) : null}
+    </div>
+  );
 
   return (
-    <header>
-      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <h1 className="min-w-0 text-4xl font-bold text-inkoust sm:text-5xl">Výpravy</h1>
+    <header className="flex flex-col gap-[22px] min-[90rem]:gap-[18px]">
+      <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:items-end">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+            Výpravy
+          </h1>
+          <p className="text-xs text-ink-3 min-[90rem]:hidden">Školní expediční klub</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {!vKalendari ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setHledaniMobil((pred) => !pred)}
+                aria-label="Hledat výpravu"
+                aria-expanded={hledaniMobil}
+                aria-controls={hledaniId}
+                className={`nahled-press flex size-11 touch-manipulation items-center justify-center rounded-xl border border-linka bg-povrch text-mech min-[90rem]:hidden ${FOKUS}`}
+              >
+                <Ikona nazev="search" className="size-[18px]" />
+              </button>
+              <div className="hidden w-[252px] min-[90rem]:block">{pole}</div>
+            </>
+          ) : null}
           {novaVyprava !== undefined ? (
             <button
               type="button"
               onClick={novaVyprava}
               aria-label="Nová výprava"
-              title="Nová výprava"
-              className="nahled-press inline-flex h-11 min-h-[44px] w-11 min-w-[44px] touch-manipulation select-none items-center justify-center rounded-xl bg-okr text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:hidden"
+              className={`nahled-press inline-flex h-11 touch-manipulation select-none items-center justify-center gap-1.5 rounded-xl bg-smrk px-3.5 text-[13.5px] font-semibold text-papir hover:opacity-90 min-[90rem]:h-[46px] min-[90rem]:gap-2 min-[90rem]:pl-4 min-[90rem]:pr-[18px] min-[90rem]:text-sm ${FOKUS}`}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 items-center gap-3 lg:flex-1 lg:justify-end">
-          <div
-            role="search"
-            className={`relative w-full min-w-0 lg:max-w-md ${vKalendari ? "hidden" : ""}`}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-mech"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              id={hledaniId}
-              type="search"
-              name="nazev"
-              value={dotaz}
-              onChange={(e) => onDotaz(e.target.value)}
-              aria-label="Hledat podle jména"
-              placeholder="Hledat výpravu"
-              autoComplete="off"
-              spellCheck={false}
-              enterKeyHint="search"
-              className={`min-h-[48px] w-full rounded-xl border border-pole bg-papir py-2 pl-11 text-base text-inkoust outline-none placeholder:text-mech ${
-                maDotaz ? "pr-14" : "pr-4"
-              }`}
-            />
-            {maDotaz ? (
-              <button
-                type="button"
-                onClick={() => onDotaz("")}
-                aria-label="Zrušit hledání"
-                className="absolute right-1 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 touch-manipulation select-none items-center justify-center rounded-lg text-lg font-semibold leading-none text-mech hover:bg-mlha hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-              >
-                ×
-              </button>
-            ) : null}
-          </div>
-          {novaVyprava !== undefined ? (
-            <button
-              type="button"
-              onClick={novaVyprava}
-              className="nahled-press hidden min-h-[48px] shrink-0 touch-manipulation select-none items-center justify-center rounded-xl bg-okr px-5 text-sm font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:inline-flex"
-            >
-              Nová výprava
+              <Ikona nazev="plus" className="size-4" />
+              <span className="min-[90rem]:hidden">Nová</span>
+              <span className="hidden min-[90rem]:inline">Nová výprava</span>
             </button>
           ) : null}
         </div>
       </div>
 
-      <div role="group" aria-label="Zobrazení výprav" className="mt-5 flex gap-6 border-b border-linka">
-        {VOLBY.map((volba) => {
-          const aktivni = volba.id === zobrazeni;
-          return (
+      {hledaniMobil && !vKalendari ? <div className="min-[90rem]:hidden">{pole}</div> : null}
+
+      <div className={`flex min-w-0 flex-col gap-[22px] min-[90rem]:flex-row min-[90rem]:items-center min-[90rem]:justify-between ${vKalendari ? "min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4" : ""}`}>
+        <div
+          role="group"
+          aria-label="Zobrazení výprav"
+          className="inline-flex h-9 w-fit items-center gap-0.5 rounded-[18px] bg-povrch-2 p-[3px] min-[90rem]:h-auto min-[90rem]:rounded-[13px] min-[90rem]:p-1"
+        >
+          {VOLBY.map((volba) => {
+            const aktivni = volba.id === zobrazeni;
+            return (
+              <button
+                key={volba.id}
+                type="button"
+                aria-pressed={aktivni}
+                onClick={() => onZobrazeni(volba.id)}
+                className={`bez-prejeti inline-flex h-[30px] touch-manipulation select-none items-center gap-1.5 rounded-[15px] px-3 text-[12.5px] transition-colors motion-reduce:transition-none min-[90rem]:h-auto min-[90rem]:gap-[7px] min-[90rem]:rounded-[9px] min-[90rem]:px-3.5 min-[90rem]:py-[7px] min-[90rem]:text-[13.5px] ${FOKUS} ${
+                  aktivni
+                    ? "bg-povrch font-semibold text-inkoust shadow-[0_1px_2px_#1c261514]"
+                    : "font-medium text-mech hover:text-inkoust"
+                }`}
+              >
+                <Ikona
+                  nazev={volba.ikona}
+                  className={`size-[13px] min-[90rem]:size-[15px] ${aktivni ? "text-inkoust" : "text-ink-3"}`}
+                />
+                <span>{volba.popisek}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {!vKalendari ? (
+          <div className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
+            <div role="group" aria-label="Filtr výprav" className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
+              {FILTRY.map((volba) => {
+                const vybrano = filtr === volba.id;
+                return (
+                  <button
+                    key={volba.id}
+                    type="button"
+                    aria-pressed={vybrano}
+                    onClick={() => onFiltr(volba.id)}
+                    className={`nahled-press inline-flex h-8 shrink-0 touch-manipulation items-center rounded-full border px-3 text-[13px] min-[90rem]:h-auto min-[90rem]:px-[13px] min-[90rem]:py-[7px] ${FOKUS} ${
+                      vybrano
+                        ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
+                        : "border-linka bg-povrch font-medium text-mech min-[90rem]:bg-transparent"
+                    }`}
+                  >
+                    {volba.popisek}
+                  </button>
+                );
+              })}
+            </div>
             <button
-              key={volba.id}
               type="button"
-              aria-pressed={aktivni}
-              onClick={() => onZobrazeni(volba.id)}
-              className={`bez-prejeti -mb-px inline-flex min-h-[48px] touch-manipulation select-none items-center gap-2 border-b-2 px-1 text-base transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk ${
-                aktivni
-                  ? "border-smrk font-semibold text-inkoust"
-                  : "border-transparent font-medium text-mech hover:text-inkoust"
-              }`}
+              onClick={() => onRazeni(razeni === "datum" ? "nazev" : "datum")}
+              aria-label={`Řazení: ${razeni === "datum" ? "podle data" : "podle názvu"}. Změnit`}
+              className={`nahled-press hidden min-h-11 touch-manipulation items-center gap-1.5 rounded-lg py-[7px] pl-2.5 pr-1 text-[13px] font-medium text-mech min-[90rem]:inline-flex ${FOKUS}`}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`h-5 w-5 ${aktivni ? "text-smrk" : ""}`}>
-                {volba.ikona}
-              </svg>
-              <span className="max-sm:sr-only">{volba.popisek}</span>
+              {razeni === "datum" ? "Podle data" : "Podle názvu"}
+              <Ikona nazev="chevrons-up-down" className="size-3.5 text-ink-3" />
             </button>
-          );
-        })}
+          </div>
+        ) : kalendarOvladani !== undefined ? (
+          <div className="hidden min-[90rem]:block">{kalendarOvladani}</div>
+        ) : null}
       </div>
 
       {hlaseni !== null && hlaseni !== undefined && hlaseni !== false ? (
-        <p aria-live="polite" className="mt-3 max-w-2xl text-base leading-relaxed text-mech">
+        <p aria-live="polite" className="-mt-2 max-w-2xl text-sm leading-relaxed text-mech">
           {hlaseni}
         </p>
       ) : null}

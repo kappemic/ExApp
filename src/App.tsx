@@ -12,11 +12,17 @@ import LoginPage from "./pages/LoginPage";
 
 const AdminClenovePage = lazy(() => import("./pages/AdminClenovePage"));
 const AdminKodyPage = lazy(() => import("./pages/AdminKodyPage"));
+const ClenDetailPage = lazy(() => import("./pages/ClenDetailPage"));
+const NastaveniPage = lazy(() => import("./pages/NastaveniPage"));
+const VicePage = lazy(() => import("./pages/VicePage"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const FotkyPage = lazy(() => import("./pages/FotkyPage"));
 const ProfilPage = lazy(() => import("./pages/ProfilPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const VypravyNahledPage = lazy(() => import("./pages/VypravyNahledPage"));
+const VypravaDetailPage = lazy(() => import("./pages/VypravaDetailPage"));
+const KdoJedePage = lazy(() => import("./pages/KdoJedePage"));
+const NovaVypravaPage = lazy(() => import("./pages/NovaVypravaPage"));
 const ZebrickyPage = lazy(() => import("./pages/ZebrickyPage"));
 const ZpevnikPage = lazy(() => import("./pages/ZpevnikPage"));
 const ZpevnikPisenPage = lazy(() => import("./pages/ZpevnikPisenPage"));
@@ -27,7 +33,7 @@ const ZpevnikUpravaPage = lazy(() => import("./pages/ZpevnikUpravaPage"));
 
 /** Route chunks load after the shell. The landing page and login stay in the first script. */
 function OdlozenaStranka(props: { children: ReactNode }): JSX.Element {
-  return <Suspense fallback={<StrankaKostra />}>{props.children}</Suspense>;
+  return <Suspense fallback={<StrankaKostra vnitrni />}>{props.children}</Suspense>;
 }
 
 /** Old preview URL keeps its query and lands on the journal. */
@@ -63,7 +69,7 @@ function AppObsah(): JSX.Element {
     <DenikPlocha>
       <div className="flex min-h-dvh flex-col bg-papir text-inkoust">
         {prihlasen ? <Navbar /> : null}
-        <div className={`flex-1 ${prihlasen ? "pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-8" : ""}`}>
+        <div className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
           <Routes>
             <Route path="/" element={<DomuPage />} />
             <Route
@@ -77,6 +83,36 @@ function AppObsah(): JSX.Element {
               }
             />
             <Route path="/vypravy/nahled" element={<NahledNaVypravy />} />
+            <Route
+              path="/vypravy/nova"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <NovaVypravaPage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/vypravy/:id/kdo-jede"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <KdoJedePage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/vypravy/:id"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <VypravaDetailPage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
             <Route
               path="/zpevnik"
               element={
@@ -188,6 +224,26 @@ function AppObsah(): JSX.Element {
               }
             />
             <Route
+              path="/vice"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <VicePage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/nastaveni"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <NastaveniPage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
               path="/register"
               element={
                 <OdlozenaStranka>
@@ -213,6 +269,16 @@ function AppObsah(): JSX.Element {
                 <RequireAuth>
                   <OdlozenaStranka>
                     <AdminClenovePage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/cleny/:id"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <ClenDetailPage />
                   </OdlozenaStranka>
                 </RequireAuth>
               }

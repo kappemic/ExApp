@@ -315,6 +315,18 @@ describe("DELETE /api/users/:id — admin guard a zákaz vlastního účtu", () 
   });
 });
 
+describe("GET /api/admin/codes — živé kódy jen pro admina", () => {
+  it("route je za vyzadujAdmina a v bloku není usedBy", () => {
+    const server = readFileSync("server/src/ucty-routes.ts", "utf8");
+    const start = server.indexOf('app.get("/api/admin/codes"');
+    expect(start).toBeGreaterThan(-1);
+    const konec = server.indexOf("app.post(", start);
+    const blok = server.slice(start, konec === -1 ? undefined : konec);
+    expect(blok).toContain("vyzadujAdmina");
+    expect(blok).not.toContain("usedBy");
+  });
+});
+
 describe("GET /api/users — čtení pro přihlášené, úprava dál jen admin", () => {
   it("seznam hlídá přihlášení a mapper nese telefon", () => {
     const server = readFileSync("server/src/clenove-routes.ts", "utf8");

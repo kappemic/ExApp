@@ -1,4 +1,5 @@
 import { forwardRef, useId, useRef, useState, type JSX } from "react";
+import Ikona from "./Ikona";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 
 export interface VolbaVyberu {
@@ -44,9 +45,7 @@ const VyberPole = forwardRef<HTMLButtonElement, VyberPoleProps>(function VyberPo
         <span className={`min-w-0 truncate ${prazdne ? "font-medium text-mech" : ""}`}>
           {vybrana?.popisek ?? "Vyber"}
         </span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4 shrink-0 text-mech">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <Ikona nazev="chevron-down" className={`size-4 text-mech transition-transform motion-reduce:transition-none ${otevreno ? "rotate-180" : ""}`} />
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}
@@ -54,9 +53,10 @@ const VyberPole = forwardRef<HTMLButtonElement, VyberPoleProps>(function VyberPo
         onZavrit={() => setOtevreno(false)}
         label="Výběr"
         role="listbox"
-        minSirka={280}
+        minSirka={242}
+        vzhled="nabidka"
       >
-        <ul id={panelId} role="presentation" className="max-h-60 overflow-y-auto">
+        <ul id={panelId} role="presentation" className="posuvnik flex max-h-64 flex-col gap-0.5 overflow-y-auto">
           {volby.map((volba) => {
             const aktivni = volba.value === value;
             return (
@@ -69,11 +69,12 @@ const VyberPole = forwardRef<HTMLButtonElement, VyberPoleProps>(function VyberPo
                     onChange(volba.value);
                     setOtevreno(false);
                   }}
-                  className={`flex min-h-11 w-full items-center whitespace-nowrap rounded-lg px-3 text-left text-base ${
-                    aktivni ? "bg-mlha font-semibold text-inkoust" : "text-inkoust hover:bg-mlha"
+                  className={`flex min-h-11 w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-2.5 text-left text-[13.5px] transition-colors motion-reduce:transition-none min-[90rem]:min-h-9 ${
+                    aktivni ? "bg-mlha font-semibold text-smrk" : "font-medium text-inkoust hover:bg-povrch-2"
                   }`}
                 >
-                  {volba.popisek}
+                  <span className="min-w-0 flex-1 truncate">{volba.popisek}</span>
+                  {aktivni ? <Ikona nazev="check" className="size-4 text-smrk" /> : null}
                 </button>
               </li>
             );

@@ -39,6 +39,14 @@ describe("smiPuvod", () => {
     expect(smiPuvod({ ...zaklad, origin: undefined }, POVOLENE)).toBe(true);
   });
 
+  it("jiný port na localhost projde jen když je smyčka v seznamu a je to zapnuté", () => {
+    const lokalni = new Set(["http://localhost:5173"]);
+    const zVite = { ...zaklad, origin: "http://localhost:5174", vlastniPuvod: "http://localhost:3011" };
+    expect(smiPuvod(zVite, lokalni)).toBe(false);
+    expect(smiPuvod(zVite, lokalni, true)).toBe(true);
+    expect(smiPuvod(zVite, POVOLENE, true)).toBe(false);
+  });
+
   it("čtení projde, zápis z cizího původu ne, u všech metod", () => {
     const origin = "https://zly.example";
     for (const metoda of ["GET", "HEAD", "OPTIONS"]) {
@@ -112,7 +120,7 @@ describe("zapojení v index.ts", () => {
   it("kontrola běží po cookieParser a před parsováním těla", () => {
     const zdroj = readFileSync("server/src/index.ts", "utf8");
     const cookie = zdroj.indexOf("app.use(cookieParser())");
-    const kontrola = zdroj.indexOf('app.use("/api", vytvorOriginKontrolu(CLIENT_URL))');
+    const kontrola = zdroj.indexOf('app.use("/api", vytvorOriginKontrolu(CLIENT_URL, { lokalniPorty }))');
     const json = zdroj.indexOf("app.use(express.json(");
     expect(cookie).toBeGreaterThan(-1);
     expect(kontrola).toBeGreaterThan(cookie);

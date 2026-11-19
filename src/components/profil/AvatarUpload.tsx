@@ -115,7 +115,7 @@ export default function AvatarUpload({
         {ukazInicialy ? (
           <div
             aria-hidden="true"
-            className="flex h-24 w-24 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border-2 border-inkoust bg-linka text-2xl font-extrabold tracking-tight text-inkoust"
+            className="flex h-24 w-24 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-linka bg-linka text-2xl font-extrabold tracking-tight text-inkoust"
           >
             <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-2">
               {inicialy}
@@ -129,7 +129,7 @@ export default function AvatarUpload({
             width={96}
             height={96}
             onError={() => setRozbity(true)}
-            className="h-24 w-24 shrink-0 rounded-full border-2 border-inkoust bg-linka object-cover"
+            className="h-24 w-24 shrink-0 rounded-full border border-linka bg-linka object-cover"
           />
         )}
         <div className="min-w-0 text-left">
@@ -148,7 +148,7 @@ export default function AvatarUpload({
                   zahodSouborNahled();
                   onZmena(null);
                 }}
-                className="min-h-[44px] min-w-[44px] touch-manipulation rounded border-2 border-inkoust bg-white px-3 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60 disabled:opacity-50"
+                className="min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-white px-3 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60 disabled:opacity-50"
               >
                 Odebrat
               </button>
@@ -158,7 +158,7 @@ export default function AvatarUpload({
                 type="button"
                 disabled={disabled}
                 onClick={zahodSouborNahled}
-                className="min-h-[44px] min-w-[44px] touch-manipulation rounded border-2 border-inkoust bg-white px-3 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60 disabled:opacity-50"
+                className="min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-white px-3 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60 disabled:opacity-50"
               >
                 Zahodit náhled souboru
               </button>
@@ -178,7 +178,7 @@ export default function AvatarUpload({
           accept="image/jpeg,image/png,image/webp"
           disabled={disabled}
           onChange={vyberSoubor}
-          className="min-h-[44px] w-full rounded border-2 border-dashed border-inkoust/40 bg-white/70 px-3 py-2 text-base text-inkoust focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir file:mr-3 file:rounded file:border-2 file:border-inkoust file:bg-papir file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-inkoust"
+          className="min-h-[44px] w-full rounded border-2 border-dashed border-inkoust/40 bg-povrch px-3 py-2 text-base text-inkoust focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir file:mr-3 file:rounded file:border file:border-linka file:bg-papir file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-inkoust"
         />
         <p className="text-xs text-inkoust/70">JPEG, PNG nebo WebP, nejvýš 5 MB.</p>
       </div>

@@ -493,12 +493,12 @@ export default function DiskuzeBox({
       : "Diskuze k výpravě";
 
   return (
-    <div ref={obalRef} className={`min-w-0 rounded-2xl border border-pole bg-papir ${klidna ? "p-3" : "p-4"}`}>
+    <div ref={obalRef} className={`min-w-0 rounded-2xl border border-linka bg-povrch shadow-jemny ${klidna ? "p-3" : "p-4 min-[90rem]:p-5"}`}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3
             id={nadpisId}
-            className={klidna ? "text-base font-semibold text-inkoust" : "font-display text-xl font-bold text-inkoust"}
+            className={klidna ? "text-base font-semibold text-inkoust" : "font-display text-lg font-bold tracking-[-0.3px] text-inkoust min-[90rem]:text-[17px]"}
           >
             Diskuze
           </h3>
@@ -644,7 +644,7 @@ export default function DiskuzeBox({
               onSubmit={(e) => void naOdeslat(e)}
               /* One writing line under the thread. Safe-area keeps it above the keyboard.
                  Not sticky inside the message scroller, so focus does not jump. */
-              className="mt-3 border-t border-linka bg-papir pt-3"
+              className="mt-3 border-t border-linka pt-3"
               style={{
                 paddingBottom: "calc(0.25rem + env(safe-area-inset-bottom, 0px))",
               }}
@@ -652,7 +652,8 @@ export default function DiskuzeBox({
               <label htmlFor={composerId} className="sr-only">
                 Napsat vzkaz
               </label>
-              <div className="flex min-w-0 items-end rounded-xl border border-pole px-1">
+              <div className="flex min-w-0 items-end gap-2">
+              <div className="flex min-w-0 flex-1 items-end rounded-[10px] border border-transparent bg-povrch-2 px-1 focus-within:border-pole">
                 <TlacitkoPrilohy vzhled="tichy" disabled={odesilaSe} onVyber={naVyberSouboru} />
                 <textarea
                   ref={poleRef}
@@ -671,11 +672,12 @@ export default function DiskuzeBox({
                   rows={1}
                   enterKeyHint="send"
                   maxLength={MAX_DELKA + 50}
-                  placeholder="Vzkaz…"
+                  placeholder="Napsat vzkaz ke výpravě…"
                   autoComplete="off"
                   aria-describedby={zbyva <= 80 ? pocitadloId : undefined}
-                  className="block max-h-32 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2.5 text-base leading-5 text-inkoust caret-smrk outline-none selection:bg-okr/40 placeholder:text-mech"
+                  className="block max-h-32 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2.5 text-base leading-5 text-inkoust caret-smrk outline-none selection:bg-okr/40 placeholder:text-ink-3 min-[90rem]:text-[13px]"
                 />
+              </div>
                 <button
                   type="submit"
                   disabled={!muzeOdeslat(text, odesilaSe, soubory.length)}
@@ -685,7 +687,7 @@ export default function DiskuzeBox({
                   title={
                     odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu do diskuze"
                   }
-                  className="nahled-poslat inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center rounded-lg px-2 text-sm font-semibold text-smrk [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:text-mech"
+                  className="nahled-poslat inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center rounded-[10px] bg-smrk px-3.5 text-[13px] font-semibold text-papir [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {odesilaSe ? "…" : "Poslat"}
                 </button>

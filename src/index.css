@@ -1,33 +1,42 @@
 @import "tailwindcss";
 
 @theme {
-  /* ——— ExApp tokeny, paleta 12f „Bílá s olivou“ (redesign C2) ———
-     Názvy tokenů zůstávají kvůli zpětné kompatibilitě, mění se hodnoty:
-     papir = bílé pozadí, inkoust = tmavě olivový text, smrk = olivová
-     značka, jantar = okrová pro text, okr = okrová pro plochy (CTA). */
-  --color-papir: #ffffff;
-  --color-inkoust: #26301a;
-  --color-smrk: #556b2f;
-  --color-linka: #e7e9df;
-  --color-jantar: #8f5f0a;
-  --color-mech: #5e6b4e;
-  /* Okrová výplň hlavních tlačítek. Text na ní vždy text-inkoust:
-     bílý text na #d99b26 má jen ~2,4:1. */
-  --color-okr: #d99b26;
-  --color-okr-tmavy: #c4861a;
-  /* Jemný olivový podklad (schůzky, vybraný řádek, segmenty). */
-  --color-mlha: #eef1e4;
-  /* Okraj polí formulářů: ≥3:1 proti bílé (WCAG 1.4.11). Linka je na to moc světlá. */
+  /* Pen frames. Names stay so existing utilities keep working.
+     Primary actions use --color-smrk (dark olive) with papir text.
+     Terracotta (--color-akcent) is for destructive actions and, from
+     1440px up, the sign-up CTA and chat send. Cards use a hairline
+     --color-linka border, never a dark ink outline. Ochre is only
+     where a frame paints an ochre surface; text on it stays ink. */
+  --color-papir: #f7f4eb;
+  --color-povrch: #fffdf6;
+  --color-povrch-2: #f1ede0;
+  --color-inkoust: #1c2615;
+  --color-mech: #55604a;
+  --color-ink-3: #6a7157;
+  --color-linka: #e4dfce;
+  --color-smrk: #2e4022;
+  --color-mlha: #e8edda;
+  --color-akcent: #a8461c;
+  --color-akcent-100: #f7e7dc;
+  --color-jantar: #7a5b22;
+  --color-okr: #7a5b22;
+  --color-okr-tmavy: #5e4518;
+  --color-okr-100: #f3eadb;
+  --color-salvej: #7e9370;
+  /* Field border stays darker than the hairline. Do not set this to #e4dfce. */
   --color-pole: #8c937b;
 
-  /* Zaoblení o stupeň střídmější než výchozí Tailwind (24/16/12 → 18/12/10 px). */
+  /* Zaoblení podle ExApp.pen: tlačítka a pole 12, karty 16, hero a panely 18 px. */
   --radius-3xl: 1.125rem;
-  --radius-2xl: 0.75rem;
-  --radius-xl: 0.625rem;
+  --radius-2xl: 1rem;
+  --radius-xl: 0.75rem;
 
-  /* Měkké stíny místo tvrdého papírového offsetu. */
-  --shadow-denik: 0 1px 2px rgba(38, 48, 26, 0.06),
-    0 4px 16px rgba(38, 48, 26, 0.06);
+  /* Stíny z ExApp.pen. denik = karta a sekce, jemny = řádek a malé prvky,
+     panel = spodní panel na telefonu, modal = modál a rozbalovací menu. */
+  --shadow-denik: 0 1px 2px #1c261512, 0 12px 32px #1c26150f;
+  --shadow-jemny: 0 1px 2px #1c261512;
+  --shadow-panel: 0 -10px 28px #0a100866;
+  --shadow-modal: 0 2px 6px #1c261514, 0 24px 64px #1c261526;
   --shadow-razitko: 0 1px 2px rgba(38, 48, 26, 0.12),
     0 2px 8px rgba(38, 48, 26, 0.1);
 
@@ -203,6 +212,63 @@ button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):n
   }
 }
 
+@keyframes exapp-vstup {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exapp-sheet {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes exapp-radek {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.exapp-vstup {
+  animation: exapp-vstup 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exapp-sheet {
+  animation: exapp-sheet 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exapp-radek {
+  animation: exapp-radek 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exapp-sheet-bez-pohybu {
+  animation: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exapp-vstup,
+  .exapp-sheet,
+  .exapp-radek {
+    animation: none;
+    transform: none;
+  }
+}
+
 /* Album picker: ink wash sits on the wrapper. A transform on the select
    or any ancestor drops clicks on the native option list in Chromium. */
 .fotky-album-vyber {
@@ -337,7 +403,7 @@ input[type="file"]:active::-webkit-file-upload-button {
   bottom: max(5.25rem, calc(env(safe-area-inset-bottom, 0px) + 4.5rem));
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1440px) {
   .fotky-stav-panel {
     bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
@@ -350,45 +416,86 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 }
 
-/* Chat lists: a slim pill, always faintly there, a little stronger while moving. */
-@property --seznam-palec {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: rgb(38 48 26 / 0.24);
-}
-
-.seznam-scroll {
-  scrollbar-width: thin;
-  --seznam-palec: rgb(38 48 26 / 0.24);
-  scrollbar-color: var(--seznam-palec) transparent;
-  transition: --seznam-palec 480ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.seznam-scroll:hover,
-.seznam-scroll.seznam-scrolluje {
-  --seznam-palec: rgb(85 107 47 / 0.55);
-}
-
-/* Standard scrollbar-color wins where it exists. WebKit rules only fill the gap. */
-@supports not (scrollbar-color: auto) {
-  .seznam-scroll::-webkit-scrollbar {
-    width: 12px;
-  }
-
-  .seznam-scroll::-webkit-scrollbar-track {
+/* Posuvník podle ExApp.pen („Počítač · Posuvník“): okraj 16 px, dráha 6 px
+   v barvě linky, jezdec v ink-3, oboje plně zaoblené. Jen pro myš, na dotyku
+   zůstává systémový překryvný posuvník. `.posuvnik` je užší varianta do seznamů
+   uvnitř panelů. Chromium bere ::-webkit-scrollbar, jen když chybí scrollbar-color,
+   proto standardní vlastnosti dostane jen Firefox. */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 16px;
+    height: 16px;
     background: transparent;
   }
 
-  .seznam-scroll::-webkit-scrollbar-thumb {
-    background-color: var(--seznam-palec);
-    border: 4px solid transparent;
-    border-radius: 999px;
+  ::-webkit-scrollbar-track {
+    background-color: var(--color-linka);
     background-clip: padding-box;
+    border: solid transparent;
+    border-width: 8px 5px;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    min-height: 48px;
+    background-color: var(--color-ink-3);
+    background-clip: padding-box;
+    border: solid transparent;
+    border-width: 8px 5px;
+    border-radius: 999px;
+    transition: background-color 160ms ease-out;
+  }
+
+  ::-webkit-scrollbar-track:horizontal,
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-width: 5px 8px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-mech);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .posuvnik::-webkit-scrollbar,
+  .seznam-scroll::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .posuvnik::-webkit-scrollbar-track,
+  .posuvnik::-webkit-scrollbar-thumb,
+  .seznam-scroll::-webkit-scrollbar-track,
+  .seznam-scroll::-webkit-scrollbar-thumb {
+    border-width: 4px 2px;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  @media (hover: hover) and (pointer: fine) {
+    html,
+    .posuvnik,
+    .seznam-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-ink-3) var(--color-linka);
+    }
+  }
+}
+
+/* Závoj pod panelem a modálem: náběh 200 ms, bez pohybu při reduced-motion. */
+.exapp-zavoj {
+  animation: exapp-zavoj-vstup 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes exapp-zavoj-vstup {
+  from {
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .seznam-scroll {
-    transition: none;
+  .exapp-zavoj {
+    animation: none;
   }
 }

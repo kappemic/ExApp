@@ -1,118 +1,27 @@
-import { type JSX, type ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { useEffect, useRef, useState, type JSX, type RefObject } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import LogoKlubu from "../LogoKlubu";
+import Ikona from "../Ikona";
 import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "../chat/NeprectenaTecka";
+import NavigacniRozbalovak from "./NavigacniRozbalovak";
 import { popisekNeprectenych } from "../../hooks/useUnreadExpeditions";
 import { useKonverzacePrehled } from "../../hooks/useKonverzacePrehled";
 import { useAuth } from "../../hooks/useAuth";
+import { nactiNavrhy } from "../../lib/zpevnik-api";
+import { inicialyProAvatar } from "../../lib/storage/avatar";
 
 type IkonaProps = {
   className?: string;
 };
 
-function ZakladIkony({
-  className = "",
-  children,
-}: IkonaProps & { children: ReactNode }): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      className={`h-6 w-6 shrink-0 ${className}`}
-    >
-      {children}
-    </svg>
-  );
-}
-
-function IkonaVypravy(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z" />
-      <path d="M9 4v14" />
-      <path d="M15 6v14" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaZebricky(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-      <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-      <path d="M7 6H4.5a1 1 0 0 0-1 1.2C3.8 9.5 5.4 11 7.5 11" />
-      <path d="M17 6h2.5a1 1 0 0 1 1 1.2c-.3 2.3-1.9 3.8-4 3.8" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaFotky(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <rect x="3.5" y="5" width="17" height="14" rx="2" />
-      <circle cx="8.5" cy="9.5" r="1.4" />
-      <path d="m6.5 16.5 3.4-3.4a1 1 0 0 1 1.4 0L14 15.5" />
-      <path d="m13 14.2 1.2-1.2a1 1 0 0 1 1.4 0L20.5 17" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaZpevnik(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M9 18V6.5l9-2V16" />
-      <circle cx="7" cy="18" r="2.2" />
-      <circle cx="16" cy="16" r="2.2" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaChat(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9l-5 4V6.5Z" />
-      <path d="M8.5 9.5h7" />
-      <path d="M8.5 12.5h4" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaProfil(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20a7 7 0 0 1 14 0" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaClenove(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3.2 19.5a5.8 5.8 0 0 1 11.6 0" />
-      <path d="M15.5 5.4a3.2 3.2 0 0 1 0 5.3" />
-      <path d="M17.2 14.4a5.8 5.8 0 0 1 3.6 5.1" />
-    </ZakladIkony>
-  );
-}
-
-function IkonaKody(props: IkonaProps): JSX.Element {
-  return (
-    <ZakladIkony {...props}>
-      <path d="M4 8.5V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a2.5 2.5 0 0 0 0 5V15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5a2.5 2.5 0 0 0 0-5Z" />
-      <path d="M13.5 7v10" strokeDasharray="2 2" />
-    </ZakladIkony>
-  );
-}
+/* Lucide ikony z návrhu (App Header a Spodní lišta v ExApp.pen). */
+const IkonaVypravy = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="compass" className={className} />;
+const IkonaFotky = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="images" className={className} />;
+const IkonaZpevnik = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="music" className={className} />;
+const IkonaChat = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="message-circle" className={className} />;
+const IkonaZebricky = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="trophy" className={className} />;
+const IkonaVice = ({ className = "size-4" }: IkonaProps): JSX.Element => <Ikona nazev="ellipsis" className={className} />;
 
 type PolozkaNavigace = {
   to: string;
@@ -127,35 +36,154 @@ const DESKTOP_POLOZKY: PolozkaNavigace[] = [
   { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
   { to: "/zpevnik", popisek: "Zpěvník", Ikona: IkonaZpevnik },
   { to: "/chat", popisek: "Chat", Ikona: IkonaChat },
-  { to: "/profil", popisek: "Profil", Ikona: IkonaProfil },
 ];
 
-/**
- * Phone bottom bar: Výpravy, Fotky, Žebříčky.
- * Chat is intentionally absent from this list — it lives in `AppHeader`
- * (`lg:hidden`, 44px target + badge) and shares `pocetNeprectenych` with TopBar.
- * Profil is also absent here: on the phone it is an avatar at the top right.
- * Domů is the logged-out landing only, so signed-in nav does not link to it.
- * Kódy are added in MobileBar / TopBar for admins.
- * Členové (`ADMIN_POLOZKA`) stay in both bars for every signed-in member.
- */
+const SIRKA_MENU_VICE = 268;
+const SIRKA_MENU_PROFIL = 268;
+
+function MenuRadek({
+  popisek,
+  onClick,
+  badge,
+  zvyrazneno = false,
+}: {
+  popisek: string;
+  onClick: () => void;
+  badge?: number | null;
+  zvyrazneno?: boolean;
+}): JSX.Element {
+  return (
+    <li role="none">
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onClick}
+        className={`nahled-press flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[13.5px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation] ${
+          zvyrazneno ? "bg-mlha font-semibold text-smrk" : "text-inkoust hover:bg-mlha/60"
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">{popisek}</span>
+        {badge !== undefined && badge !== null && badge > 0 ? (
+          <span className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-smrk px-1.5 text-[11px] font-semibold tabular-nums text-papir">
+            {badge}
+          </span>
+        ) : null}
+      </button>
+    </li>
+  );
+}
+
+function MenuOddelovac({ popisek }: { popisek: string }): JSX.Element {
+  return (
+    <li role="separator" className="px-3 pb-1 pt-2">
+      <span className="text-[10px] font-bold uppercase tracking-wide text-mech">{popisek}</span>
+    </li>
+  );
+}
+
+function MenuVice({ onZavrit }: { onZavrit: () => void }): JSX.Element {
+  const navigate = useNavigate();
+  const { user, isAdmin, isSuperadmin } = useAuth();
+  const [pocetNavrhu, setPocetNavrhu] = useState<number | null>(null);
+  const jeAdmin = isAdmin || isSuperadmin;
+  const smiFrontu =
+    user?.isAdmin === true || user?.isSuperadmin === true || user?.funkce === "vedeni";
+
+  useEffect(() => {
+    if (!jeAdmin && !smiFrontu) return;
+    let zivy = true;
+    void nactiNavrhy().then((vysledek) => {
+      if (!zivy || !vysledek.ok) return;
+      setPocetNavrhu(vysledek.navrhy.length);
+    });
+    return () => {
+      zivy = false;
+    };
+  }, [jeAdmin, smiFrontu]);
+
+  function jdi(cesta: string): void {
+    onZavrit();
+    void navigate(cesta);
+  }
+
+  return (
+    <ul className="flex flex-col gap-0.5">
+      <MenuRadek popisek="Členové" onClick={() => jdi("/cleny")} />
+      <MenuRadek popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
+      {jeAdmin ? (
+        <>
+          <MenuOddelovac popisek="Admin" />
+          <MenuRadek popisek="Pozvánkové kódy" onClick={() => jdi("/admin/kody")} />
+          <MenuRadek
+            popisek="Návrhy písní"
+            onClick={() => jdi("/zpevnik/fronta")}
+            badge={pocetNavrhu}
+          />
+        </>
+      ) : smiFrontu ? (
+        <MenuRadek
+          popisek="Návrhy písní"
+          onClick={() => jdi("/zpevnik/fronta")}
+          badge={pocetNavrhu}
+        />
+      ) : null}
+      <MenuRadek popisek="Nastavení" onClick={() => jdi("/nastaveni")} />
+    </ul>
+  );
+}
+
+function MenuProfil({ onZavrit }: { onZavrit: () => void }): JSX.Element {
+  const navigate = useNavigate();
+  const { user, odhlasit } = useAuth();
+  if (user === null) return <span />;
+
+  const celeJmeno = `${user.jmeno} ${user.prijmeni ?? ""}`.trim();
+
+  function jdi(cesta: string): void {
+    onZavrit();
+    void navigate(cesta);
+  }
+
+  return (
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center gap-3 px-2 pb-2 pt-1">
+      <AvatarKruh jmeno={celeJmeno} url={user.avatarUrl} />
+      <div className="min-w-0">
+        <p className="truncate text-[13.5px] font-semibold text-inkoust">{celeJmeno}</p>
+        <p className="truncate text-[12px] font-medium text-mech">{user.email}</p>
+      </div>
+    </div>
+    <ul className="flex flex-col gap-0.5 border-t border-linka pt-1">
+      <MenuRadek popisek="Můj profil" onClick={() => jdi("/profil")} />
+      <MenuRadek popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
+      <MenuRadek popisek="Oznámení" onClick={() => jdi("/nastaveni")} />
+      <MenuRadek
+        popisek="Odhlásit se"
+        onClick={() => {
+          onZavrit();
+          void odhlasit();
+        }}
+      />
+    </ul>
+  </div>
+  );
+}
+
+function jeViceAktivni(cesta: string, hledani: string): boolean {
+  if (cesta === "/cleny" || cesta === "/nastaveni") return true;
+  if (cesta === "/admin/kody" || cesta === "/zpevnik/fronta") return true;
+  if (cesta === "/profil" && hledani.includes("tab=statistiky")) return true;
+  return false;
+}
+
+/** Phone bar: five pen targets. Members and codes stay on the desktop bar until /vice exists. */
 const MOBIL_POLOZKY: PolozkaNavigace[] = [
   { to: "/vypravy", popisek: "Výpravy", Ikona: IkonaVypravy },
   { to: "/fotky", popisek: "Fotky", Ikona: IkonaFotky },
-  { to: "/zebricky", popisek: "Žebříčky", Ikona: IkonaZebricky },
+  { to: "/zpevnik", popisek: "Zpěvník", Ikona: IkonaZpevnik },
+  { to: "/chat", popisek: "Chat", Ikona: IkonaChat },
+  { to: "/vice", popisek: "Více", Ikona: IkonaVice },
 ];
-
-const ADMIN_POLOZKA: PolozkaNavigace = {
-  to: "/cleny",
-  popisek: "Členové",
-  Ikona: IkonaClenove,
-};
-
-const KODY_POLOZKA: PolozkaNavigace = {
-  to: "/admin/kody",
-  popisek: "Kódy",
-  Ikona: IkonaKody,
-};
 
 /**
  * Badge nepřečtených zpráv v navigaci.
@@ -186,86 +214,42 @@ function ChatTecka({ popisek }: { popisek: string }): JSX.Element {
   );
 }
 
-/**
- * Kódy jen pro admina. Členové jsou v navigaci pro každého přihlášeného.
- */
-function useVidetAdmin(): boolean {
-  const { isAdmin, isSuperadmin } = useAuth();
-  // Codes stay visible for a head admin the same way as for a regular admin.
-  return isAdmin || isSuperadmin;
-}
-
-/** Bez session vidí odhlášený nic — varianta A: Navbar se vůbec nerenderuje (viz default Navbar). */
-/** Filtr podle session odstraněn: odhlášený Navbar nikdy neuvidí, přihlášený vidí vše. */
-
 function tridyDesktopOdkazu(aktivni: boolean): string {
-  // nahled-press: stisk scale(0.97)/160ms — odkazy v TopBar mají gap-1,
-  // sdílenou hranu sousedů nemají, proto se smršťují celé (DESIGN §7).
   const zaklad =
-    "nahled-press flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "nahled-press flex min-h-11 items-center gap-[7px] rounded-[10px] px-[13px] py-[9px] [&:last-child]:px-[11px] text-[13.5px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
   if (aktivni) {
-    return `${zaklad} font-semibold text-smrk`;
+    return `${zaklad} bg-mlha font-semibold text-smrk`;
   }
-  return `${zaklad} font-medium text-mech hover:bg-mlha hover:text-inkoust`;
+  return `${zaklad} font-medium text-mech [&_svg]:text-ink-3 hover:bg-mlha/60 hover:text-inkoust`;
 }
 
 function tridyMobilOdkazu(aktivni: boolean): string {
-  // nahled-press jako u TopBar — pole mají gap-1, hranu nesdílejí.
   const zaklad =
-    "nahled-press flex min-h-[48px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[11px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none";
+    "nahled-press flex min-h-11 min-w-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-3xl px-1 text-[10px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
   if (aktivni) {
-    return `${zaklad} font-semibold text-smrk`;
+    return `${zaklad} bg-mlha font-semibold text-smrk`;
   }
-  return `${zaklad} font-medium text-mech hover:text-inkoust`;
-}
-
-/** Desktop: tenká olivová linka pod aktivní položkou. */
-function Indikátor({ aktivni }: { aktivni: boolean }): JSX.Element {
-  return (
-    <span
-      aria-hidden="true"
-      className={`h-[3px] w-8 rounded-full transition-colors ${
-        aktivni ? "bg-smrk" : "bg-transparent"
-      }`}
-    />
-  );
-}
-
-/** Mobil: ikona aktivní položky leží v olivové mlze (C2). */
-function IkonaVPilulce({
-  aktivni,
-  children,
-}: {
-  aktivni: boolean;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <span
-      aria-hidden="true"
-      className={`inline-flex h-8 w-14 items-center justify-center rounded-full transition-colors motion-reduce:transition-none ${
-        aktivni ? "bg-mlha" : "bg-transparent"
-      }`}
-    >
-      {children}
-    </span>
-  );
+  return `${zaklad} font-medium text-mech`;
 }
 
 export function TopBar({
   pocetNeprectenych = 0,
+  viceOtevreno,
+  onVicePrepnout,
+  viceKotvaRef,
 }: {
   pocetNeprectenych?: number;
-} = {}): JSX.Element {
-  const videtAdmin = useVidetAdmin();
-  const polozky: PolozkaNavigace[] = [
-    ...DESKTOP_POLOZKY,
-    ADMIN_POLOZKA,
-    ...(videtAdmin ? [KODY_POLOZKA] : []),
-  ];
+  viceOtevreno: boolean;
+  onVicePrepnout: () => void;
+  viceKotvaRef: RefObject<HTMLButtonElement | null>;
+}): JSX.Element {
+  const polozky: PolozkaNavigace[] = DESKTOP_POLOZKY;
   const maNeprectene: boolean = pocetNeprectenych > 0;
+  const { pathname, search } = useLocation();
+  const viceAktivni = jeViceAktivni(pathname, search);
 
   return (
-    <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 lg:flex lg:justify-self-center">
+    <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 min-[90rem]:flex min-[90rem]:justify-self-center">
       {polozky.map(({ to, popisek, end, Ikona }) => {
         const jeChat: boolean = to === "/chat";
         const label: string = jeChat ? popisekChat(pocetNeprectenych) : popisek;
@@ -277,173 +261,183 @@ export function TopBar({
             aria-label={jeChat ? label : undefined}
             className={({ isActive }) => tridyDesktopOdkazu(isActive)}
           >
-            {({ isActive }) => (
-              <span className="flex flex-col items-center gap-1">
-                <span className="flex items-center gap-2">
-                  <span className="relative inline-flex shrink-0 [touch-action:manipulation]">
-                    <Ikona />
-                    {jeChat && maNeprectene && (
-                      <ChatTecka popisek={popisek} />
-                    )}
-                  </span>
-                  <span>{popisek}</span>
+            {() => (
+              <span className="flex items-center gap-[7px]">
+                <span className="relative inline-flex shrink-0 [touch-action:manipulation]">
+                  <Ikona />
+                  {jeChat && maNeprectene ? <ChatTecka popisek={popisek} /> : null}
                 </span>
-                <Indikátor aktivni={isActive} />
+                <span>{popisek}</span>
               </span>
             )}
           </NavLink>
         );
       })}
+      <button
+        ref={viceKotvaRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={viceOtevreno}
+        aria-controls="menu-vice"
+        onClick={onVicePrepnout}
+        className={tridyDesktopOdkazu(viceAktivni)}
+      >
+        <span className="flex items-center gap-[7px]">
+          <IkonaVice />
+          <span>Více</span>
+        </span>
+      </button>
     </nav>
   );
 }
 
-export function MobileBar(): JSX.Element {
-  const videtAdmin = useVidetAdmin();
-  const polozky: PolozkaNavigace[] = [
-    ...MOBIL_POLOZKY,
-    ADMIN_POLOZKA,
-    ...(videtAdmin ? [KODY_POLOZKA] : []),
-  ];
+export function MobileBar({ pocetNeprectenych = 0 }: { pocetNeprectenych?: number } = {}): JSX.Element {
+  const polozky: PolozkaNavigace[] = MOBIL_POLOZKY;
+  const maNeprectene: boolean = pocetNeprectenych > 0;
 
   return (
     <nav
       aria-label="Spodní navigace"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-linka bg-papir lg:hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-3 pt-2 min-[90rem]:hidden"
+      style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}
     >
-      <ul
-        style={{ gridTemplateColumns: `repeat(${polozky.length}, minmax(0, 1fr))` }}
-        className="mx-auto grid w-full gap-1 px-2 pb-[env(safe-area-inset-bottom,0px)] pt-1"
-      >
-        {polozky.map(({ to, popisek, end, Ikona }) => (
-          <li key={to} className="min-w-0">
-            <NavLink
-              to={to}
-              end={end}
-              className={({ isActive }) => tridyMobilOdkazu(isActive)}
-            >
-              {({ isActive }) => (
-                <>
-                  <IkonaVPilulce aktivni={isActive}>
-                    <Ikona />
-                  </IkonaVPilulce>
-                  <span>{popisek}</span>
-                </>
-              )}
-            </NavLink>
-          </li>
-        ))}
+      <ul className="pointer-events-auto mx-auto flex h-14 items-stretch gap-0.5 rounded-[28px] border border-white bg-povrch/70 p-1 shadow-[0_8px_24px_rgba(28,38,21,0.07)] backdrop-blur-md">
+        {polozky.map(({ to, popisek, end, Ikona }) => {
+          const jeChat: boolean = to === "/chat";
+          return (
+            <li key={to} className="min-w-0 flex-1">
+              <NavLink
+                to={to}
+                end={end}
+                aria-label={jeChat ? popisekChat(pocetNeprectenych) : undefined}
+                className={({ isActive }) => tridyMobilOdkazu(isActive)}
+              >
+                {() => (
+                  <>
+                    <span className="relative inline-flex shrink-0">
+                      <Ikona className="h-[22px] w-[22px]" />
+                      {jeChat && maNeprectene && <ChatTecka popisek={popisek} />}
+                    </span>
+                    <span>{popisek}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );
 }
 
 /** Stav přihlášení v hlavičce — obdoba GET /me. Renderuje se jen pro přihlášené (Navbar pro odhlášené vrací null). */
-function AuthCluster(): JSX.Element | null {
-  const { user, isLoading, odhlasit } = useAuth();
-
-  if (isLoading) {
-    return (
-      <span aria-hidden="true" className="hidden h-8 w-20 animate-pulse rounded-md bg-linka sm:block" />
-    );
-  }
-
-  if (user === null) {
-    // Nedosažitelné: Navbar se pro odhlášené vůbec nerenderuje (varianta A).
-    return null;
-  }
-
-  // Desktop reaches /profil from TopBar. On the phone the header avatar does.
-  return (
-    <button
-      type="button"
-      onClick={odhlasit}
-      title="Odhlásit se"
-      className="bez-prejeti nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2.5 py-2 text-xs font-bold text-mech transition-[transform,background-color,color] duration-200 ease-out hover:-translate-y-px hover:bg-smrk/[0.08] hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-    >
-      Odhlásit
-    </button>
-  );
-}
-
 export function AppHeader({
   pocetNeprectenych = 0,
 }: {
   pocetNeprectenych?: number;
 } = {}): JSX.Element {
-  const { user } = useAuth();
-  const prihlasen = user !== null;
-  const maNeprectene: boolean = pocetNeprectenych > 0;
+  const { user, isLoading } = useAuth();
+  const jmeno = user?.jmeno.trim() ?? "";
+  const [viceOtevreno, setViceOtevreno] = useState(false);
+  const [profilOtevreno, setProfilOtevreno] = useState(false);
+  const viceKotvaRef = useRef<HTMLButtonElement>(null);
+  const profilKotvaRef = useRef<HTMLButtonElement>(null);
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    setViceOtevreno(false);
+    setProfilOtevreno(false);
+  }, [pathname]);
+
+  function zavriVse(): void {
+    setViceOtevreno(false);
+    setProfilOtevreno(false);
+  }
+
   return (
-    <header className="sticky top-0 z-40 border-b border-linka bg-papir/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur">
-      <div className="mx-auto flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-8 xl:px-12">
+    <>
+      <header className="sticky top-0 z-40 hidden h-[76px] items-center border-b border-linka bg-povrch px-10 min-[90rem]:grid min-[90rem]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <Link
           to="/vypravy"
-          className="nahled-press flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+          className="nahled-press flex min-h-[44px] min-w-[44px] flex-col justify-center rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           aria-label="ExApp – výpravy"
         >
-          <LogoKlubu velikost="sm" />
-          <span className="font-display text-lg font-bold tracking-tight text-smrk">
-            ExApp
+          <span className="flex items-center gap-[11px]">
+            <LogoKlubu velikost="sm" />
+            <span className="flex flex-col">
+              <span className="font-display text-[17px] font-bold leading-tight tracking-[-0.3px] text-inkoust">ExApp</span>
+              <span className="text-[11px] font-medium tracking-[0.3px] text-ink-3">Školní expediční klub</span>
+            </span>
           </span>
         </Link>
-
-        <TopBar pocetNeprectenych={pocetNeprectenych} />
-
-        <div className="flex items-center gap-1 lg:justify-self-end">
-          <AuthCluster />
-          {prihlasen && (
-            <NavLink
-              to="/zpevnik"
-              aria-label="Zpěvník"
-              className={({ isActive }: { isActive: boolean }) =>
-                `nahled-press relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
-                  isActive
-                    ? "font-bold text-smrk"
-                    : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
-                }`
-              }
+        <TopBar
+          pocetNeprectenych={pocetNeprectenych}
+          viceOtevreno={viceOtevreno}
+          onVicePrepnout={() => {
+            setProfilOtevreno(false);
+            setViceOtevreno((stav) => !stav);
+          }}
+          viceKotvaRef={viceKotvaRef}
+        />
+        <div className="justify-self-end">
+          {!isLoading && user !== null ? (
+            <button
+              ref={profilKotvaRef}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={profilOtevreno}
+              aria-controls="menu-profil"
+              aria-label="Účet a profil"
+              onClick={() => {
+                setViceOtevreno(false);
+                setProfilOtevreno((stav) => !stav);
+              }}
+              className="nahled-press flex min-h-[44px] min-w-[44px] items-center py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
             >
-              <IkonaZpevnik />
-            </NavLink>
-          )}
-          {prihlasen && (
-            <NavLink
-              to="/chat"
-              aria-label={popisekChat(pocetNeprectenych)}
-              className={({ isActive }: { isActive: boolean }) =>
-                `nahled-press relative flex min-h-[44px] min-w-[44px] select-none items-center justify-center rounded-md p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none lg:hidden [touch-action:manipulation] ${
-                  isActive
-                    ? "font-bold text-smrk"
-                    : "text-mech hover:bg-smrk/[0.08] hover:text-inkoust"
-                }`
-              }
-            >
-              <span className="relative inline-flex shrink-0">
-                <IkonaChat />
-                {maNeprectene && <ChatTecka popisek="Chat" />}
+              <span className="flex items-center gap-2 rounded-full bg-povrch-2 py-1 pl-1 pr-2">
+                {user.avatarUrl !== null && user.avatarUrl !== undefined && user.avatarUrl.length > 0 ? (
+                  <span className="flex size-7 items-center justify-center overflow-hidden rounded-full [&>*]:scale-[0.78]">
+                    <AvatarKruh jmeno={`${user.jmeno} ${user.prijmeni ?? ""}`.trim()} url={user.avatarUrl} />
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="flex size-7 items-center justify-center rounded-full bg-smrk text-[11px] font-semibold tracking-[0.2px] text-papir"
+                  >
+                    {inicialyProAvatar(user.jmeno, user.prijmeni)}
+                  </span>
+                )}
+                <span className="text-[13px] font-medium text-inkoust">{jmeno}</span>
+                <Ikona nazev="chevron-down" className="size-3.5 text-ink-3" />
               </span>
-            </NavLink>
-          )}
-          {user !== null && (
-            <NavLink
-              to="/profil"
-              aria-label="Profil"
-              className={({ isActive }: { isActive: boolean }) =>
-                `nahled-press flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk lg:hidden [touch-action:manipulation] ${
-                  isActive ? "ring-2 ring-smrk ring-offset-2 ring-offset-papir" : ""
-                }`
-              }
-            >
-              <AvatarKruh
-                jmeno={`${user.jmeno} ${user.prijmeni ?? ""}`.trim()}
-                url={user.avatarUrl}
-              />
-            </NavLink>
-          )}
+            </button>
+          ) : null}
         </div>
-      </div>
-    </header>
+      </header>
+      <NavigacniRozbalovak
+        otevreno={viceOtevreno}
+        onZavrit={() => setViceOtevreno(false)}
+        kotvaRef={viceKotvaRef}
+        sirka={SIRKA_MENU_VICE}
+        popisek="Menu Více"
+      >
+        <div id="menu-vice">
+          <MenuVice onZavrit={zavriVse} />
+        </div>
+      </NavigacniRozbalovak>
+      <NavigacniRozbalovak
+        otevreno={profilOtevreno}
+        onZavrit={() => setProfilOtevreno(false)}
+        kotvaRef={profilKotvaRef}
+        sirka={SIRKA_MENU_PROFIL}
+        zarovnani="end"
+        popisek="Menu profil"
+      >
+        <div id="menu-profil">
+          <MenuProfil onZavrit={zavriVse} />
+        </div>
+      </NavigacniRozbalovak>
+    </>
   );
 }
 
@@ -456,7 +450,7 @@ export default function Navbar(): JSX.Element | null {
   return (
     <>
       <AppHeader pocetNeprectenych={pocetNeprectenych} />
-      <MobileBar />
+      <MobileBar pocetNeprectenych={pocetNeprectenych} />
     </>
   );
 }

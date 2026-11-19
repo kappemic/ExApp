@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import Ikona from "../components/Ikona";
 import { useSearchParams } from "react-router-dom";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import ConversationList, {
   prevedNaPolozky,
   seradKonverzace,
+  zalozkaProKanal,
   type PolozkaSeznamu,
-  type ZalozkaChatu,
+  type SegmentChatu,
 } from "../components/chat/ConversationList";
 import KonverzaceDetail from "../components/chat/KonverzaceDetail";
 import SkupinaForm from "../components/chat/SkupinaForm";
@@ -84,6 +86,31 @@ export function tvarVypravy(pocet: number): string {
 export const KONVERZACE_CACHE_KLIC = "exapp:konverzace-v1" as const;
 
 /** Česká pluralizace konverzací: 1 konverzace / 2–4 konverzace / 0 a 5+ konverzací. */
+/** Counts for the Chat list subtitle (pen meta line). */
+export function spocitejSouhrnChatu(polozky: readonly PolozkaSeznamu[]): {
+  skupiny: number;
+  soukrome: number;
+} {
+  let skupiny = 0;
+  let soukrome = 0;
+  for (const polozka of polozky) {
+    if (polozka.channel === "soukrome") soukrome += 1;
+    else if (zalozkaProKanal(polozka.channel) === "skupiny") skupiny += 1;
+  }
+  return { skupiny, soukrome };
+}
+
+export function popisekSouhrnuChatu(skupiny: number, soukrome: number): string {
+  const casti: string[] = [];
+  if (skupiny === 1) casti.push("1 skupina");
+  else if (skupiny >= 2 && skupiny <= 4) casti.push(`${skupiny} skupiny`);
+  else casti.push(`${skupiny} skupin`);
+  if (soukrome === 1) casti.push("1 soukromá");
+  else if (soukrome >= 2 && soukrome <= 4) casti.push(`${soukrome} soukromé`);
+  else casti.push(`${soukrome} soukromých`);
+  return casti.join(" · ");
+}
+
 export function tvarKonverzace(pocet: number): string {
   if (pocet === 1) return "konverzace";
   if (pocet >= 2 && pocet <= 4) return "konverzace";
@@ -203,7 +230,7 @@ export function vytvorWorstCaseNazvy(): Map<string, string> {
  *   „Ty" jen pro `currentUserId`; composer skrytý v Důležitém pro USER
  *   (read-only notice). Mobile-first: mobil = seznam NEBO detail se Zpět,
  *   desktop = vedle sebe. Offline-friendly: snapshot cache + retry.
- * - Deníkové tokeny (border-inkoust, bg-papir, shadow-denik), 44px cíle,
+ * - Tokeny 12f (border-linka, bg-papir, shadow-denik), 44px cíle,
  *   360px bez horizontálního scrollu, viditelný focus, reduced-motion.
  */
 export default function ChatPage(): JSX.Element {
@@ -225,7 +252,7 @@ export default function ChatPage(): JSX.Element {
   >(new Map());
   const [clenove, setClenove] = useState<UserListItem[]>([]);
   const [vybranyPartner, setVybranyPartner] = useState<VybranyPartner | null>(null);
-  const [zalozka, setZalozka] = useState<ZalozkaChatu>("skupiny");
+  const [segment, setSegment] = useState<SegmentChatu>("vse");
   const [muzeSpravovatSkupiny, setMuzeSpravovatSkupiny] = useState<boolean>(false);
   const [katalogSkupin, setKatalogSkupin] = useState<ApiChatSkupina[]>([]);
   const [formular, setFormular] = useState<
@@ -375,7 +402,7 @@ export default function ChatPage(): JSX.Element {
     if (skupina === undefined) return;
     setChybaSkupiny(null);
     setFormular({ id, nazev: skupina.nazev, prava: skupina.prava });
-    setZalozka("skupiny");
+    setSegment((pred) => (pred === "vse" ? pred : "globalni"));
   }
 
   function otevriSmazaniSkupiny(spoustec: HTMLElement): void {
@@ -423,21 +450,12 @@ export default function ChatPage(): JSX.Element {
 
   useEffect(() => {
     if (vybranyKey === null) return;
-    if (vybranyKey.startsWith("expedice:")) {
-      setZalozka("vypravy");
-      return;
-    }
-    if (vybranyKey.startsWith("soukrome:")) {
-      setZalozka("clenove");
-      return;
-    }
-    if (
-      vybranyKey === "dulezite" ||
-      vybranyKey === "general" ||
-      vybranyKey.startsWith("skupina:")
-    ) {
-      setZalozka("skupiny");
-    }
+    setSegment((pred) => {
+      if (pred === "vse") return pred;
+      if (vybranyKey.startsWith("expedice:")) return "vypravy";
+      if (vybranyKey.startsWith("soukrome:")) return "soukrome";
+      return "globalni";
+    });
   }, [vybranyKey]);
 
   const vybranyNazev: string =
@@ -448,7 +466,7 @@ export default function ChatPage(): JSX.Element {
         : vybrana.channel === "dulezite"
         ? "Důležité"
         : vybrana.channel === "general"
-          ? "General"
+          ? "Obecný"
           : vybrana.channel === "skupina"
             ? (vybrana.nazev ?? "Skupina")
           : (vybrana.expeditionId !== null &&
@@ -456,50 +474,65 @@ export default function ChatPage(): JSX.Element {
             vybrana.expeditionId ||
             vybrana.key;
 
-  const pocetNeprectenych: number = polozky.reduce(
-    (soucet, p) => soucet + (p.unreadCount > 0 ? 1 : 0),
-    0,
-  );
-
+  const souhrn = spocitejSouhrnChatu(polozky);
   const vlaknoOtevrene: boolean = vybranyKey !== null;
 
   return (
     <main
       className={
         vlaknoOtevrene
-          ? "mx-auto flex h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 flex-col overflow-hidden px-2 pb-2 pt-2 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:px-8 lg:pb-2 lg:pt-4 xl:px-12"
-          : "mx-auto w-full min-w-0 px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12"
+          ? "nocturne mx-auto flex h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 max-w-2xl flex-col overflow-hidden px-5 pb-2 pt-2 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:max-w-none lg:px-8 lg:pb-2 lg:pt-4 min-[90rem]:h-[calc(100dvh-76px)] min-[90rem]:max-h-[calc(100dvh-76px)] min-[90rem]:px-10 min-[90rem]:pb-10 min-[90rem]:pt-11"
+          : "nocturne mx-auto w-full min-w-0 max-w-2xl px-5 pb-16 pt-4 sm:px-6 sm:pt-8 lg:max-w-none lg:px-8 min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11"
       }
     >
-      <header className={`border-b-2 border-inkoust pb-5${vlaknoOtevrene ? " hidden lg:block" : ""}`}>
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h1 className="min-w-0 break-words text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Chaty
-          </h1>
-          {pocetNeprectenych > 0 && (
-            <span
-              role="status"
-              aria-label={`${pocetNeprectenych} ${pocetNeprectenych === 1 ? "konverzace má" : pocetNeprectenych >= 2 && pocetNeprectenych <= 4 ? "konverzace mají" : "konverzací má"} nepřečtené zprávy`}
-              className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center whitespace-nowrap rounded-full border-2 border-inkoust bg-red-800 px-2 text-[12px] font-extrabold text-papir tabular-nums"
-            >
-              {pocetNeprectenych}
-            </span>
-          )}
+      <header className={`${vlaknoOtevrene ? " hidden lg:block" : ""} mb-4 min-[90rem]:mb-0`}>
+        <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:items-end">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+              Chat
+            </h1>
+            <p className="text-xs text-ink-3 min-[90rem]:hidden">
+              {popisekSouhrnuChatu(souhrn.skupiny, souhrn.soukrome)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSegment("soukrome")}
+            className="nahled-press inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-smrk px-3.5 text-[13.5px] font-semibold text-papir hover:opacity-90 min-[90rem]:h-[46px] min-[90rem]:gap-2 min-[90rem]:px-[18px] min-[90rem]:text-sm"
+          >
+            <Ikona nazev="pen-line" className="size-4" />
+            Napsat
+          </button>
         </div>
       </header>
 
       <div
         className={
           vlaknoOtevrene
-            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]"
-            : "min-w-0 pt-6 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pt-6 xl:grid-cols-[24rem_minmax(0,1fr)]"
+            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6 min-[90rem]:grid-cols-[360px_minmax(0,1fr)] min-[90rem]:gap-7 min-[90rem]:pt-8"
+            : "min-w-0 pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pt-6 min-[90rem]:grid-cols-[360px_minmax(0,1fr)] min-[90rem]:gap-7 min-[90rem]:pt-8"
         }
       >
         {/* Mobil: seznam NEBO detail. Desktop: vždy vedle sebe. */}
-        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block lg:min-h-0 lg:overflow-y-auto" : "block"}`}>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-inkoust/60">
-            Konverzace
-          </h2>
+        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block lg:min-h-0 lg:overflow-y-auto" : "block"} min-[90rem]:posuvnik min-[90rem]:self-stretch min-[90rem]:overflow-y-auto min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:px-4 min-[90rem]:pb-4 min-[90rem]:shadow-denik`}>
+          <div className="hidden items-center justify-between pb-2 pt-4 min-[90rem]:flex">
+            <h2 className="text-base font-bold text-inkoust">Konverzace</h2>
+            {muzeSpravovatSkupiny ? (
+              <button
+                type="button"
+                aria-label="Nová skupina"
+                onClick={() => {
+                  setChybaSkupiny(null);
+                  setFormular({ id: null, nazev: "", prava: [] });
+                  setSegment("globalni");
+                }}
+                className="nahled-press flex size-7 items-center justify-center rounded-lg bg-povrch-2 text-mech hover:bg-linka"
+              >
+                <Ikona nazev="plus" className="size-[15px]" />
+              </button>
+            ) : null}
+          </div>
+          <h2 className="sr-only min-[90rem]:hidden">Konverzace</h2>
           <ConversationList
             polozky={polozky}
             vybranyKey={vybranyKey}
@@ -510,13 +543,13 @@ export default function ChatPage(): JSX.Element {
             clenove={clenove}
             jaId={currentUserId}
             onZacitSClenem={zacitSClenem}
-            zalozka={zalozka}
-            onZalozka={setZalozka}
+            segment={segment}
+            onSegment={setSegment}
             muzeSpravovatSkupiny={muzeSpravovatSkupiny}
             onNovaSkupina={() => {
               setChybaSkupiny(null);
               setFormular({ id: null, nazev: "", prava: [] });
-              setZalozka("skupiny");
+              setSegment("globalni");
             }}
             novaSkupina={
               formular !== null && formular.id === null ? (
@@ -566,19 +599,22 @@ export default function ChatPage(): JSX.Element {
           {vybrana === null ? (
             <div
               role="status"
-              className="rounded-2xl border-2 border-dashed border-inkoust/30 bg-white/60 px-6 py-14 text-center shadow-denik"
+              className="flex min-h-[420px] flex-col items-center justify-center gap-2 rounded-2xl border border-linka bg-povrch px-6 py-14 text-center shadow-denik"
             >
-              <p className="min-w-0 break-words text-lg font-bold tracking-tight">
+              <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-xl bg-povrch-2 text-ink-3">
+                <Ikona nazev="message-circle" className="size-[18px]" />
+              </span>
+              <p className="min-w-0 break-words text-[15px] font-semibold text-inkoust">
                 Vyber konverzaci
               </p>
-              <p className="mx-auto mt-1.5 max-w-sm min-w-0 break-words text-sm leading-relaxed text-inkoust/70">
+              <p className="mx-auto max-w-sm min-w-0 break-words text-[13px] leading-snug text-ink-3">
                 Vlevo je seznam vláken s náhledem poslední zprávy. Klikni na
                 řádek a thread se otevře tady — se seskupenými bublinami po
                 autorovi a dni.
               </p>
             </div>
           ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border-2 border-inkoust bg-papir p-2 shadow-denik lg:p-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-linka bg-povrch shadow-denik lg:h-full">
               <KonverzaceDetail
                 key={vybrana.key}
                 konverzace={vybrana}

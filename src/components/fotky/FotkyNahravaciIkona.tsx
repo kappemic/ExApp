@@ -52,7 +52,7 @@ export default function FotkyNahravaciIkona({
         onClick={() => {
           vstupRef.current?.click();
         }}
-        className={`${fotkyTlacitkoZaklad} nahled-press h-11 w-11 rounded-lg border-2 border-okr bg-okr p-0 text-inkoust shadow-denik disabled:opacity-60`}
+        className={`${fotkyTlacitkoZaklad} nahled-press h-11 min-w-11 rounded-xl bg-smrk p-0 text-papir disabled:opacity-60`}
       >
         <IkonaNahrat />
       </button>

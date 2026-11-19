@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState, type JSX } from "react";
 import { evropskyNaIsoCas, isoCasNaEvropsky, maskaEvropskehoCasu } from "../lib/evropsky-cas";
+import Ikona from "./Ikona";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 
 const CAS_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const HODINY = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTY = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+/** Po 5 minutách (návrh ukazuje 00, 10, 20…). Přesný čas jde dál napsat do pole. */
+const MINUTY = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
 
 export interface CasVstupProps {
   id: string;
@@ -39,7 +41,9 @@ function SloupecCasu({
   }, [vybrano]);
 
   return (
-    <div ref={seznamRef} role="listbox" aria-label={label} className="max-h-56 flex-1 overflow-y-auto">
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+    <span aria-hidden="true" className="text-[10px] font-bold uppercase tracking-[0.8px] text-ink-3">{label}</span>
+    <div ref={seznamRef} role="listbox" aria-label={label} className="posuvnik flex max-h-[178px] w-full flex-col gap-0.5 overflow-y-auto">
       {hodnoty.map((hodnota) => {
         const aktivni = hodnota === vybrano;
         return (
@@ -50,14 +54,15 @@ function SloupecCasu({
             data-hodnota={hodnota}
             aria-selected={aktivni}
             onClick={() => onVyber(hodnota)}
-            className={`flex h-10 w-full items-center justify-center rounded-lg text-base tabular-nums ${
-              aktivni ? "bg-smrk font-semibold text-papir" : "text-inkoust hover:bg-mlha"
+            className={`flex h-10 w-full shrink-0 items-center justify-center rounded-lg text-sm tabular-nums transition-colors motion-reduce:transition-none min-[90rem]:h-[34px] ${
+              aktivni ? "bg-mlha font-semibold text-smrk" : "font-medium text-inkoust hover:bg-povrch-2"
             }`}
           >
             {hodnota}
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
@@ -137,34 +142,42 @@ export default function CasVstup({
         onClick={() => setOtevreno((stav) => !stav)}
         className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v6l4 2" />
-        </svg>
+        <Ikona nazev="clock" className="size-4" />
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}
         kotva={kotvaRef}
         onZavrit={() => setOtevreno(false)}
-        sirka={220}
+        sirka={242}
         label="Výběr času"
+        vzhled="cas"
       >
-        <div id={panelId}>
-          <div className="flex items-stretch gap-1">
+        <div id={panelId} className="flex flex-col gap-2.5">
+          <p className="text-[15px] font-bold">Čas</p>
+          <div className="flex items-start gap-2">
             <SloupecCasu hodnoty={HODINY} vybrano={hodina} label="Hodina" onVyber={nastavHodinu} />
-            <span aria-hidden="true" className="flex items-center text-lg font-semibold text-mech">.</span>
+            <span aria-hidden="true" className="flex w-2 items-center justify-center self-center pt-4 text-lg font-bold text-inkoust">:</span>
             <SloupecCasu hodnoty={MINUTY} vybrano={minuta} label="Minuta" onVyber={nastavMinutu} />
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              onChange("");
-              setOtevreno(false);
-            }}
-            className="mt-1 flex h-10 w-full items-center justify-center rounded-lg text-sm font-semibold text-mech hover:bg-mlha hover:text-inkoust"
-          >
-            Bez času
-          </button>
+          <div className="flex items-center justify-between px-0.5 pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOtevreno(false);
+              }}
+              className="nahled-press -ml-2 flex min-h-11 items-center rounded-lg px-2 text-[13px] font-semibold text-mech hover:bg-povrch-2 min-[90rem]:min-h-8"
+            >
+              Bez času
+            </button>
+            <button
+              type="button"
+              onClick={() => setOtevreno(false)}
+              className="nahled-press -mr-2 flex min-h-11 items-center rounded-lg px-2 text-[13px] font-semibold text-smrk hover:bg-mlha min-[90rem]:min-h-8"
+            >
+              Hotovo
+            </button>
+          </div>
         </div>
       </VyskakovaciPanel>
     </div>

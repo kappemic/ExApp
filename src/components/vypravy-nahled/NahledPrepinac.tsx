@@ -5,7 +5,7 @@ interface Volba<T extends string> {
   popisek: string;
 }
 
-/** Segmentový přepínač (C2): olivová mlha jako dráha, aktivní volba bílá. */
+/** Segmentový přepínač podle ExApp.pen: šedá dráha, aktivní volba bílá se stínem. */
 export default function NahledPrepinac<T extends string>({
   ariaLabel,
   volby,
@@ -24,8 +24,8 @@ export default function NahledPrepinac<T extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`inline-flex max-w-full rounded-xl bg-mlha ${
-        roztahnout ? "w-full sm:w-auto sm:shrink-0" : "w-auto shrink-0"
+      className={`inline-flex h-9 max-w-full items-center gap-0.5 rounded-[18px] bg-povrch-2 p-[3px] ${
+        roztahnout ? "w-fit min-w-0" : "w-auto shrink-0"
       }`}
     >
       {volby.map((volba) => {
@@ -36,11 +36,11 @@ export default function NahledPrepinac<T extends string>({
             type="button"
             aria-pressed={jeAktivni}
             onClick={() => onZmena(volba.id)}
-            className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded-xl px-4 text-sm select-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none ${
-              roztahnout ? "flex-1 sm:flex-none" : ""
+            className={`bez-prejeti h-[30px] min-w-[44px] touch-manipulation rounded-[15px] px-3 text-[12.5px] select-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none ${
+              roztahnout ? "" : ""
             } ${
               jeAktivni
-                ? "bg-smrk font-semibold text-papir"
+                ? "bg-povrch font-semibold text-inkoust shadow-[0_1px_2px_#1c261514]"
                 : "font-medium text-mech hover:text-inkoust"
             }`}
           >

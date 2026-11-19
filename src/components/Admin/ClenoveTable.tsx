@@ -1,11 +1,19 @@
 import type { JSX } from "react";
+import { Link } from "react-router-dom";
 import {
   mapujRoliNaProfil,
   type ClenskyProfil,
 } from "../../config/roles";
 import { OBLIBENE_BARVY, jeOblibenaBarva, type UserListItem } from "../../shared/api-types";
+import { popisekClena } from "../../lib/clen-popisek";
 import { zobrazeniTelefonu } from "../../shared/telefon";
 import AvatarKruh from "../AvatarKruh";
+import { SEZNAM_KARTA_TRIDA, SeznamSipka } from "../SeznamKarta";
+import PrazdnyStav from "../PrazdnyStav";
+import Strankovani from "../Strankovani";
+import { useStrankovani } from "../../hooks/useStrankovani";
+import { RADKU_NA_STRANKU } from "../../lib/strankovani";
+import { IkonaLide } from "../SeznamIkony";
 import { TlacitkoProfilu } from "../clen/ClenProfil";
 
 interface ClenoveTableProps {
@@ -41,7 +49,7 @@ function Zarazeni({ profil }: { profil: ClenskyProfil }): JSX.Element {
         </span>
       )}
       {vedeni && (
-        <span className="inline-flex min-h-[28px] items-center whitespace-nowrap rounded-full border-2 border-inkoust bg-white/70 px-2.5 py-0.5 text-xs font-bold text-inkoust">
+        <span className="inline-flex min-h-[28px] items-center whitespace-nowrap rounded-full border border-linka bg-povrch px-2.5 py-0.5 text-xs font-bold text-inkoust">
           Vedení
         </span>
       )}
@@ -58,7 +66,7 @@ function KoleckoBarvy({ nazev }: { nazev: string }): JSX.Element | null {
     <span title={popisek} className="inline-flex shrink-0">
       <span
         aria-hidden="true"
-        className="h-3.5 w-3.5 rounded-full border-2 border-inkoust"
+        className="h-3.5 w-3.5 rounded-full border border-linka"
         style={{ backgroundColor: hex }}
       />
       <span className="sr-only">{popisek}</span>
@@ -83,7 +91,8 @@ function Stav({ profil }: { profil: ClenskyProfil }): JSX.Element {
 
 /**
  * Jedna znovupoužitelná tabulka pro všechny 4 taby.
- * Na mobilu horizontálně scrolluje (min-w), layout se neláme.
+ * Pod 1440 px seznam řádků (avatar, jméno, zařazení, ›) podle návrhu, žádný
+ * vodorovný scroll. Od 1440 px tabulka se všemi sloupci.
  * Nativní <table> = role=table zdarma, prázdný stav má role=status.
  * Řádek je klikací tlačítko (min-h 44px, aria-haspopup="dialog") —
  * klik / Enter otevře ClenDetailModal (stav drží AdminClenovePage).
@@ -94,22 +103,65 @@ export default function ClenoveTable({
   onVyber,
   popisek,
 }: ClenoveTableProps): JSX.Element {
+  const strankovani = useStrankovani(clenove, RADKU_NA_STRANKU, `${popisek ?? ""}:${clenove.length}`);
   if (clenove.length === 0) {
     return (
-      <div
-        role="status"
-        className="rounded-lg border-2 border-dashed border-mech/40 bg-white/60 px-5 py-10 text-center shadow-denik"
-      >
-        <p className="text-base font-bold">Žádní členové v této skupině</p>
-        <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-inkoust/70">
-          V této skupině zatím nikdo není. Zkuste jinou záložku.
-        </p>
-      </div>
+      <PrazdnyStav
+        ikona={<IkonaLide />}
+        nadpis="Žádní členové v této skupině"
+        text="V této skupině zatím nikdo není. Zkus jinou záložku nebo pozvi nováčka."
+      />
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border-2 border-inkoust bg-white/60 shadow-denik">
+    <>
+    <ul
+      aria-label={popisek ?? "Seznam členů"}
+      className={`${SEZNAM_KARTA_TRIDA} min-[90rem]:hidden`}
+    >
+      {strankovani.viditelne.map((clen) => {
+        const profil: ClenskyProfil = profilClena(clen);
+        const vybran: boolean = vybranyId === clen.id;
+        return (
+          <li
+            key={clen.id}
+            className={`flex min-w-0 items-center ${vybran ? "bg-mlha/60" : ""}`}
+          >
+            <Link
+              to={`/cleny/${clen.id}`}
+              className="bez-prejeti flex min-h-[64px] min-w-0 flex-1 items-center gap-3 py-2.5 pl-3.5 pr-1 [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
+            >
+              <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-[15px] font-semibold text-inkoust">
+                    {clen.jmeno}
+                  </span>
+                  <KoleckoBarvy nazev={clen.oblibenaBarva ?? ""} />
+                </span>
+                <span className="block truncate text-[13px] text-ink-3">
+                  {popisekClena(profil, clen.isSuperadmin === true)}
+                </span>
+              </span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => onVyber(clen)}
+              aria-haspopup="dialog"
+              aria-label={`${clen.jmeno}, správa člena`}
+              className="bez-prejeti inline-flex min-h-11 shrink-0 items-center rounded-lg px-2.5 text-xs font-bold text-mech [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-smrk"
+            >
+              Správa
+            </button>
+            <span className="pr-3.5">
+              <SeznamSipka />
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+    <div className="hidden overflow-x-auto rounded-lg border border-linka bg-povrch shadow-denik min-[90rem]:block">
       <table className="w-full min-w-[880px] border-collapse text-left lg:min-w-0 lg:table-fixed">
         <colgroup className="max-lg:hidden">
           <col className="w-[30%]" />
@@ -122,7 +174,7 @@ export default function ClenoveTable({
           {popisek ?? "Seznam členů — jméno, kontakt, stav a zařazení"}
         </caption>
         <thead>
-          <tr className="border-b-2 border-inkoust bg-papir">
+          <tr className="border-b border-linka bg-papir">
             <th scope="col" className="min-h-[44px] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
               Jméno
             </th>
@@ -141,7 +193,7 @@ export default function ClenoveTable({
           </tr>
         </thead>
         <tbody>
-          {clenove.map((clen) => {
+          {strankovani.viditelne.map((clen) => {
             const vybran: boolean = vybranyId === clen.id;
             const profil: ClenskyProfil = profilClena(clen);
             const telefonText = zobrazeniTelefonu(clen.telefon).text;
@@ -190,6 +242,12 @@ export default function ClenoveTable({
                         </span>
                       </span>
                     </TlacitkoProfilu>
+                    <Link
+                      to={`/cleny/${clen.id}`}
+                      className="bez-prejeti nahled-press inline-flex min-h-11 shrink-0 items-center rounded px-2.5 text-xs font-extrabold text-mech [touch-action:manipulation]"
+                    >
+                      Karta
+                    </Link>
                     <button
                       type="button"
                       onClick={() => onVyber(clen)}
@@ -221,5 +279,13 @@ export default function ClenoveTable({
         </tbody>
       </table>
     </div>
+    <Strankovani
+      cislo={strankovani.cislo}
+      pocet={strankovani.pocet}
+      onZmena={strankovani.nastav}
+      popisek="Stránky seznamu členů"
+      className="mt-4"
+    />
+    </>
   );
 }

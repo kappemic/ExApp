@@ -74,8 +74,7 @@ describe("Fotky master–detail layout", () => {
     expect(page).toContain("FotkyNahravaciPanel");
     expect(page).not.toContain("data-fotky-nahrat-do-alba");
     expect(page).not.toContain("data-fotky-nav-zpet");
-    expect(page).toContain("data-fotky-nav-prephed-alb");
-    expect(page).toMatch(/data-fotky-nav-prephed-alb[\s\S]*lg:hidden/);
+    expect(page).toContain("<HlavickaZpet zpet=\"/fotky\"");
     expect(page).toContain("fotkyTlacitkoZaklad");
     expect(page).toContain('to="/fotky"');
     expect(page).toContain("rozbalNahravani");
@@ -84,19 +83,16 @@ describe("Fotky master–detail layout", () => {
     const panel = cti("src/components/fotky/FotkyNahravaciPanel.tsx");
     expect(panel).toContain("data-fotky-nahravaci-panel");
     expect(panel).toContain("data-fotky-nahravaci-sbaleno");
-    expect(panel).toContain("data-fotky-rozbal-nahravani");
-    expect(panel).toContain("aria-expanded");
+    expect(page).toContain("data-fotky-rozbal-nahravani");
+    expect(page).toContain("aria-expanded");
     expect(panel).toContain("Nahrát fotky");
-    expect(panel).toContain("data-fotky-rozbal-nove-album");
-    expect(panel).toContain("data-fotky-nove-album-blok");
-    expect(panel).toContain("Nové album");
-    expect(panel).toContain("fotkyDisclosureSpoustec");
-    expect(panel).toContain("fotkyDisclosureObsah");
-    expect(panel).toContain("fotkyDisclosurePopover");
-    expect(panel).toContain("fotkyNahravaciSpoustice");
-    expect(panel).toContain("data-fotky-nahravaci-spoustice");
+    expect(page).toContain("data-fotky-rozbal-nove-album");
+    expect(page).toContain("Přidat album");
+    expect(page).toContain("fotkyTlacitkoPrimarni");
+    expect(panel).toContain("SpodniSheet");
+    expect(panel).toContain('titulek="Nahrát fotky"');
+    expect(page).toContain("data-fotky-nahravaci-spoustice");
     expect(panel).toContain("fotkyNahravaciObalSbaleny");
-    expect(panel).not.toMatch(/flex min-w-0 flex-col items-start[\s\S]*data-fotky-rozbal-nahravani/);
 
     const form = cti("src/components/fotky/NoveAlbumForm.tsx");
     expect(form).toContain("Založit album");

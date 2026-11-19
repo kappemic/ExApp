@@ -237,7 +237,7 @@ export default function Heatmapa(): JSX.Element {
       <div
         aria-busy="true"
         aria-label="Načítám mapu tras"
-        className="overflow-hidden rounded-lg border-2 border-inkoust bg-white/70 text-left shadow-denik"
+        className="overflow-hidden rounded-lg border border-linka bg-povrch text-left shadow-denik"
       >
         <div className="h-[320px] animate-pulse bg-linka/50 sm:h-[420px]" />
         <div className="flex items-center justify-between gap-3 border-t-2 border-inkoust/15 px-4 py-3">
@@ -256,7 +256,7 @@ export default function Heatmapa(): JSX.Element {
       >
         <p
           aria-hidden="true"
-          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-inkoust bg-linka/60 text-xl"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-linka bg-linka/60 text-xl"
         >
           🧭
         </p>
@@ -308,7 +308,7 @@ export default function Heatmapa(): JSX.Element {
 
   if (faze.stav === "seznam") {
     return (
-      <div className="rounded-lg border-2 border-inkoust bg-papir/40 p-4 text-left shadow-denik">
+      <div className="rounded-lg border border-linka bg-papir/40 p-4 text-left shadow-denik">
         <h2 className="text-lg font-bold tracking-tight">{SEZNAM_NADPIS}</h2>
         <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-inkoust/70">
           {SEZNAM_TEXT}
@@ -522,7 +522,7 @@ export function HeatmapaMapa({
 
   return (
     <section aria-label={popisekMapy} className="text-left">
-      <div className="overflow-hidden rounded-lg border-2 border-inkoust bg-white/70 shadow-denik">
+      <div className="overflow-hidden rounded-lg border border-linka bg-povrch shadow-denik">
         <div
           ref={kontejnerRef}
           role="application"
@@ -553,7 +553,7 @@ export function HeatmapaMapa({
             <button
               type="button"
               onClick={centrovat}
-              className="min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-white px-3 py-2 text-xs font-bold text-inkoust transition-colors hover:bg-linka/60"
+              className="min-h-[44px] min-w-[44px] rounded border border-linka bg-white px-3 py-2 text-xs font-bold text-inkoust transition-colors hover:bg-linka/60"
             >
               Centrovat trasy
             </button>

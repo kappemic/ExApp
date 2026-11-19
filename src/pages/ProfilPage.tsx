@@ -7,14 +7,17 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
-import { formatKmZaokrouhlene } from "../lib/format-cisla";
-import {
-  getMojeStatistiky,
-  type StatistikyResponse,
-} from "../lib/statistiky-api";
+import StatistikyPlocha from "../components/statistiky/StatistikyPlocha";
+import PridatNaPlochuSheet from "../components/shell/PridatNaPlochuSheet";
+import { ROLE_LIST, type Role } from "../config/roles";
+import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import ProfileForm from "../components/profil/ProfileForm";
-import { vypniOznameni, zapniOznameni } from "../lib/push-odber";
+import { DlazdiceStatu, IdentitaProfilu, RadekUdaje } from "../components/ProfilKusy";
+import { SEZNAM_KARTA_TRIDA } from "../components/SeznamKarta";
+import { IkonaOdhlasit } from "../components/SeznamIkony";
+import { zobrazeniTelefonu } from "../shared/telefon";
+import { getMojeStatistiky } from "../lib/statistiky-api";
 import type { ApiUser } from "../shared/api-types";
 import {
   ctiStravaDuvodZUrl,
@@ -37,79 +40,74 @@ const TABY: Array<{ id: ProfilTab; popisek: string }> = [
   { id: "heatmapa", popisek: "Heatmapa" },
 ];
 
-const PANEL_OBSAH: Record<
-  Extract<ProfilTab, "statistiky" | "heatmapa">,
-  { nadpis: string; text: string; paticka: string }
-> = {
-  statistiky: {
-    nadpis: "Zatím bez kilometrů",
-    text: "Kilometry, převýšení a počet výprav doplníme ve Fázi 4 po napojení Stravy.",
-    paticka: "exapp · statistiky se chystají",
-  },
-  heatmapa: {
-    nadpis: "Mapa je zatím čistá",
-    text: "Prošlé trasy a heatmapa výprav se vykreslí, jakmile spárujeme první aktivity.",
-    paticka: "exapp · mapa se chystá",
-  },
-};
-
 /**
  * Tab Osobní údaje (Step 4): formulář předvyplněný z GET /api/me.
  * Kontejner (fetch + stavy) + ProfileForm (editace) — fetch/mutate žije
  * v `useProfile`, UI jen konzumuje. Po uložení drží čerstvého usera
  * lokálně (server je zdrojem pravdy, žádný optimistic update).
  */
-function OznameniKarta(): JSX.Element {
-  const [hlaska, setHlaska] = useState<string | null>(null);
-  const [bezi, setBezi] = useState(false);
+function iniciály(jmeno: string, prijmeni?: string): string {
+  const a = jmeno.trim().charAt(0).toUpperCase();
+  const b = (prijmeni ?? "").trim().charAt(0).toUpperCase();
+  return `${a}${b.length > 0 ? b : ""}` || "?";
+}
 
-  async function zapnout(): Promise<void> {
-    setBezi(true);
-    const vysledek = await zapniOznameni();
-    setBezi(false);
-    setHlaska(vysledek.ok ? "Oznámení jsou zapnutá na tomhle zařízení." : vysledek.chyba);
-  }
+function nazevRole(role: Role): string {
+  return ROLE_LIST.find((r) => r.id === role)?.nazev ?? role;
+}
 
-  async function vypnout(): Promise<void> {
-    setBezi(true);
-    const vysledek = await vypniOznameni();
-    setBezi(false);
-    setHlaska(vysledek.ok ? "Oznámení jsou na tomhle zařízení vypnutá." : vysledek.chyba);
-  }
+function clenOd(iso: string | undefined): string | null {
+  if (iso === undefined || !Number.isFinite(Date.parse(iso))) return null;
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getFullYear()}`;
+}
 
+type ProfilSouhrn = { vypravy: number; km: number; fotek: number };
+
+function Odhlaseni(): JSX.Element {
+  const { odhlasit } = useAuth();
   return (
-    <section className="mb-6 rounded-lg border-2 border-inkoust bg-papir p-4 text-left shadow-denik">
-      <h2 className="text-base font-extrabold">Oznámení</h2>
-      <p className="mt-1 text-sm text-inkoust/75">
-        Soukromá zpráva a označení ve Generalu nebo Důležitých. Chodí, když máš ExApp na ploše a tady si je zapneš.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={bezi}
-          onClick={() => void zapnout()}
-          className="min-h-[44px] rounded border-2 border-inkoust bg-inkoust px-4 text-sm font-bold text-papir [touch-action:manipulation] disabled:opacity-60"
-        >
-          Zapnout na tomhle zařízení
-        </button>
-        <button
-          type="button"
-          disabled={bezi}
-          onClick={() => void vypnout()}
-          className="min-h-[44px] rounded border-2 border-inkoust bg-papir px-4 text-sm font-bold text-inkoust [touch-action:manipulation] disabled:opacity-60"
-        >
-          Vypnout
-        </button>
-      </div>
-      {hlaska !== null && <p className="mt-3 text-sm font-bold text-inkoust">{hlaska}</p>}
-    </section>
+    <button
+      type="button"
+      onClick={odhlasit}
+      className="nahled-press mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-akcent/25 bg-akcent-100 px-4 text-base font-semibold text-akcent [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+    >
+      <IkonaOdhlasit />
+      Odhlásit se
+    </button>
   );
+}
+
+/** "2007-04-14" → "14. 4. 2007". Neplatné datum zůstane, jak je. */
+function datumCesky(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m === null) return iso;
+  return `${Number(m[3])}. ${Number(m[2])}. ${m[1]}`;
 }
 
 function OsobniPanel(): JSX.Element {
   const { profil, stav, chyba, znovuNacti } = useProfile();
   const [prepsany, setPrepsany] = useState<ApiUser | null>(null);
+  const [souhrn, setSouhrn] = useState<ProfilSouhrn>({ vypravy: 0, km: 0, fotek: 0 });
+  const [plochaSheet, setPlochaSheet] = useState(false);
+  const [upravuje, setUpravuje] = useState(false);
   const zobrazeny: ApiUser | null = prepsany ?? profil;
+
+  useEffect(() => {
+    let zije = true;
+    void (async (): Promise<void> => {
+      const stat = await getMojeStatistiky();
+      if (!zije) return;
+      setSouhrn({
+        vypravy: stat.data.vypravy,
+        km: Math.round(stat.data.kmCelkem),
+        fotek: 0,
+      });
+    })();
+    return () => {
+      zije = false;
+    };
+  }, [zobrazeny?.id]);
 
   if (stav === "nacitani" || zobrazeny === null) {
     if (stav === "chyba") {
@@ -121,7 +119,7 @@ function OsobniPanel(): JSX.Element {
           <button
             type="button"
             onClick={znovuNacti}
-            className="mt-3 min-h-[44px] min-w-[44px] touch-manipulation rounded border-2 border-inkoust bg-white px-4 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60"
+            className="mt-3 min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-white px-4 py-2 text-sm font-bold text-inkoust select-none hover:bg-linka/60"
           >
             Zkusit znovu
           </button>
@@ -137,19 +135,103 @@ function OsobniPanel(): JSX.Element {
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-12 animate-pulse rounded border-2 border-inkoust/20 bg-linka/40"
+            className="h-12 animate-pulse rounded-2xl border border-linka bg-linka/40"
           />
         ))}
       </div>
     );
   }
 
+  const celeJmeno = [zobrazeny.jmeno, zobrazeny.prijmeni].filter((d) => (d ?? "").trim().length > 0).join(" ");
+  const od = clenOd(zobrazeny.createdAt);
+  const role: string = zobrazeny.isSuperadmin
+    ? "Hlavní admin"
+    : zobrazeny.isAdmin === true
+      ? "Admin"
+      : nazevRole(zobrazeny.role);
+  const roleRadek: string = od !== null ? `${role} · člen od ${od}` : role;
+
   return (
-    <ProfileForm
-      key={`${zobrazeny.id}-${zobrazeny.updatedAt}`}
-      pocatecni={zobrazeny}
-      onUlozeno={(novy: ApiUser) => setPrepsany(novy)}
-    />
+    <div className="mx-auto w-full max-w-lg text-left">
+      <IdentitaProfilu
+        inicialy={iniciály(zobrazeny.jmeno, zobrazeny.prijmeni)}
+        jmeno={celeJmeno}
+        podtitul={zobrazeny.email}
+        stitek={roleRadek}
+      />
+
+      <div className="grid grid-cols-3 gap-2">
+        <DlazdiceStatu popisek="Výprav" hodnota={String(souhrn.vypravy)} />
+        <DlazdiceStatu popisek="Kilometrů" hodnota={String(souhrn.km)} />
+        <DlazdiceStatu popisek="Fotek" hodnota={String(souhrn.fotek)} />
+      </div>
+
+      <section className="mt-4 rounded-2xl border border-linka bg-povrch p-4">
+        <h3 className="font-display text-[17px] font-bold text-inkoust">Aplikace na plochu</h3>
+        <p className="mt-1 text-sm leading-relaxed text-ink-3">
+          Otevře se na celou obrazovku a historie jde i bez sítě.
+        </p>
+        <button
+          type="button"
+          className="nahled-press mt-3 min-h-11 w-full rounded-xl bg-smrk px-4 text-[15px] font-semibold text-papir"
+          onClick={() => setPlochaSheet(true)}
+        >
+          Nainstalovat aplikaci
+        </button>
+      </section>
+
+      {upravuje ? (
+        <section className="mt-4" aria-label="Úprava osobních údajů">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h3 className="font-display text-[17px] font-bold text-inkoust">Upravit údaje</h3>
+            <button
+              type="button"
+              onClick={() => setUpravuje(false)}
+              className="nahled-press inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-end text-[15px] font-semibold text-smrk"
+            >
+              Zrušit
+            </button>
+          </div>
+          <ProfileForm
+            key={`${zobrazeny.id}-${zobrazeny.updatedAt}`}
+            variant="radky"
+            pocatecni={zobrazeny}
+            onUlozeno={(novy: ApiUser) => {
+              setPrepsany(novy);
+              setUpravuje(false);
+            }}
+          />
+        </section>
+      ) : (
+        <section className="mt-4" aria-labelledby="profil-udaje">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h3 id="profil-udaje" className="font-display text-[17px] font-bold text-inkoust">
+              Osobní údaje
+            </h3>
+            <button
+              type="button"
+              onClick={() => setUpravuje(true)}
+              className="nahled-press inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-end text-[15px] font-semibold text-smrk"
+            >
+              Upravit údaje
+            </button>
+          </div>
+          <ul className={SEZNAM_KARTA_TRIDA}>
+            <RadekUdaje popisek="E-mail" hodnota={zobrazeny.email} />
+            <RadekUdaje popisek="Telefon" hodnota={zobrazeniTelefonu(zobrazeny.telefon).text} />
+            <RadekUdaje popisek="Discord nick" hodnota={zobrazeny.discordNick ?? ""} />
+            <RadekUdaje popisek="Škola" hodnota={zobrazeny.skola ?? ""} />
+            <RadekUdaje popisek="Třída" hodnota={zobrazeny.trida ?? ""} />
+            <RadekUdaje
+              popisek="Datum narození"
+              hodnota={zobrazeny.narozeniny ? datumCesky(zobrazeny.narozeniny) : ""}
+            />
+            <RadekUdaje popisek="Role" hodnota={roleRadek} />
+          </ul>
+        </section>
+      )}
+      <PridatNaPlochuSheet otevreno={plochaSheet} onZavrit={() => setPlochaSheet(false)} />
+    </div>
   );
 }
 
@@ -293,7 +375,7 @@ function StravaKarta(): JSX.Element {
   return (
     <section
       aria-label="Propojení se Stravou"
-      className="mb-4 overflow-hidden rounded-lg border-2 border-inkoust bg-white/60 text-left shadow-denik"
+      className="mb-4 overflow-hidden rounded-lg border border-linka bg-povrch text-left shadow-denik"
     >
       <div aria-hidden="true" className="h-1.5 w-full bg-jantar" />
       <div className="p-5">
@@ -334,7 +416,7 @@ function StravaKarta(): JSX.Element {
             type="button"
             onClick={() => void odpoj()}
             disabled={pracuje}
-            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
+            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border border-linka bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
           >
             {pracuje ? "Odpojuji…" : "Odpojit Stravu"}
           </button>
@@ -343,7 +425,7 @@ function StravaKarta(): JSX.Element {
             type="button"
             onClick={() => void pripoj()}
             disabled={pracuje || faze.stav === "nacitani"}
-            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border-2 border-inkoust bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
+            className="nahled-press nahled-prejeti min-h-[44px] min-w-[44px] rounded border border-linka bg-papir px-4 py-2 text-sm font-bold text-inkoust disabled:opacity-50"
           >
             {pracuje ? "Přesměrovávám…" : "Připojit Stravu"}
           </button>
@@ -354,150 +436,18 @@ function StravaKarta(): JSX.Element {
   );
 }
 
-/**
- * Tab Statistiky (Fáze 4, Krok 3): agregace z DB bez live Stravy.
- * Kontejner (fetch + stavy) + prezentace (karty + seznam) v jednom
- * souboru — stránka je malá, oddělený hook by byl over-engineering.
- * Stavy: načítání → skeleton; nuly/[] → prázdný stav pro nováčka
- * (stejná kopie jako placeholder); data → karty čísel + seznam.
- * Fallback klienta (backend mimo / 401) → stejný prázdný stav,
- * nikdy nevyhazuje. Responzivní mřížka 1 → 3 sloupce (mobile-first).
- */
-function StatistikyPanel(): JSX.Element {
-  const [faze, setFaze] = useState<"nacitani" | "hotovo">("nacitani");
-  const [data, setData] = useState<StatistikyResponse | null>(null);
-
-  useEffect(() => {
-    let zije = true;
-    void (async (): Promise<void> => {
-      const vysledek = await getMojeStatistiky();
-      if (!zije) return;
-      setData(vysledek.data);
-      setFaze("hotovo");
-    })();
-    return () => {
-      zije = false;
-    };
-  }, []);
-
-  if (faze === "nacitani" || data === null) {
-    return (
-      <div
-        aria-busy="true"
-        aria-label="Načítám statistiky"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-      >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-24 animate-pulse rounded-lg border-2 border-inkoust/20 bg-linka/40"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (data.vypravy === 0) {
-    return (
-      <div
-        role="status"
-        className="flex flex-col items-center rounded-lg border-2 border-dashed border-inkoust/30 bg-papir px-6 py-10"
-      >
-        <h2 className="text-lg font-bold tracking-tight">
-          {PANEL_OBSAH.statistiky.nadpis}
-        </h2>
-        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-inkoust/70">
-          {PANEL_OBSAH.statistiky.text}
-        </p>
-        <p
-          aria-hidden="true"
-          className="mt-4 border-t border-dashed border-linka pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-inkoust/70"
-        >
-          {PANEL_OBSAH.statistiky.paticka}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section aria-label="Osobní statistiky" className="text-left">
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border-2 border-inkoust bg-papir px-4 py-5 text-center shadow-denik">
-          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-inkoust/70">
-            Výpravy
-          </dt>
-          <dd className="mt-1 text-3xl font-extrabold tabular-nums">
-            {data.vypravy}
-          </dd>
-        </div>
-        <div className="rounded-lg border-2 border-inkoust bg-papir px-4 py-5 text-center shadow-denik">
-          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-inkoust/70">
-            Kilometry
-          </dt>
-          <dd className="mt-1 text-3xl font-extrabold tabular-nums">
-            {formatKmZaokrouhlene(data.kmCelkem)}
-          </dd>
-        </div>
-        <div className="rounded-lg border-2 border-inkoust bg-papir px-4 py-5 text-center shadow-denik">
-          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-inkoust/70">
-            Převýšení
-          </dt>
-          <dd className="mt-1 text-3xl font-extrabold tabular-nums">
-            {formatPrevyseni(data.prevyseniCelkem)}
-          </dd>
-        </div>
-      </dl>
-
-      <h3 className="mt-6 text-base font-extrabold tracking-tight">
-        Navštívené výpravy ({data.aktivity.length})
-      </h3>
-      <ul role="list" className="mt-2 divide-y divide-inkoust/15 rounded-lg border-2 border-inkoust/20 bg-white/70">
-        {data.aktivity.map((aktivita) => {
-          const nazev =
-            typeof aktivita.nazev === "string" && aktivita.nazev.length > 0
-              ? aktivita.nazev
-              : aktivita.expeditionId;
-          const meta: string[] = [];
-          if (typeof aktivita.datum === "string" && aktivita.datum.length > 0) {
-            meta.push(aktivita.datum);
-          }
-          meta.push(
-            typeof aktivita.km === "number"
-              ? formatKmZaokrouhlene(aktivita.km)
-              : "bez kilometrů",
-          );
-          meta.push(
-            typeof aktivita.prevyseniM === "number"
-              ? formatPrevyseni(aktivita.prevyseniM)
-              : "bez převýšení",
-          );
-          return (
-            <li
-              key={aktivita.id}
-              className="flex flex-col gap-0.5 px-4 py-3 text-left sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
-            >
-              <span className="text-sm font-bold">{nazev}</span>
-              <span className="text-sm tabular-nums text-inkoust/70">
-                {meta.join(" · ")}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function formatPrevyseni(metry: number): string {
-  return `${metry} m`;
+function jeProfilTab(hodnota: string | null): hodnota is ProfilTab {
+  return hodnota === "osobni" || hodnota === "strava" || hodnota === "statistiky" || hodnota === "heatmapa";
 }
 
 export default function ProfilPage(): JSX.Element {
-  // Po návratu ze Stravy (?strava=propojeno|chyba) rovnou na tab Strava,
-  // jinak výchozí Osobní údaje. Čte jen vlastní query, nikdy tokeny.
-  const [aktivniTab, setAktivniTab] = useState<ProfilTab>(() =>
-    ctiStravaPriznakZUrl() === null ? "osobni" : "strava",
-  );
+  const [aktivniTab, setAktivniTab] = useState<ProfilTab>(() => {
+    if (typeof window !== "undefined") {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (jeProfilTab(tab)) return tab;
+    }
+    return ctiStravaPriznakZUrl() === null ? "osobni" : "strava";
+  });
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
     const poradi = TABY.map((t) => t.id);
@@ -516,26 +466,19 @@ export default function ProfilPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
-      <header className="border-b-2 border-inkoust pb-5">
-        <p className="text-sm font-medium text-mech">Školní expediční klub</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Profil
-        </h1>
-        <p className="mt-2 max-w-2xl text-base text-inkoust/75">
-          Osobní údaje, propojení se Stravou, statistiky z docházky
-          a heatmapa spárovaných tras z OSM — bez klíče, i offline s hláškou.
-        </p>
+    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:max-w-2xl lg:px-8">
+      <header className="border-b border-linka pb-4">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-inkoust">Profil</h1>
 
         <div
-          className="sticky top-0 z-10 -mx-4 bg-papir/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12"
+          className="sticky top-0 z-10 -mx-4 bg-papir px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12"
           style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top, 0px))" }}
         >
           <div
             role="tablist"
             aria-label="Sekce profilu"
             onKeyDown={onKeyDown}
-            className="inline-flex max-w-full flex-wrap rounded-md border-2 border-inkoust bg-white/60 p-1 shadow-denik"
+            className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden"
           >
             {TABY.map((tab) => {
               const aktivni = aktivniTab === tab.id;
@@ -549,10 +492,10 @@ export default function ProfilPage(): JSX.Element {
                   aria-controls={aktivni ? `panel-${tab.id}` : undefined}
                   tabIndex={aktivni ? 0 : -1}
                   onClick={() => setAktivniTab(tab.id)}
-                  className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded px-4 py-2 text-sm font-bold select-none transition-colors ${
+                  className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation shrink-0 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-semibold select-none transition-colors motion-reduce:transition-none ${
                     aktivni
-                      ? "bg-inkoust text-papir"
-                      : "text-inkoust hover:bg-linka/60"
+                      ? "border-transparent bg-smrk text-papir"
+                      : "border-linka bg-povrch text-inkoust hover:bg-mlha/60"
                   }`}
                 >
                   {tab.popisek}
@@ -568,23 +511,22 @@ export default function ProfilPage(): JSX.Element {
           role="tabpanel"
           id={`panel-${aktivniTab}`}
           aria-labelledby={`tab-${aktivniTab}`}
-          className="rounded-lg border-2 border-inkoust bg-white/60 p-6 text-center shadow-denik lg:text-left"
+          className={
+            aktivniTab === "osobni" || aktivniTab === "statistiky"
+              ? "text-left"
+              : "rounded-2xl border border-linka bg-povrch p-5 text-left"
+          }
         >
-          {aktivniTab === "osobni" && (
-            <>
-              <OznameniKarta />
-              <OsobniPanel />
-            </>
-          )}
+          {aktivniTab === "osobni" && <OsobniPanel />}
           {aktivniTab === "strava" && <StravaKarta />}
-          {aktivniTab === "statistiky" && <StatistikyPanel />}
+          {aktivniTab === "statistiky" && <StatistikyPlocha />}
           {aktivniTab === "heatmapa" && (
             <Suspense
               fallback={
                 <div
                   aria-busy="true"
                   aria-label="Načítám mapu tras"
-                  className="h-[320px] animate-pulse rounded-lg border-2 border-inkoust/20 bg-linka/40 sm:h-[420px]"
+                  className="h-[320px] animate-pulse rounded-2xl border border-linka bg-linka/40 sm:h-[420px]"
                 />
               }
             >
@@ -592,6 +534,7 @@ export default function ProfilPage(): JSX.Element {
             </Suspense>
           )}
         </div>
+        <Odhlaseni />
       </div>
     </main>
   );

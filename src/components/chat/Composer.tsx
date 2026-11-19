@@ -164,7 +164,7 @@ export default function Composer({
     <form
       onSubmit={naSubmit}
       aria-label={popisek}
-      className="rounded-2xl border-2 border-inkoust bg-papir p-1.5 shadow-denik"
+      className="rounded-2xl border border-linka bg-papir p-1.5 shadow-denik"
     >
       <label htmlFor={poleId} className="sr-only">
         {popisek}
@@ -178,7 +178,7 @@ export default function Composer({
               setVybrany(0);
               poleRef.current?.focus();
             }}
-            className="inline-flex min-h-[44px] items-center rounded-md border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust [touch-action:manipulation]"
+            className="inline-flex min-h-[44px] items-center rounded-md border border-linka bg-papir px-3 text-sm font-bold text-inkoust [touch-action:manipulation]"
           >
             Označit
           </button>
@@ -188,7 +188,7 @@ export default function Composer({
         <ul
           role="listbox"
           aria-label="Koho označit"
-          className="mb-1 max-h-56 overflow-y-auto rounded-xl border-2 border-inkoust bg-papir shadow-denik"
+          className="mb-1 max-h-56 overflow-y-auto rounded-xl border border-linka bg-papir shadow-denik"
         >
           {nabidky.map((nabidka, index) => (
             <li key={nabidka.token}>
@@ -235,7 +235,7 @@ export default function Composer({
           type="submit"
           disabled={!muze}
           title={odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu"}
-          className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 text-sm font-bold text-inkoust [touch-action:manipulation] motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl bg-smrk px-4 text-sm font-bold text-papir min-[90rem]:bg-akcent [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {odesilaSe ? "Posílám…" : "Poslat"}
         </button>

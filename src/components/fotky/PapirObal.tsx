@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from "react";
+import Ikona from "../Ikona";
 import PostupnaFotka from "./PostupnaFotka";
 
 const LINIE =
@@ -9,6 +10,8 @@ interface PapirObalProps {
   /** Empty when the photo is decorative next to a visible name. */
   alt: string;
   className?: string;
+  /** Prázdné album podle ExApp.pen: ikona a „Zatím žádné fotky“ místo linkovaného papíru. */
+  prazdnyPopisek?: string;
 }
 
 /**
@@ -19,6 +22,7 @@ export default function PapirObal({
   src,
   alt,
   className = "aspect-[4/3]",
+  prazdnyPopisek,
 }: PapirObalProps): JSX.Element {
   const [rozbita, setRozbita] = useState<boolean>(false);
 
@@ -27,6 +31,15 @@ export default function PapirObal({
   }, [src]);
 
   const ukaz = src !== null && src.length > 0 && !rozbita;
+
+  if (!ukaz && prazdnyPopisek !== undefined) {
+    return (
+      <div className={`relative flex w-full flex-col items-center justify-center gap-2 overflow-hidden bg-povrch-2 ${className}`}>
+        <Ikona nazev="image-plus" className="size-[22px] text-[#a9af9b]" />
+        <span className="text-[12.5px] font-medium text-[#8a9179]">{prazdnyPopisek}</span>
+      </div>
+    );
+  }
 
   return (
     <div

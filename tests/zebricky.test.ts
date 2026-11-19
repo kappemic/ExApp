@@ -344,7 +344,7 @@ describe("výkon: index pro žebříček (bez seq-scanu na 1000+ participants)",
   });
 });
 
-describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", () => {
+describe("ZebrickyPage (seznam + filtr období + zvýraznění sebe + CTA)", () => {
   function cti(soubor: string): string {
     return readFileSync(soubor, "utf8");
   }
@@ -362,10 +362,11 @@ describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", ()
     expect(server).toContain('eq(expeditions.stav, "proběhlá")');
   });
 
-  it("tabulka pořadí s popiskem a záhlavím", () => {
+  it("seznam pořadí s popiskem pro čtečky", () => {
     const obsah = cti("src/pages/ZebrickyPage.tsx");
-    expect(obsah).toContain("<table");
-    expect(obsah).toContain("Pořadí");
+    expect(obsah).toContain("<SeznamKarta");
+    expect(obsah).toContain("Žebříček členů podle účasti a kilometrů");
+    expect(obsah).toContain("index + 1");
     expect(obsah).toContain("getZebricek");
   });
 
@@ -373,12 +374,13 @@ describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", ()
     const obsah = cti("src/pages/ZebrickyPage.tsx");
     expect(obsah).toContain("obdobi");
     expect(obsah).toContain("celkem");
-    expect(obsah).toContain("<select");
+    expect(obsah).toContain("setObdobi");
   });
 
-  it("zvýrazní přihlášeného (aria-current)", () => {
+  it("zvýrazní přihlášeného (aria-current přes ariaCurrent)", () => {
     const obsah = cti("src/pages/ZebrickyPage.tsx");
-    expect(obsah).toContain("aria-current");
+    expect(obsah).toContain("ariaCurrent={jsemJa");
+    expect(cti("src/components/SeznamKarta.tsx")).toContain("aria-current={ariaCurrent}");
     expect(obsah).toContain("user");
   });
 
@@ -396,7 +398,8 @@ describe("ZebrickyPage (tabulka + filtr období + zvýraznění sebe + CTA)", ()
 
   it("stav načítání přes role=status, žádné PII ani secrety", () => {
     const obsah = cti("src/pages/ZebrickyPage.tsx");
-    expect(obsah).toContain('role="status"');
+    expect(obsah).toContain("<PrazdnyStav");
+    expect(cti("src/components/PrazdnyStav.tsx")).toContain('role="status"');
     expect(obsah).not.toContain("access_token");
     expect(obsah.toLowerCase()).not.toContain("client_secret");
     expect(obsah).not.toContain("email");

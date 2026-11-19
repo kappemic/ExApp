@@ -33,16 +33,30 @@ export const fotkyHoverBgOkrPlne =
 
 export const fotkyTlacitkoZaklad = `${fotkyStisk} inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${FOTKY_FOCUS}`;
 
+/** Primary action — Nahrát (pen brand / smrk). */
+export const fotkyTlacitkoPrimarni = `${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} gap-1.5 rounded-xl bg-smrk px-3.5 text-sm font-semibold text-papir disabled:opacity-60`;
+
+/** Secondary outline — Přidat album, Stáhnout. */
+export const fotkyTlacitkoSekundarni = `${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrk} gap-1.5 rounded-xl border border-linka bg-povrch px-3.5 text-sm font-semibold text-inkoust disabled:opacity-60`;
+
+/** Filter chips on /fotky (pen: selected = brand fill). */
+export const fotkyChipZaklad =
+  "inline-flex min-h-8 items-center rounded-full border px-3 text-sm font-medium";
+
+export const fotkyChipVybrany = `${fotkyChipZaklad} border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust`;
+
+export const fotkyChipNeaktivni = `${fotkyChipZaklad} border-linka bg-povrch font-medium text-mech min-[90rem]:bg-transparent`;
+
 /** Collapsed disclosure trigger — compact width, not full bar */
-export const fotkyDisclosureSpoustec = `bez-prejeti inline-flex min-h-[44px] min-w-[44px] w-auto max-w-full touch-manipulation select-none items-center justify-center gap-2 rounded-md border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust shadow-denik transition-colors hover:bg-linka/60 ${FOTKY_FOCUS}`;
+export const fotkyDisclosureSpoustec = `bez-prejeti inline-flex min-h-[44px] min-w-[44px] w-auto max-w-full touch-manipulation select-none items-center justify-center gap-2 rounded-xl border border-pole bg-povrch px-3 text-sm font-semibold text-inkoust transition-colors ${fotkyHoverBgSmrk} ${FOTKY_FOCUS}`;
 
 /** Full-width panel under the trigger row (upload flow) */
 export const fotkyDisclosureObsah =
-  "fotky-disclosure-enter w-full min-w-0 max-w-xl origin-top-left rounded-md border-2 border-inkoust bg-papir p-2.5 shadow-denik motion-reduce:animate-none sm:p-3";
+  "fotky-disclosure-enter w-full min-w-0 max-w-xl origin-top-left rounded-md border border-linka bg-papir p-2.5 shadow-denik motion-reduce:animate-none sm:p-3";
 
 /** Floating panel anchored to the Nové album trigger — keeps sibling triggers on one row */
 export const fotkyDisclosurePopover =
-  "fotky-disclosure-enter absolute left-0 top-full z-20 mt-1.5 w-[min(calc(100vw-2rem),20rem)] min-w-[min(100%,16rem)] max-w-xl origin-top-left rounded-md border-2 border-inkoust bg-papir p-2.5 shadow-denik motion-reduce:animate-none sm:p-3";
+  "fotky-disclosure-enter absolute left-0 top-full z-20 mt-1.5 w-[min(calc(100vw-2rem),20rem)] min-w-[min(100%,16rem)] max-w-xl origin-top-left rounded-md border border-linka bg-papir p-2.5 shadow-denik motion-reduce:animate-none sm:p-3";
 
 /** Trigger row — horizontal, compact */
 export const fotkyNahravaciSpoustice =

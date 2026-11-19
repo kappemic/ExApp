@@ -267,7 +267,7 @@ export default function FotkaDialog({
           <p
             role="status"
             onMouseDown={zastav}
-            className="rounded-md border-2 border-inkoust bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
+            className="rounded-md border border-linka bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
           >
             Fotku se nepodařilo načíst.
           </p>

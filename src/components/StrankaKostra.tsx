@@ -132,10 +132,16 @@ export function KostraTabulka({
  * Full-page skeleton shown while the session is still unknown.
  * Mirrors the journal chrome so the first paint is the page, not a lone sentence.
  */
-export default function StrankaKostra(): JSX.Element {
+export default function StrankaKostra({
+  vnitrni = false,
+}: {
+  /** Uvnitř aplikace: hlavičku a spodní lištu už kreslí shell, kostra je nemá. */
+  vnitrni?: boolean;
+} = {}): JSX.Element {
   return (
-    <div aria-busy="true" aria-label="Načítám" className="flex min-h-dvh flex-col">
+    <div aria-busy="true" aria-label="Načítám" className={vnitrni ? "flex flex-col" : "flex min-h-dvh flex-col"}>
       <p className="sr-only">Načítám</p>
+      {!vnitrni ? (
       <header className="border-b border-linka">
         <div className="mx-auto flex h-16 w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 xl:px-12">
           <div className="flex items-center gap-2.5">
@@ -150,8 +156,9 @@ export default function StrankaKostra(): JSX.Element {
           <span className={`h-9 w-20 ${PULS}`} />
         </div>
       </header>
+      ) : null}
 
-      <main className="mx-auto w-full flex-1 px-4 pb-24 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
+      <main className="mx-auto w-full flex-1 px-5 pb-24 pt-6 sm:px-6 sm:pt-10 min-[90rem]:px-10 min-[90rem]:pt-11">
         <span className={`block h-3 w-40 ${PULS}`} />
         <span className={`mt-3 block h-10 w-52 max-w-full bg-inkoust/10 ${PULS}`} />
         <span className={`mt-4 block h-4 w-full max-w-md ${PULS}`} />
@@ -160,7 +167,7 @@ export default function StrankaKostra(): JSX.Element {
           {["w-2/3", "w-1/2", "w-3/5", "w-2/5"].map((sirka, index) => (
             <div
               key={index}
-              className="rounded-lg border-2 border-inkoust/15 bg-white/60 px-4 py-4 shadow-denik"
+              className="rounded-2xl border border-linka bg-povrch px-4 py-4 shadow-jemny"
             >
               <span className={`block h-4 ${sirka} ${PULS}`} />
               <span className={`mt-3 block h-3 w-1/3 ${PULS}`} />
@@ -169,6 +176,7 @@ export default function StrankaKostra(): JSX.Element {
         </div>
       </main>
 
+      {!vnitrni ? (
       <div
         aria-hidden="true"
         className="fixed inset-x-0 bottom-0 border-t border-linka bg-papir lg:hidden"
@@ -179,6 +187,7 @@ export default function StrankaKostra(): JSX.Element {
           ))}
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

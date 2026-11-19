@@ -1,3 +1,5 @@
+import Ikona, { type NazevIkony } from "../Ikona";
+import { rozlozSraz } from "../../lib/sraz";
 import {
   useCallback,
   useEffect,
@@ -8,6 +10,10 @@ import {
   type JSX,
   type MouseEvent,
 } from "react";
+import { Link } from "react-router-dom";
+import PrihlaseniVypravaSheet from "../vypravy/PrihlaseniVypravaSheet";
+import SmazatVypravuSheet from "../vypravy/SmazatVypravuSheet";
+import DochazkaVypravaSheet from "../vypravy/DochazkaVypravaSheet";
 import { useAuth } from "../../hooks/useAuth";
 import { apiBase } from "../../lib/api-base";
 import AvatarKruh from "../AvatarKruh";
@@ -65,9 +71,14 @@ import { useNahledFotkaId } from "../../hooks/useNahledFotkaId";
 import { rozdelViditelne } from "../../lib/sbaleny-seznam";
 import ExpeditionTrasaPrehled from "./ExpeditionTrasaPrehled";
 import StravaParovani from "./StravaParovani";
+import HlavickaZpet, { AkceHlavicky } from "../HlavickaZpet";
+
+type OtevrenyList = "prihlasit" | "smazat" | "dochazka" | null;
 
 export interface ExpeditionModalProps {
   expedice: Expedition;
+  /** When true, render as a full route page instead of a dimmed overlay. */
+  stranka?: boolean;
   onZavrit: () => void;
   /** Propíše účast / úpravu / uzavření do seznamu (kapacita, stav). */
   onAktualizace: (nova: Expedition) => void;
@@ -84,6 +95,8 @@ export interface ExpeditionModalProps {
    * nechává `false` — detail začíná odshora jako dosud.
    */
   startNaDiskuzi?: boolean;
+  /** `?prihlasit=1` (kalendář „Přihlásit se“): po načtení účastníků otevře přihlášení. */
+  startNaPrihlaseni?: boolean;
   /** Shown once after create when screenshot upload failed. */
   hlaseni?: string | null;
   /**
@@ -137,6 +150,12 @@ function statusUcastiPopisek(status: ApiUcastnik["status"]): string {
 }
 
 /** "Jede 11 lidí" before the trip; afterwards just the signed-up count. */
+function popisekDochazky(pocet: number): string {
+  if (pocet === 1) return "1 přihlášený";
+  if (pocet >= 2 && pocet <= 4) return `${pocet} přihlášení`;
+  return `${pocet} přihlášených`;
+}
+
 function textPoctuPrihlasenych(pocet: number, jede: boolean): string {
   if (pocet <= 0) return "";
   if (!jede) {
@@ -229,6 +248,28 @@ function JmenoUcastnika({
  * (aktivní člen, dual-guard): Upravit (reuse ExpeditionForm),
  * Odstranit (potvrzení), Uzavřít (bez vyplňování docházky).
  */
+function RadekLogistiky({
+  ikona,
+  popisek,
+  hodnota,
+}: {
+  ikona: NazevIkony;
+  popisek: string;
+  hodnota: string;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-povrch-2 text-mech">
+        <Ikona nazev={ikona} className="size-3.5" />
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[11px] font-medium text-ink-3">{popisek}</span>
+        <span className="truncate text-[12.5px] font-semibold text-inkoust">{hodnota}</span>
+      </span>
+    </div>
+  );
+}
+
 function srcSnimku(url: string): string {
   if (url.startsWith("/api/")) return `${apiBase()}${url}`;
   return url;
@@ -266,7 +307,8 @@ function MrizkaSnimku({
 const TLACITKO_ZAKLAD =
   "inline-flex min-h-[48px] items-center justify-center rounded-xl px-6 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60";
 const PAPIR = `${TLACITKO_ZAKLAD} bg-mlha text-inkoust hover:bg-linka`;
-const TLACITKO_HLAVNI = `${TLACITKO_ZAKLAD} bg-okr text-inkoust hover:bg-okr-tmavy`;
+const TLACITKO_HLAVNI =
+  "inline-flex min-h-11 items-center justify-center rounded-xl bg-smrk px-6 text-base font-semibold text-papir hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60";
 const TLACITKO_NEBEZPECI = `${TLACITKO_ZAKLAD} bg-red-800 text-papir hover:bg-red-900`;
 const TLACITKO_UZAVRIT = `${TLACITKO_ZAKLAD} bg-jantar text-papir hover:brightness-95`;
 const TLACITKO_NA_MLZE = `${TLACITKO_ZAKLAD} bg-papir text-inkoust hover:bg-linka`;
@@ -332,20 +374,24 @@ function TlacitkoDalsichUcastniku({
 
 export default function ExpeditionModal({
   expedice,
+  stranka = false,
   onZavrit,
   onAktualizace,
   onSmazana,
   neprectenaDiskuze = false,
   startNaDiskuzi = false,
+  startNaPrihlaseni = false,
   hlaseni = null,
   denik = false,
 }: ExpeditionModalProps): JSX.Element {
   const { user, isAdmin, muzeSpravovatVypravy } = useAuth();
+  const [otevrenyList, setOtevrenyList] = useState<OtevrenyList>(null);
   const nadpisId: string = useId();
   const popisId: string = useId();
   const ucastNadpisId: string = useId();
   const spravaNadpisId: string = useId();
   const filtrUzivateluId: string = useId();
+  const hledaniUcastiId: string = useId();
   const vyberUzivateleId: string = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const krizekRef = useRef<HTMLButtonElement>(null);
@@ -415,7 +461,7 @@ export default function ExpeditionModal({
   const [spravaChyba, setSpravaChyba] = useState<string | null>(null);
   const [potvrzOdebraniId, setPotvrzOdebraniId] = useState<string | null>(null);
   const [odebiraId, setOdebiraId] = useState<string | null>(null);
-  const [ucastVysunuto, setUcastVysunuto] = useState(false);
+  const [hledaniUcasti, setHledaniUcasti] = useState("");
   const [kronikaVysunuto, setKronikaVysunuto] = useState(false);
   const pridatTlacitkoRef = useRef<HTMLButtonElement>(null);
   const kotvaPridani = useRef<number | null>(null);
@@ -551,7 +597,7 @@ export default function ExpeditionModal({
     setPotvrzOdebraniId(null);
     setFiltrUzivatelu("");
     setVybranyUzivatelId("");
-    setUcastVysunuto(false);
+    setHledaniUcasti("");
     setKronikaVysunuto(false);
     setUzivateleStav("neaktivni");
     setUzivatele([]);
@@ -563,6 +609,7 @@ export default function ExpeditionModal({
      Schválně jen při mountu ([]) — refocus křížku při každé
      aktualizaci by házel scroll dialogu nahoru (viz onZavritRef). */
   useEffect(() => {
+    if (stranka) return;
     const predchoziFocus: Element | null = document.activeElement;
     /* Step 3 — deep-link cílí Diskuzi (vlastní efekt níže); běžné otevření
        drží dosavadní focus na křížku. */
@@ -607,7 +654,7 @@ export default function ExpeditionModal({
       if (predchoziFocus instanceof HTMLElement) predchoziFocus.focus();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stranka]);
 
   /* Step 3 — deep-link: otevření z Nástěnky / přímé URL doscrolluje na
      Diskuzi + dá jí focus. Mobil OK (start bloku, dialog je vlastní
@@ -643,8 +690,23 @@ export default function ExpeditionModal({
       ? undefined
       : ucastnici.find((u) => u.userId === user.id);
   const jsemPrihlasen: boolean = mojeUcast !== undefined;
+  const startNaPrihlaseniRef = useRef<boolean>(startNaPrihlaseni);
+  useEffect(() => {
+    if (!startNaPrihlaseniRef.current || ucastStav !== "hotovo" || user === null) return;
+    startNaPrihlaseniRef.current = false;
+    if (!jsemPrihlasen && stranka) setOtevrenyList("prihlasit");
+  }, [ucastStav, jsemPrihlasen, stranka, user]);
 
-  async function naPrihlasit(): Promise<void> {
+  function otevriPrihlaseni(): void {
+    if (stranka) {
+      setAkceChyba(null);
+      setOtevrenyList("prihlasit");
+      return;
+    }
+    void potvrdPrihlaseni();
+  }
+
+  async function potvrdPrihlaseni(): Promise<void> {
     setAkceBezi(true);
     setAkceChyba(null);
     const vysledek = await prihlasNaVypravu(expedice.id);
@@ -655,6 +717,7 @@ export default function ExpeditionModal({
     }
     onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
     await nacistiUcastniky(expedice.id);
+    setOtevrenyList(null);
   }
 
   async function naOdhlasit(): Promise<void> {
@@ -699,6 +762,11 @@ export default function ExpeditionModal({
     ucastnici.map((u) => normalizujJmeno(u.jmeno)),
   );
   const filtrNorm: string = normalizujJmeno(filtrUzivatelu);
+  const hledaniUcastiNorm: string = normalizujJmeno(hledaniUcasti);
+  const ucastniciKZobrazeni: ApiUcastnik[] =
+    hledaniUcastiNorm.length === 0
+      ? ucastnici
+      : ucastnici.filter((clovek) => normalizujJmeno(clovek.jmeno).includes(hledaniUcastiNorm));
   const dostupniUzivatele: UserListItem[] = uzivatele.filter((uzivatel) => {
     if (userIdUzEvidovanych.has(uzivatel.id)) return false;
     if (jmenaUzEvidovanych.has(normalizujJmeno(uzivatel.jmeno))) return false;
@@ -853,6 +921,15 @@ export default function ExpeditionModal({
     setCestaZpet((prev) => prev.filter((snimek) => snimek.id !== snimekId));
   }
 
+  function otevriSmazani(): void {
+    if (stranka) {
+      setSmazChyba(null);
+      setOtevrenyList("smazat");
+      return;
+    }
+    setRezim("ruseni");
+  }
+
   function naSmazat(): void {
     setMazeSe(true);
     setSmazChyba(null);
@@ -863,9 +940,23 @@ export default function ExpeditionModal({
         setSmazChyba(vysledek.chyba);
         return;
       }
+      setOtevrenyList(null);
       onSmazana(expedice.id);
-      zavriRef.current();
+      if (stranka) onZavrit();
+      else zavriRef.current();
     })();
+  }
+
+  function otevriDochazku(): void {
+    if (!muzeSpravovatVypravy) return;
+    if (stranka) {
+      setUzavriChyba(null);
+      setOtevrenyList("dochazka");
+      if (uzivateleStav === "neaktivni") void nacistiUzivatele();
+      return;
+    }
+    setUzavriChyba(null);
+    setRezim("uzavirani");
   }
 
   function naUzavrit(): void {
@@ -887,6 +978,26 @@ export default function ExpeditionModal({
       onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
       setUcastnici(vysledek.data.ucastnici);
       setRezim("prehled");
+      setOtevrenyList(null);
+    })();
+  }
+
+  function ulozDochazkuZeSheetu(
+    zaznamy: Array<{ ucastnikId: string; status: "ucastnil_se" | "omluven" }>,
+  ): void {
+    setUzaviraSe(true);
+    setUzavriChyba(null);
+    void (async (): Promise<void> => {
+      const vysledek = await uzavriVypravu(expedice.id, zaznamy);
+      setUzaviraSe(false);
+      if (!vysledek.ok) {
+        setUzavriChyba(vysledek.chyba);
+        return;
+      }
+      onAktualizaceRef.current(prevedExpedici(vysledek.data.expedice, expedice.nahledFotkaId));
+      setUcastnici(vysledek.data.ucastnici);
+      setOtevrenyList(null);
+      await nacistiUcastniky(expedice.id);
     })();
   }
 
@@ -919,32 +1030,171 @@ export default function ExpeditionModal({
 
   const akcentVypravy: string = paletaVypravy(expedice.id, expedice.datum).akcent;
 
-  return (
-    <div
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 lg:items-center lg:p-4 ${
-        denik ? `nocturne nahled-modal${zavira ? " nahled-zavira" : ""}` : ""
-      }`}
-      onMouseDown={naKlikBackdropu}
-      onWheel={(e) => e.preventDefault()}
-      onTouchMove={(e) => e.preventDefault()}
-      touch-action="none"
+  const fotkaVypravy =
+    probehla && fotkaId !== null ? (
+      <VypravaNahled expeditionId={expedice.id} fotkaId={fotkaId} probehla={probehla} />
+    ) : (
+      <ZastupnySnimek id={expedice.id} datum={expedice.datum} povolit={!probehla && !poTerminu} />
+    );
+
+  const panelClass =
+    stranka
+      ? "w-full min-w-0 bg-papir"
+      : `max-h-[100dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-papir shadow-denik lg:max-h-[92vh] lg:rounded-3xl ${
+          rezim === "prehled" ? "lg:max-w-5xl" : "lg:max-w-3xl"
+        }`;
+
+  const srazRozlozeny = rozlozSraz(expedice.sraz);
+  const railStranky = (
+    <>
+      <section aria-label="Obsazenost výpravy" className="flex flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+        <p className="text-[10.5px] font-bold uppercase tracking-[1.2px] text-ink-3">Přihlášeno</p>
+        <p className="flex items-end gap-3">
+          <span className="font-display text-[34px] font-bold leading-none tracking-[-1.2px] text-inkoust">
+            {expedice.kapacita.prihlaseno}
+          </span>
+          <span className="pb-0.5 text-[13px] font-medium text-ink-3">
+            {bezOmezeni ? "bez omezení" : `z ${expedice.kapacita.celkem} míst`}
+          </span>
+        </p>
+        <div
+          role="progressbar"
+          aria-label={`Obsazenost: ${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
+          aria-valuenow={expedice.kapacita.prihlaseno}
+          aria-valuemin={0}
+          aria-valuemax={bezOmezeni ? expedice.kapacita.prihlaseno : expedice.kapacita.celkem}
+          className="h-1.5 overflow-hidden rounded-full bg-[#ede8d9]"
+        >
+          <div
+            aria-hidden="true"
+            className={`h-full rounded-full ${probehla ? "bg-mech" : "bg-smrk"}`}
+            style={{ width: `${bezOmezeni ? 100 : procenta}%` }}
+          />
+        </div>
+        {!archiv && ucastStav === "hotovo" && user !== null ? (
+          jsemPrihlasen ? (
+            <button
+              type="button"
+              onClick={() => void naOdhlasit()}
+              disabled={akceBezi}
+              className="nahled-press inline-flex h-11 w-full items-center justify-center rounded-[11px] border border-linka bg-povrch text-[13.5px] font-semibold text-inkoust hover:bg-povrch-2 disabled:opacity-60"
+            >
+              {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => otevriPrihlaseni()}
+              disabled={akceBezi || plno}
+              className="nahled-press inline-flex h-11 w-full items-center justify-center gap-2 rounded-[11px] bg-akcent text-[13.5px] font-semibold text-papir hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {akceBezi ? "Přihlašuji…" : plno ? "Plně obsazeno" : "Přihlásit se"}
+              {!plno ? <Ikona nazev="arrow-right" className="size-3.5" /> : null}
+            </button>
+          )
+        ) : null}
+      </section>
+      <section aria-labelledby={`${nadpisId}-logistika`} className="flex flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+        <h3 id={`${nadpisId}-logistika`} className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">
+          Sraz a doprava
+        </h3>
+        {srazRozlozeny.misto.length > 0 ? (
+          <RadekLogistiky ikona="map-pin" popisek="Sraz" hodnota={srazRozlozeny.misto} />
+        ) : null}
+        {srazRozlozeny.cas !== null ? (
+          <RadekLogistiky ikona="train-front" popisek="Odjezd" hodnota={srazRozlozeny.cas} />
+        ) : null}
+        <RadekLogistiky ikona="calendar" popisek="Termín" hodnota={formatRozsahData(expedice.datum, expedice.datumDo)} />
+        {expedice.trasaOdkaz.trim().length > 0 ? (
+          <a
+            href={expedice.trasaOdkaz}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nahled-press flex items-center gap-2.5 rounded-lg hover:bg-povrch-2/60"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-povrch-2 text-mech">
+              <Ikona nazev="link" className="size-3.5" />
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[11px] font-medium text-ink-3">Trasa</span>
+              <span className="text-[12.5px] font-semibold text-smrk underline underline-offset-2">Zobrazit naplánovanou trasu</span>
+            </span>
+          </a>
+        ) : null}
+      </section>
+    </>
+  );
+
+  const diskuzeSekce = (
+    <section
+      ref={diskuzeRef}
+      id="diskuze"
+      tabIndex={-1}
+      aria-label={`Diskuze k výpravě ${expedice.nazev}`}
+      data-deep-link-cil="diskuze"
+      className="mt-5 scroll-mt-4 focus-visible:outline-3 lg:mt-0 focus-visible:outline-smrk focus-visible:outline-offset-2"
     >
+      {diskuzeNeprectena && (
+        <p className="mb-2 flex min-h-[24px] items-center gap-2 text-base font-bold text-red-800">
+          <NeprectenaTecka
+            viditelna={diskuzeNeprectena}
+            velikost="nadpis"
+            nazevVypravy={expedice.nazev}
+          />
+          <span>Nové zprávy v diskuzi</span>
+        </p>
+      )}
+      <DiskuzeBox
+        idVypravy={expedice.id}
+        nazevVypravy={expedice.nazev}
+        organizatorId={expedice.organizatorId ?? null}
+        klidna={probehla}
+      />
+    </section>
+  );
+
+  const vnitrek = (
+    <>
+      {stranka ? (
+        <div className="sticky top-0 z-20 bg-papir/95 px-5 pb-2 pt-4 backdrop-blur-sm min-[90rem]:hidden">
+          <HlavickaZpet
+            zpet="/vypravy"
+            zpetPopisek="Zpět na výpravy"
+            onZpet={() => onZavrit()}
+            titulek="Výprava"
+            akce={
+              muzeSpravovatVypravy && rezim === "prehled" ? (
+                <AkceHlavicky
+                  onClick={() => {
+                    setServerChyba(null);
+                    setServerChybyPoli({});
+                    setRezim("upravy");
+                  }}
+                >
+                  Upravit
+                </AkceHlavicky>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : null}
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        role={stranka ? "main" : "dialog"}
+        aria-modal={stranka ? undefined : true}
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        /* chat-scroll-fix: dialog je jediný vnější scroll detailu.
-           Diskuze (DiskuzeBox `data-vlakno-scroll`) má vlastní vnitřní
-           scroll-kartu max-h-80 — scroll detailu celým vláknem jen odjede,
-           chat nikoho nenásleduje. `overscroll-contain` brání propadu. */
-        className={`max-h-[100dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-papir shadow-denik lg:max-h-[92vh] lg:rounded-3xl ${
-          rezim === "prehled" ? "lg:max-w-5xl" : "lg:max-w-3xl"
-        }`}
+        className={panelClass}
       >
+        {!stranka ? (
         <div className="relative">
-          <div className="relative h-48 w-full overflow-hidden sm:h-56 lg:h-64">
+          <div
+            className={`relative w-full overflow-hidden ${
+              stranka
+                ? "h-52 sm:h-60 min-[90rem]:h-72"
+                : "h-48 sm:h-56 lg:h-64"
+            }`}
+          >
             {probehla && fotkaId !== null ? (
               <VypravaNahled
                 expeditionId={expedice.id}
@@ -959,6 +1209,7 @@ export default function ExpeditionModal({
               />
             )}
           </div>
+          {!stranka ? (
           <button
             ref={krizekRef}
             type="button"
@@ -968,21 +1219,44 @@ export default function ExpeditionModal({
           >
             <span aria-hidden="true">×</span>
           </button>
+          ) : null}
         </div>
-        <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
-          <p className="text-sm font-semibold" style={{ color: akcentVypravy }}>
+        ) : null}
+        <div
+          className={
+            stranka
+              ? "mx-auto max-w-5xl px-5 pb-24 pt-2 sm:px-6 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11"
+              : "p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 lg:p-8"
+          }
+        >
+          {stranka && rezim === "prehled" ? (
+            <div className="relative mb-5 h-[180px] overflow-hidden rounded-2xl min-[90rem]:hidden">
+              {fotkaVypravy}
+              <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl border border-black/10" />
+            </div>
+          ) : null}
+          <div className={stranka && rezim === "prehled" ? "min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_auto] min-[90rem]:items-end min-[90rem]:gap-x-8" : ""}>
+          <div className="min-w-0">
+          <p
+            className={`text-sm font-semibold ${stranka && rezim === "prehled" ? "sr-only" : ""}`}
+            style={{ color: akcentVypravy }}
+          >
             {nadpisRezim}
           </p>
           <h2
             id={nadpisId}
-            className="mt-1 break-words text-3xl font-bold leading-tight text-inkoust sm:text-4xl"
+            className={
+              stranka
+                ? "break-words font-display text-2xl font-bold leading-tight tracking-[-0.4px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]"
+                : "mt-1 break-words text-3xl font-bold leading-tight text-inkoust sm:text-4xl"
+            }
           >
             {expedice.nazev}
           </h2>
           <dl
             id={popisId}
             className={
-              rezim === "prehled"
+              rezim === "prehled" && !stranka
                 ? "mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-base"
                 : "sr-only"
             }
@@ -994,6 +1268,13 @@ export default function ExpeditionModal({
             <dt className="text-mech">Sraz</dt>
             <dd className="m-0 break-words font-medium text-inkoust">{expedice.sraz}</dd>
           </dl>
+          {stranka && rezim === "prehled" ? (
+            <p aria-hidden="true" className="mt-1.5 text-[13.5px] text-mech min-[90rem]:mt-3 min-[90rem]:text-[15px]">
+              {formatRozsahData(expedice.datum, expedice.datumDo)}
+              {expedice.sraz.trim().length > 0 ? ` · sraz ${expedice.sraz}` : ""}
+            </p>
+          ) : null}
+          </div>
 
           {rezim === "prehled" && !archiv && ucastStav === "hotovo" && akceChyba !== null ? (
             <p role="alert" className="mt-3 text-sm font-semibold text-red-800">
@@ -1002,28 +1283,58 @@ export default function ExpeditionModal({
           ) : null}
 
           {rezim === "prehled" && !archiv && ucastStav === "hotovo" && user !== null ? (
-            <div className="mt-4">
+            <div className={stranka ? "mt-5 flex flex-col gap-2 min-[90rem]:mt-0 min-[90rem]:flex-row min-[90rem]:items-center min-[90rem]:gap-2.5" : "mt-4"}>
+              {stranka && muzeSpravovatVypravy ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServerChyba(null);
+                    setServerChybyPoli({});
+                    setRezim("upravy");
+                  }}
+                  className="nahled-press hidden h-[46px] items-center gap-2 rounded-xl border border-linka bg-povrch px-[18px] text-sm font-semibold text-inkoust hover:bg-povrch-2 min-[90rem]:inline-flex"
+                >
+                  <Ikona nazev="pen-line" className="size-4 text-mech" />
+                  Upravit
+                </button>
+              ) : null}
               {jsemPrihlasen ? (
                 <button
                   type="button"
                   onClick={() => void naOdhlasit()}
                   disabled={akceBezi}
                   title={akceBezi ? "Odhlašování probíhá…" : "Odhlásit se z výpravy"}
-                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:w-auto"
+                  className={
+                    stranka
+                      ? "nahled-press inline-flex h-12 w-full items-center justify-center rounded-xl border border-linka bg-povrch px-6 text-sm font-semibold text-inkoust hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 min-[90rem]:h-[46px] min-[90rem]:w-auto min-[90rem]:px-[18px]"
+                      : "inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:w-auto"
+                  }
                 >
                   {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
                 </button>
               ) : (
                 <button
                   type="button"
-                  onClick={() => void naPrihlasit()}
+                  onClick={() => otevriPrihlaseni()}
                   disabled={akceBezi || plno}
                   title={plno ? "Výprava je plná" : "Přihlásit se na výpravu"}
-                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  className={
+                    stranka
+                      ? "nahled-press inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-smrk px-6 text-sm font-semibold text-papir hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60 min-[90rem]:h-[46px] min-[90rem]:w-auto min-[90rem]:bg-akcent min-[90rem]:px-[18px]"
+                      : "inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-smrk px-6 text-base font-semibold text-papir hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  }
                 >
+                  {stranka && !plno ? <Ikona nazev="check" className="hidden size-4 min-[90rem]:block" /> : null}
                   {akceBezi ? "Přihlašuji…" : plno ? "Plně obsazeno" : "Přihlásit se"}
                 </button>
               )}
+            </div>
+          ) : null}
+          </div>
+          {stranka && rezim === "prehled" ? (
+            <div className="relative mt-8 hidden h-[300px] overflow-hidden rounded-2xl min-[90rem]:block">
+              {fotkaVypravy}
+              <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl border border-black/[0.08]" />
             </div>
           ) : null}
 
@@ -1035,10 +1346,23 @@ export default function ExpeditionModal({
 
           {rezim === "prehled" && (
             <>
-              <div className={probehla ? "mt-2" : "lg:mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-10"}>
-              <div className="min-w-0">
+              <div className={stranka ? "mt-7 min-[90rem]:mt-7 min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_340px] min-[90rem]:items-start min-[90rem]:gap-7" : probehla ? "mt-2" : "lg:mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-10"}>
+              <div className={stranka ? "flex min-w-0 flex-col gap-7 min-[90rem]:gap-5 [&>*]:mt-0" : "min-w-0"}>
+              {(stranka
+                ? expedice.popis.trim().length > 0 || cestaTam.length > 0 || cestaZpet.length > 0 || expedice.trasaOdkaz.trim().length > 0
+                : true) ? (
+              <div className={stranka ? "rounded-2xl border border-linka bg-povrch p-5 [&>*:first-child]:mt-0" : ""}>
+              {stranka ? (
+                <h3 className="font-display text-lg font-bold tracking-[-0.4px] text-inkoust">O výpravě</h3>
+              ) : null}
               {expedice.popis.trim().length > 0 && (
-                <p className="mt-3 break-words border-t border-linka pt-3 text-base leading-relaxed">
+                <p
+                  className={
+                    stranka
+                      ? "mt-4 break-words text-sm leading-relaxed text-mech"
+                      : "mt-3 break-words border-t border-linka pt-3 text-base leading-relaxed"
+                  }
+                >
                   {expedice.popis}
                 </p>
               )}
@@ -1062,6 +1386,8 @@ export default function ExpeditionModal({
                   </a>
                 </p>
               )}
+              </div>
+              ) : null}
 
               {archiv ? (
                 <div
@@ -1082,13 +1408,10 @@ export default function ExpeditionModal({
                       {!probehla ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            setUzavriChyba(null);
-                            setRezim("uzavirani");
-                          }}
+                          onClick={otevriDochazku}
                           className={TLACITKO_UZAVRIT}
                         >
-                          Uzavřít výpravu
+                          {stranka ? "Docházka" : "Uzavřít výpravu"}
                         </button>
                       ) : null}
                       <button
@@ -1112,7 +1435,7 @@ export default function ExpeditionModal({
                   ) : null}
                 </div>
               ) : (
-              <div className="mt-5 rounded-lg border border-pole bg-papir p-4">
+              <div className={stranka ? "hidden" : "mt-5 rounded-lg border border-pole bg-papir p-4"}>
                 <p className="text-base font-semibold tabular-nums">
                   {bezOmezeni ? (
                     <>
@@ -1160,11 +1483,34 @@ export default function ExpeditionModal({
               )}
 
               {/* Kdo jede / kdo byl vidí každý, i bez správy výpravy. */}
-              <section aria-labelledby={ucastNadpisId} className="mt-5">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 id={ucastNadpisId} className="font-display text-xl font-bold text-inkoust">
-                    {probehla ? "Kdo byl" : poTerminu ? "Přihlášení" : "Kdo jede"}
-                  </h3>
+              <section
+                aria-labelledby={ucastNadpisId}
+                className={stranka ? "min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:px-5 min-[90rem]:pb-4 min-[90rem]:pt-1" : "mt-5"}
+              >
+                <div className={`flex items-center justify-between gap-3 ${stranka ? "min-[90rem]:-mx-5 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:px-5 min-[90rem]:pb-1" : ""}`}>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <h3
+                      id={ucastNadpisId}
+                      className={stranka ? "font-display text-lg font-bold text-inkoust min-[90rem]:text-[17px] min-[90rem]:tracking-[-0.3px]" : "font-display text-xl font-bold text-inkoust"}
+                    >
+                      {probehla ? "Kdo byl" : poTerminu ? "Přihlášení" : "Kdo jede"}
+                    </h3>
+                    {stranka ? (
+                      <span className="text-[13px] tabular-nums text-ink-3 min-[90rem]:rounded-full min-[90rem]:bg-povrch-2 min-[90rem]:px-2 min-[90rem]:py-[3px] min-[90rem]:text-[10.5px] min-[90rem]:font-semibold min-[90rem]:text-mech">
+                        {bezOmezeni
+                          ? `${expedice.kapacita.prihlaseno}`
+                          : `${expedice.kapacita.prihlaseno} z ${expedice.kapacita.celkem}`}
+                      </span>
+                    ) : null}
+                  </div>
+                  {stranka && ucastStav === "hotovo" && ucastnici.length > 0 ? (
+                    <Link
+                      to={`/vypravy/${expedice.id}/kdo-jede`}
+                      className="text-sm font-semibold text-smrk underline underline-offset-2"
+                    >
+                      Zobrazit všechny
+                    </Link>
+                  ) : null}
                   {ucastStav === "hotovo" && (
                     <button
                       type="button"
@@ -1213,10 +1559,30 @@ export default function ExpeditionModal({
                           : "Zatím se nikdo nepřihlásil. Buď první."}
                       </p>
                     ) : (
-                      <PrehledPrihlasenych
-                        ucastnici={ucastnici}
-                        jede={!poTerminu && !probehla}
-                      />
+                      <>
+                        <label htmlFor={hledaniUcastiId} className="mt-3 block text-sm font-semibold text-inkoust">
+                          Hledat jméno
+                        </label>
+                        <input
+                          id={hledaniUcastiId}
+                          type="search"
+                          value={hledaniUcasti}
+                          onChange={(e) => setHledaniUcasti(e.target.value)}
+                          placeholder="Jméno"
+                          autoComplete="off"
+                          className="mt-1 block min-h-11 w-full rounded-xl border border-pole bg-papir px-3 text-base text-inkoust placeholder:text-mech"
+                        />
+                        {ucastniciKZobrazeni.length === 0 ? (
+                          <p role="status" className="mt-3 text-base text-mech">
+                            Nikdo takový v seznamu není.
+                          </p>
+                        ) : (
+                          <PrehledPrihlasenych
+                            ucastnici={ucastniciKZobrazeni}
+                            jede={!poTerminu && !probehla}
+                          />
+                        )}
+                      </>
                     )}
 
                   </>
@@ -1225,10 +1591,12 @@ export default function ExpeditionModal({
 
               {archiv && (
                 <div className="mt-8 grid w-full items-stretch gap-8 sm:grid-cols-2 sm:gap-10 [&>section]:mt-0 [&>section]:h-full">
-                  <ExpeditionTrasaPrehled
-                    expeditionId={expedice.id}
-                    probehla={archiv}
-                  />
+                  {probehla && (
+                    <ExpeditionTrasaPrehled
+                      expeditionId={expedice.id}
+                      probehla
+                    />
+                  )}
                   <ExpeditionPhotos
                     expeditionId={expedice.id}
                     probehla={archiv}
@@ -1241,38 +1609,15 @@ export default function ExpeditionModal({
                 </div>
               )}
 
+              {stranka ? diskuzeSekce : null}
               </div>
-              <div className={probehla ? "mt-8 min-w-0" : "min-w-0 lg:border-l lg:border-linka lg:pl-8"}>
+              <div className={stranka ? "hidden min-[90rem]:flex min-[90rem]:flex-col min-[90rem]:gap-5" : probehla ? "mt-8 min-w-0" : "min-w-0 lg:border-l lg:border-linka lg:pl-8"}>
               {/* Diskuze — živé vlákno (GET PUBLIC čte i anonym,
                   POST USER píše přihlášený). Vlastní sekce s nadpisem
                   uvnitř DiskuzeBoxu (role=log + aria-live, composer
                   44px+, optimistic insert s rollbackem). Step 3: cíl
                   deep-linku (`id="diskuze"`, focusovatelná pro doscroll). */}
-              <section
-                ref={diskuzeRef}
-                id="diskuze"
-                tabIndex={-1}
-                aria-label={`Diskuze k výpravě ${expedice.nazev}`}
-                data-deep-link-cil="diskuze"
-                className="mt-5 scroll-mt-4 focus-visible:outline-3 lg:mt-0 focus-visible:outline-smrk focus-visible:outline-offset-2"
-              >
-                {diskuzeNeprectena && (
-                  <p className="mb-2 flex min-h-[24px] items-center gap-2 text-base font-bold text-red-800">
-                    <NeprectenaTecka
-                      viditelna={diskuzeNeprectena}
-                      velikost="nadpis"
-                      nazevVypravy={expedice.nazev}
-                    />
-                    <span>Nové zprávy v diskuzi</span>
-                  </p>
-                )}
-                <DiskuzeBox
-                  idVypravy={expedice.id}
-                  nazevVypravy={expedice.nazev}
-                  organizatorId={expedice.organizatorId ?? null}
-                  klidna={probehla}
-                />
-              </section>
+              {stranka ? railStranky : diskuzeSekce}
 
               </div>
               </div>
@@ -1300,22 +1645,16 @@ export default function ExpeditionModal({
                     {probiha && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setUzavriChyba(null);
-                          setRezim("uzavirani");
-                        }}
+                        onClick={otevriDochazku}
                         className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-jantar px-6 text-base font-semibold text-papir motion-safe:transition-colors motion-safe:hover:brightness-95"
                       >
-                        Uzavřít
+                        {stranka ? "Docházka" : "Uzavřít"}
                       </button>
                     )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setSmazChyba(null);
-                        setRezim("ruseni");
-                      }}
-                      aria-label={`Odstranit výpravu ${expedice.nazev}`}
+                      onClick={otevriSmazani}
+                      aria-label={`Smazat výpravu ${expedice.nazev}`}
                       title="Odstranit výpravu"
                       className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-lg text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
                     >
@@ -1634,12 +1973,13 @@ export default function ExpeditionModal({
             </div>
           )}
 
-          {rezim === "ruseni" && (
+          {!stranka && rezim === "ruseni" && (
             <div className="mt-6 rounded-2xl border border-red-800/30 bg-red-50 p-5">
               <h3 className="font-display break-words text-xl font-bold text-inkoust">Opravdu odstranit „{expedice.nazev}"?</h3>
               <p className="mt-1 text-sm text-inkoust/70">
-                Smaže se i seznam {ucastnici.length}{" "}
-                {ucastnici.length === 1 ? "přihlášeného" : ucastnici.length >= 2 && ucastnici.length <= 4 ? "přihlášených" : "přihlášených"}.
+                {ucastStav === "hotovo"
+                  ? `Smaže se docházka: ${popisekDochazky(ucastnici.length)}.`
+                  : "Seznam přihlášených ještě není načtený."}{" "}
                 Tahle akce nejde vzít zpět.
               </p>
               {smazChyba !== null && (
@@ -1668,7 +2008,7 @@ export default function ExpeditionModal({
             </div>
           )}
 
-          {rezim === "uzavirani" && (
+          {!stranka && rezim === "uzavirani" && (
             <div className="mt-6">
               <h3 className="font-display text-xl font-bold text-inkoust">Uzavřít výpravu</h3>
               <p className="mt-1 text-sm text-inkoust/70">
@@ -1707,7 +2047,7 @@ export default function ExpeditionModal({
                   onClick={naUzavrit}
                   disabled={uzaviraSe || ucastnici.length === 0 || ucastStav !== "hotovo"}
                   title={ucastnici.length === 0 ? "Bez přihlášených nelze uzavřít" : "Uzavřít výpravu"}
-                  className={TLACITKO_UZAVRIT}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-smrk px-6 text-base font-semibold text-papir hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {uzaviraSe ? "Uzavírám…" : "Uzavřít výpravu"}
                 </button>
@@ -1716,6 +2056,71 @@ export default function ExpeditionModal({
           )}
         </div>
       </div>
+    </>
+  );
+
+  const listy = (
+    <>
+      <PrihlaseniVypravaSheet
+        otevreno={otevrenyList === "prihlasit"}
+        expedice={expedice}
+        odesilaSe={akceBezi}
+        chyba={akceChyba}
+        onZavrit={() => {
+          setOtevrenyList(null);
+          setAkceChyba(null);
+        }}
+        onPotvrdit={() => void potvrdPrihlaseni()}
+      />
+      <SmazatVypravuSheet
+        otevreno={otevrenyList === "smazat"}
+        expedice={expedice}
+        pocetUcastniku={ucastnici.length}
+        mazeSe={mazeSe}
+        chyba={smazChyba}
+        onZavrit={() => {
+          setOtevrenyList(null);
+          setSmazChyba(null);
+        }}
+        onPotvrdit={naSmazat}
+      />
+      <DochazkaVypravaSheet
+        otevreno={otevrenyList === "dochazka"}
+        ucastnici={ucastnici}
+        uzivatele={uzivatele}
+        nacitaUzivatele={uzivateleStav === "nacitani"}
+        ukladaSe={uzaviraSe}
+        chyba={uzavriChyba}
+        onZavrit={() => {
+          setOtevrenyList(null);
+          setUzavriChyba(null);
+        }}
+        onUlozit={ulozDochazkuZeSheetu}
+      />
+    </>
+  );
+
+  if (stranka) {
+    return (
+      <div className="nocturne min-h-dvh w-full bg-papir text-inkoust">
+        <div className="mx-auto w-full max-w-6xl min-[90rem]:max-w-none">{vnitrek}</div>
+        {listy}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-inkoust/50 lg:items-center lg:p-4 ${
+        denik ? `nocturne nahled-modal${zavira ? " nahled-zavira" : ""}` : ""
+      }`}
+      onMouseDown={naKlikBackdropu}
+      onWheel={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      touch-action="none"
+    >
+      {vnitrek}
+      {listy}
     </div>
   );
 }

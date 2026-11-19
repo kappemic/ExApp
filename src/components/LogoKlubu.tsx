@@ -2,7 +2,7 @@ import type { JSX } from "react";
 
 const VYSKA: Record<"sm" | "lg", string> = {
   /** Header bar. Tall enough to read, short enough to sit in h-16. */
-  sm: "h-12",
+  sm: "h-9",
   /** Beside a page title. The crest is a narrow shield, so height carries the weight. */
   lg: "h-20",
 };

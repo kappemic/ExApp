@@ -1,9 +1,5 @@
 import type { JSX } from "react";
-import {
-  fotkyHoverBgSmrk,
-  fotkyHoverBgOkrPlne,
-  fotkyTlacitkoZaklad,
-} from "./fotky-ui";
+import { fotkyHoverBgSmrk, fotkyTlacitkoSekundarni, fotkyTlacitkoZaklad } from "./fotky-ui";
 
 interface FotkyStahovaciHlavickaProps {
   maFotky: boolean;
@@ -32,10 +28,10 @@ export default function FotkyStahovaciHlavicka({
 }: FotkyStahovaciHlavickaProps): JSX.Element | null {
   if (!maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} rounded-lg border-2 px-3 text-sm font-bold disabled:opacity-60`;
-  const akcni = `${zaklad} w-full border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-smrk/35 sm:w-auto ${fotkyHoverBgSmrk}`;
-  const akcniPlne = `${zaklad} w-full border-okr bg-okr text-inkoust shadow-denik sm:w-auto ${fotkyHoverBgOkrPlne}`;
-  const neutralni = `${zaklad} w-full border-inkoust bg-papir text-inkoust shadow-denik sm:w-auto`;
+  const zaklad = `${fotkyTlacitkoZaklad} rounded-lg border px-3 text-sm font-bold disabled:opacity-60`;
+  const akcni = `${zaklad} w-full border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-smrk/35 sm:w-auto ${fotkyHoverBgSmrk}`;
+  const akcniPlne = `${zaklad} w-full border-smrk bg-smrk text-papir sm:w-auto ${fotkyHoverBgSmrk}`;
+  const neutralni = `${zaklad} w-full border-linka bg-povrch text-inkoust shadow-denik sm:w-auto`;
 
   if (!stahovaciRezim) {
     return (
@@ -44,9 +40,10 @@ export default function FotkyStahovaciHlavicka({
         onClick={onZacniStahovani}
         aria-label="Stáhnout"
         title="Stáhnout"
-        className={`${fotkyTlacitkoZaklad} nahled-press h-11 w-11 rounded-lg border-2 border-okr bg-okr p-0 text-inkoust shadow-denik`}
+        className={`${fotkyTlacitkoSekundarni} nahled-press min-h-11 gap-1.5 px-3`}
       >
         <IkonaStazeni />
+        <span className="sr-only sm:not-sr-only sm:inline">Stáhnout</span>
       </button>
     );
   }

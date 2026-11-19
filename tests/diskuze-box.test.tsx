@@ -335,7 +335,7 @@ describe("DiskuzeBox zdroj-kontrakt (a11y + deník + 44px + optimistic)", () => 
 
   it("výpravní zápis bez stínu karty, soukromý chat dál v bublině", () => {
     expect(diskuze).toContain('podoba="zapis"');
-    expect(diskuze).toContain("bg-papir");
+    expect(diskuze).toContain("bg-povrch");
     expect(diskuze).toContain("border-pole");
     expect(diskuze).not.toContain("shadow-denik");
     expect(bublina).toContain("border-inkoust");
@@ -374,8 +374,10 @@ describe("ExpeditionModal slot + ChatPage proklik (zdroj-kontrakt)", () => {
     );
     expect(modal).toContain("<DiskuzeBox");
     expect(modal).toContain("idVypravy={expedice.id}");
-    const poziceDiskuze: number = modal.indexOf("<DiskuzeBox");
+    // Diskuze je v proměnné `diskuzeSekce`; hlídá se místo, kde se vykresluje.
+    const poziceDiskuze: number = modal.lastIndexOf("diskuzeSekce");
     const poziceTrasy: number = modal.indexOf("<ExpeditionTrasaPrehled");
+    expect(modal.indexOf("<DiskuzeBox")).toBeGreaterThan(-1);
     expect(poziceDiskuze).toBeGreaterThan(-1);
     if (poziceTrasy > -1) {
       expect(poziceTrasy).toBeLessThan(poziceDiskuze);
@@ -385,7 +387,7 @@ describe("ExpeditionModal slot + ChatPage proklik (zdroj-kontrakt)", () => {
   it("ChatPage je seznam konverzací + detail (Step 3, pinned Důležité + General)", () => {
     const chat: string = ctiZdroj("src/pages/ChatPage.tsx");
     expect(chat).not.toContain("Brzy");
-    expect(chat).toContain("Chaty");
+    expect(chat).toContain("Chat");
     expect(chat).toContain("ConversationList");
     expect(chat).toContain("KonverzaceDetail");
     expect(chat).toContain("useKonverzacePrehled");

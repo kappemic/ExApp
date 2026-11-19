@@ -38,13 +38,13 @@ export default function FotkyKosHlavicka({
 }: FotkyKosHlavickaProps): JSX.Element | null {
   if (!maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} min-w-0 w-full rounded-lg border-2 px-2.5 text-center text-xs font-bold leading-tight whitespace-normal disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm`;
-  const neutralni = `${zaklad} border-inkoust bg-papir text-inkoust shadow-denik`;
-  const spravovat = `${fotkyTlacitkoZaklad} w-auto rounded-lg border-2 border-inkoust bg-papir px-3 text-sm font-bold text-inkoust shadow-denik ring-1 ring-smrk/30`;
-  const obnovit = `${zaklad} border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-smrk/35 ${fotkyHoverBgSmrk}`;
+  const zaklad = `${fotkyTlacitkoZaklad} min-w-0 w-full rounded-lg border px-2.5 text-center text-xs font-bold leading-tight whitespace-normal disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm`;
+  const neutralni = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik`;
+  const spravovat = `${fotkyTlacitkoZaklad} w-auto rounded-lg border border-linka bg-papir px-3 text-sm font-bold text-inkoust shadow-denik ring-1 ring-smrk/30`;
+  const obnovit = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-smrk/35 ${fotkyHoverBgSmrk}`;
   const obnovitPlne = `${zaklad} border-okr bg-okr text-inkoust shadow-denik ${fotkyHoverBgOkrPlne}`;
-  const destruktivniPlne = `${zaklad} border-inkoust bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
-  const destruktivniOkraj = `${zaklad} border-inkoust bg-papir text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
+  const destruktivniPlne = `${zaklad} border-jantar bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
+  const destruktivniOkraj = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
 
   if (!spravovaciRezim) {
     return (

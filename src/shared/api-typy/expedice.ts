@@ -233,6 +233,7 @@ export const VALIDACNI_ZPRAVY = {
   hesloDlouhe: "Heslo může mít nejvýš 128 znaků.",
   kodPovinny: "Zadej pozvánkový kód.",
   kodNeplatnyTvar: "Kód musí mít 8 znaků (bez 0, O, 1, I).",
+  kodNeznamy: "Kód je neplatný. Zkontroluj ho, nebo požádej vedoucí o nový.",
   expediceNazevPovinny: "Zadej název výpravy.",
   expediceNazevKratky: "Název výpravy musí mít aspoň 3 znaky.",
   expediceNazevDlouhy: "Název výpravy může mít nejvýš 120 znaků.",
@@ -418,6 +419,7 @@ export function expediceListUrl(query: ExpediceListQuery): string {
   if (query.page !== undefined) params.set("page", String(query.page));
   if (query.pageSize !== undefined)
     params.set("pageSize", String(query.pageSize));
+  if (query.ucastnik !== undefined) params.set("ucastnik", query.ucastnik);
   const qs = params.toString();
   return qs.length > 0 ? `${EXPEDITIONS_PATH}?${qs}` : EXPEDITIONS_PATH;
 }
@@ -454,6 +456,8 @@ export interface ExpediceListQuery {
   stav?: StavVypravy;
   page?: number;
   pageSize?: number;
+  /** Jen výpravy, kde je účet v `participants`. Neznámé id → prázdný seznam. */
+  ucastnik?: string;
 }
 
 /** Vytvoření výpravy (jen ADMIN). Expirace ani stav se neposílají. */

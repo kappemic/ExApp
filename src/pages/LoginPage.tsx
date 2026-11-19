@@ -1,11 +1,18 @@
 import { useState, type FormEvent, type JSX } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import LogoKlubu from "../components/LogoKlubu";
+import AuthRozlozeni from "../components/Auth/AuthRozlozeni";
+import {
+  AUTH_VSTUP,
+  AUTH_VSTUP_CHYBA,
+  AuthPrimarniTlacitko,
+  AuthVstup,
+  IkonaZamku,
+} from "../components/Auth/authVstupy";
 import { useAuth, type PolePrihlaseni } from "../hooks/useAuth";
 
 /**
- * Bezpečný návrat po loginu — jen vnitřní cesta.
- * Odmítne absolutní URL, `//evil` i prázdnou hodnotu.
+ * Safe post-login redirect — internal paths only.
+ * Rejects absolute URLs, `//evil`, and empty values.
  */
 export function bezpecneFrom(hodnota: string | null): string {
   if (hodnota === null || !hodnota.startsWith("/") || hodnota.startsWith("//") || hodnota === "/") {
@@ -14,14 +21,9 @@ export function bezpecneFrom(hodnota: string | null): string {
   return hodnota;
 }
 
-const VSTUP_TRIDY =
-  "min-h-[44px] w-full rounded-xl border border-pole bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 transition-colors focus:border-smrk focus:outline-none motion-reduce:transition-none";
-const VSTUP_CHYBA_TRIDY =
-  "min-h-[44px] w-full rounded-xl border-2 border-red-800 bg-papir px-3.5 py-2.5 text-base text-inkoust placeholder:text-inkoust/40 focus:border-red-800 focus:outline-none";
-
 type ChybyPoli = Partial<Record<PolePrihlaseni, string>>;
 
-/** Přihlášení e-mailem + heslem — prezentace, logika žije v useAuth. */
+/** Email + password sign-in — logic lives in useAuth. */
 export default function LoginPage(): JSX.Element {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -30,6 +32,7 @@ export default function LoginPage(): JSX.Element {
   const [email, setEmail] = useState("");
   const [heslo, setHeslo] = useState("");
   const [ukazatHeslo, setUkazatHeslo] = useState(false);
+  const [zustat, setZustat] = useState(false);
   const [chyby, setChyby] = useState<ChybyPoli>({});
   const [formChyba, setFormChyba] = useState<string | null>(null);
   const [odesilaSe, setOdesilaSe] = useState(false);
@@ -39,7 +42,7 @@ export default function LoginPage(): JSX.Element {
     if (odesilaSe) return;
     setOdesilaSe(true);
     setFormChyba(null);
-    const vysledek = await login({ email, heslo });
+    const vysledek = await login({ email, heslo, zustat });
     if (vysledek.uspech) {
       navigate(navrat, { replace: true });
       return;
@@ -49,64 +52,52 @@ export default function LoginPage(): JSX.Element {
     setOdesilaSe(false);
   }
 
+  const hesloTridy = chyby.heslo !== undefined ? AUTH_VSTUP_CHYBA : AUTH_VSTUP;
+
   return (
-    <main className="mx-auto w-full max-w-md px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
-      <div className="flex items-center gap-4">
-        <LogoKlubu velikost="lg" />
-        <div className="min-w-0">
-          <p className="font-condensed text-sm font-medium text-mech">ExApp · přihlášení</p>
-          <h1 className="font-expanded mt-0.5 text-3xl font-extrabold tracking-tight">Přihlášení</h1>
-        </div>
-      </div>
-      <p className="mt-2 text-base text-inkoust/75">
-        Vítej zpět v ExApp. Zadej e-mail a heslo z registrace.
-      </p>
+    <AuthRozlozeni>
+      <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight text-inkoust">
+        Přihlas se do klubu
+      </h1>
 
       <form
         onSubmit={onSubmit}
         noValidate
         aria-describedby={formChyba !== null ? "prihlaseni-chyba" : undefined}
-        className="mt-6 flex flex-col gap-4 rounded-lg border-2 border-inkoust bg-white/60 p-5 shadow-denik sm:p-6"
+        className="mt-7 flex flex-col gap-4"
       >
-        {formChyba !== null && (
+        {formChyba !== null ? (
           <p
             id="prihlaseni-chyba"
             role="alert"
-            className="rounded-md border-2 border-red-800/40 bg-red-50 px-3.5 py-2.5 text-sm font-bold text-red-900"
+            className="rounded-2xl border-2 border-red-800/40 bg-red-50 px-3.5 py-2.5 text-sm font-bold text-red-900"
           >
             {formChyba}
           </p>
-        )}
+        ) : null}
+
+        <AuthVstup
+          id="prihlaseni-email"
+          label="E-mail"
+          chyba={chyby.email}
+          ikonaVpravo={<IkonaZamku />}
+          vstup={{
+            name: "email",
+            type: "email",
+            autoComplete: "email",
+            inputMode: "email",
+            value: email,
+            onChange: (e) => setEmail(e.target.value),
+            placeholder: "anezka@example.cz",
+            className: chyby.email !== undefined ? AUTH_VSTUP_CHYBA : AUTH_VSTUP,
+          }}
+        />
 
         <div>
-          <label htmlFor="prihlaseni-email" className="block text-sm font-bold">
-            E-mail
-          </label>
-          <input
-            id="prihlaseni-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            inputMode="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            aria-invalid={chyby.email !== undefined}
-            aria-describedby={chyby.email !== undefined ? "prihlaseni-email-chyba" : undefined}
-            placeholder="anezka@example.cz"
-            className={chyby.email !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
-          />
-          {chyby.email !== undefined && (
-            <p id="prihlaseni-email-chyba" role="alert" className="mt-1.5 text-xs font-bold text-red-800">
-              {chyby.email}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor="prihlaseni-heslo" className="block text-sm font-bold">
+          <label htmlFor="prihlaseni-heslo" className="mb-1.5 block text-sm font-semibold text-inkoust">
             Heslo
           </label>
-          <div className="mt-1.5 flex gap-2">
+          <div className="relative">
             <input
               id="prihlaseni-heslo"
               name="heslo"
@@ -117,40 +108,46 @@ export default function LoginPage(): JSX.Element {
               aria-invalid={chyby.heslo !== undefined}
               aria-describedby={chyby.heslo !== undefined ? "prihlaseni-heslo-chyba" : undefined}
               placeholder="Tvoje heslo"
-              className={chyby.heslo !== undefined ? VSTUP_CHYBA_TRIDY : VSTUP_TRIDY}
+              className={`${hesloTridy} pr-12`}
             />
             <button
               type="button"
               aria-pressed={ukazatHeslo}
               aria-label={ukazatHeslo ? "Skrýt heslo" : "Zobrazit heslo"}
               onClick={() => setUkazatHeslo((v) => !v)}
-              className="bez-prejeti nahled-press inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border-2 border-linka bg-papir px-3 text-sm font-bold hover:-translate-y-px hover:border-inkoust hover:bg-smrk/[0.08] motion-reduce:hover:translate-y-0"
+              className="absolute inset-y-0 right-0 flex min-h-11 min-w-11 items-center justify-center rounded-full pr-1 text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
             >
-              <span aria-hidden="true">{ukazatHeslo ? "⋯" : "👁"}</span>
+              <IkonaZamku />
             </button>
           </div>
-          {chyby.heslo !== undefined && (
+          {chyby.heslo !== undefined ? (
             <p id="prihlaseni-heslo-chyba" role="alert" className="mt-1.5 text-xs font-bold text-red-800">
               {chyby.heslo}
             </p>
-          )}
+          ) : null}
         </div>
 
-        <button
-          type="submit"
-          disabled={odesilaSe}
-          className="nahled-press mt-1 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-okr bg-okr px-4 py-2.5 text-base font-bold text-inkoust transition-colors hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
-        >
-          {odesilaSe ? "Přihlašuji…" : "Přihlásit se"}
-        </button>
+        <label className="flex min-h-11 items-center gap-3 text-base text-inkoust">
+          <input
+            type="checkbox"
+            checked={zustat}
+            onChange={(e) => setZustat(e.target.checked)}
+            className="h-5 w-5 rounded border-pole accent-smrk"
+          />
+          Zůstat přihlášený
+        </label>
 
-        <p className="text-center text-sm text-inkoust/70">
-          Nemáš účet?{" "}
-          <Link to="/register" className="font-bold text-smrk underline underline-offset-2">
-            Zaregistruj se s kódem
+        <AuthPrimarniTlacitko type="submit" disabled={odesilaSe}>
+          {odesilaSe ? "Přihlašuji…" : "Přihlásit se"}
+        </AuthPrimarniTlacitko>
+
+        <p className="text-center text-sm leading-relaxed text-mech">
+          Máš pozvánkový kód od vedoucího?{" "}
+          <Link to="/register" className="font-semibold text-smrk underline underline-offset-2">
+            Zadej kód
           </Link>
         </p>
       </form>
-    </main>
+    </AuthRozlozeni>
   );
 }

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   filtrujExpedicePodleJmena,
   normalizujProVyhledavani,
+  rozdelVypravy,
 } from "../src/lib/expedice-filtr";
 
 function seznam(): Array<{ nazev: string }> {
@@ -72,5 +73,45 @@ describe("filtrujExpedicePodleJmena", () => {
       "Podzimní Šumava – Tříjezerní slať",
       "Šumava – Modrava",
     ]);
+  });
+});
+
+describe("rozdelVypravy", () => {
+  const dnes = "2026-11-18";
+
+  it("dnešek v rozsahu a stav jiný než proběhlá je probíhající", () => {
+    const vysledek = rozdelVypravy(
+      [{ datum: "2026-11-17", datumDo: "2026-11-19", stav: "volno" }],
+      dnes,
+    );
+    expect(vysledek.probihajici).toHaveLength(1);
+    expect(vysledek.cekaNaUzavreni).toHaveLength(0);
+    expect(vysledek.probehle).toHaveLength(0);
+  });
+
+  it("po konci a před uzavřením čeká na uzavření", () => {
+    const vysledek = rozdelVypravy(
+      [{ datum: "2026-11-01", datumDo: "2026-11-02", stav: "volno" }],
+      dnes,
+    );
+    expect(vysledek.cekaNaUzavreni).toHaveLength(1);
+    expect(vysledek.probihajici).toHaveLength(0);
+  });
+
+  it("stav proběhlá patří do proběhlých i když rozsah ještě trvá", () => {
+    const vysledek = rozdelVypravy(
+      [{ datum: "2026-11-17", datumDo: "2026-11-20", stav: "proběhlá" }],
+      dnes,
+    );
+    expect(vysledek.probehle).toHaveLength(1);
+    expect(vysledek.probihajici).toHaveLength(0);
+  });
+
+  it("budoucí výprava je nadcházející", () => {
+    const vysledek = rozdelVypravy(
+      [{ datum: "2026-12-01", datumDo: null, stav: "volno" }],
+      dnes,
+    );
+    expect(vysledek.nadchazejici).toHaveLength(1);
   });
 });

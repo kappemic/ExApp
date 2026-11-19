@@ -80,7 +80,7 @@ export default function VstupSNabidkou({
             id={seznamId}
             role="listbox"
             style={{ top: ram.top, left: ram.left, width: ram.width }}
-            className="nabidka-seznam registrace-nabidka fixed z-[70] max-h-48 overflow-y-auto rounded-md border-2 border-inkoust bg-papir py-1 shadow-denik"
+            className="nabidka-seznam registrace-nabidka fixed z-[70] max-h-48 overflow-y-auto rounded-md border border-linka bg-papir py-1 shadow-denik"
           >
             {shody.map((polozka, index) => (
               <li key={polozka} role="option" aria-selected={index === zvyrazneny}>

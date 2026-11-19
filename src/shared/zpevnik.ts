@@ -452,6 +452,29 @@ export function textZTela(telo: TeloPisne): string {
   return radky.join("\n");
 }
 
+/** First non-empty lyric line for list previews. */
+export function nahledRadku(telo: TeloPisne): string {
+  for (const blok of telo.bloky) {
+    for (const radek of blok.radky) {
+      const text = radek.slabiky.map((slabika) => slabika.text).join("").trim();
+      if (text.length > 0) return text;
+    }
+  }
+  return "";
+}
+
+/** Lyric lines with text, for queue metadata. */
+export function pocetRadkuLyriky(telo: TeloPisne): number {
+  let pocet = 0;
+  for (const blok of telo.bloky) {
+    for (const radek of blok.radky) {
+      const text = radek.slabiky.map((slabika) => slabika.text).join("").trim();
+      if (text.length > 0) pocet += 1;
+    }
+  }
+  return pocet;
+}
+
 /** Case- and diacritic-insensitive match on title or author. */
 export function obsahujeHledani(nazev: string, autor: string, dotaz: string): boolean {
   const klic = bezDiakritiky(dotaz);

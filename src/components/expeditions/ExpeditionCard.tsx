@@ -93,13 +93,13 @@ export default function ExpeditionCard({
 
   return (
     <article
-      className={`group flex h-full flex-col overflow-hidden rounded-lg border-2 border-inkoust bg-white/60 shadow-denik transition-transform motion-safe:group-hover:-translate-y-0.5 ${
+      className={`group flex h-full flex-col overflow-hidden rounded-lg border border-linka bg-povrch shadow-denik transition-transform motion-safe:group-hover:-translate-y-0.5 ${
         probehla ? "opacity-90" : ""
       }`}
     >
       <div className="relative">
         <div
-          className={`relative aspect-[16/9] w-full overflow-hidden border-b-2 border-inkoust ${
+          className={`relative aspect-[16/9] w-full overflow-hidden border-b border-linka ${
             probehla ? "bg-linka/60" : "bg-linka/70"
           }`}
         >

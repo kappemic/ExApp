@@ -28,6 +28,7 @@ import {
   ADMIN_CODES_PATH,
   LOGIN_PATH,
   ME_PATH,
+  OVERENI_KODU_PATH,
   REGISTER_PATH,
   VALIDACE,
   VALIDACNI_ZPRAVY,
@@ -81,7 +82,13 @@ export interface RegistraceVstup {
 export interface PrihlaseniVstup {
   email: string;
   heslo: string;
+  /** true = cookie na 7 dní. Jinak session cookie. */
+  zustat?: boolean;
 }
+
+export type VysledekOvereniKodu =
+  | { ok: true; expiresAt: string }
+  | { ok: false; chyba: string };
 
 export type PoleRegistrace =
   | "jmeno"
@@ -481,6 +488,21 @@ interface BackendOdpoved {
   telo: unknown;
 }
 
+function jeOvereniKodu(
+  telo: unknown,
+): telo is { platny: true; expiresAt: string } {
+  if (typeof telo !== "object" || telo === null) return false;
+  const kandidat = telo as { platny?: unknown; expiresAt?: unknown };
+  return kandidat.platny === true && typeof kandidat.expiresAt === "string";
+}
+
+function hlaskaOvereni(telo: unknown): string {
+  if (!jeApiChyba(telo)) return VALIDACNI_ZPRAVY.kodNeznamy;
+  const kod = telo.error.details?.["kod"];
+  if (Array.isArray(kod) && typeof kod[0] === "string") return kod[0];
+  return telo.error.message;
+}
+
 /**
  * Jednotné volání BFF se session cookie. Vrací `null` pouze když backend
  * není nakonfigurován nebo je síťově nedostupný → volající padá na demo.
@@ -721,6 +743,7 @@ interface AuthKontext {
   kody: DemoKod[];
   register: (vstup: RegistraceVstup) => Promise<AuthVysledek<PoleRegistrace>>;
   login: (vstup: PrihlaseniVstup) => Promise<AuthVysledek<PolePrihlaseni>>;
+  overKod: (kod: string) => Promise<VysledekOvereniKodu>;
   odhlasit: () => void;
   /**
    * Obdoba POST /api/admin/codes — expirace fixně +10 minut.
@@ -933,6 +956,28 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     [],
   );
 
+  const overKod = useCallback(
+    async (kod: string): Promise<VysledekOvereniKodu> => {
+      const cisty = normalizujKod(kod);
+      if (cisty.length !== VALIDACE.kodDelka) {
+        return { ok: false, chyba: VALIDACNI_ZPRAVY.kodNeplatnyTvar };
+      }
+      const odpoved = await volejBackend(OVERENI_KODU_PATH, "POST", { kod: cisty });
+      if (odpoved !== null) {
+        if (odpoved.status === 200 && jeOvereniKodu(odpoved.telo)) {
+          return { ok: true, expiresAt: odpoved.telo.expiresAt };
+        }
+        return { ok: false, chyba: hlaskaOvereni(odpoved.telo) };
+      }
+      const nalezeny = ctiKodyRaw().find((radek) => radek.kod === cisty);
+      if (nalezeny === undefined || !jePlatnyKod(nalezeny, Date.now())) {
+        return { ok: false, chyba: VALIDACNI_ZPRAVY.kodNeznamy };
+      }
+      return { ok: true, expiresAt: nalezeny.expiresAt };
+    },
+    [],
+  );
+
   const login = useCallback(
     async (vstup: PrihlaseniVstup): Promise<AuthVysledek<PolePrihlaseni>> => {
       const chybyPoli: Partial<Record<PolePrihlaseni, string>> = {};
@@ -954,6 +999,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const odpoved = await volejBackend(LOGIN_PATH, "POST", {
         email: vstup.email.trim().toLowerCase(),
         heslo: vstup.heslo,
+        zustat: vstup.zustat === true,
       });
       if (odpoved !== null) {
         const uzivatel = ctiUsera(odpoved.telo);
@@ -1086,10 +1132,11 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       kody,
       register,
       login,
+      overKod,
       odhlasit,
       generujKod,
     };
-  }, [user, isLoading, jeBootstrap, kody, register, login, odhlasit, generujKod]);
+  }, [user, isLoading, jeBootstrap, kody, register, login, overKod, odhlasit, generujKod]);
 
   return createElement(AuthContext.Provider, { value: hodnota }, children);
 }

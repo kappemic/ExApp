@@ -199,7 +199,7 @@ export default function ConfirmDialog(
               <label
                 className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "vyskyt"
-                    ? "border-inkoust bg-white/80"
+                    ? "border-smrk bg-povrch"
                     : "border-linka bg-white/50"
                 }`}
               >
@@ -221,7 +221,7 @@ export default function ConfirmDialog(
               <label
                 className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "rada"
-                    ? "border-inkoust bg-white/80"
+                    ? "border-smrk bg-povrch"
                     : "border-linka bg-white/50"
                 }`}
               >

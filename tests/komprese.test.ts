@@ -29,6 +29,21 @@ function poslouchej(): Promise<number> {
   app.get("/obrazek", (_req, res) => {
     res.type("webp").send(Buffer.alloc(4000, 7));
   });
+  app.get("/proud", (_req, res) => {
+    res.type("text/javascript");
+    const kus = Buffer.alloc(16 * 1024, 97);
+    let zbyva = 20;
+    const dalsi = (): void => {
+      if (zbyva === 0) {
+        res.end();
+        return;
+      }
+      zbyva -= 1;
+      if (res.write(kus)) dalsi();
+      else res.once("drain", dalsi);
+    };
+    dalsi();
+  });
   return new Promise((resolve) => {
     const server = app.listen(0, "127.0.0.1", () => {
       const adresa = server.address();
@@ -98,5 +113,9 @@ describe("komprese odpovědi", () => {
     const obrazek = await stahni(port, "/obrazek", "br, gzip");
     expect(obrazek.encoding).toBeUndefined();
     expect(obrazek.body.length).toBe(4000);
+
+    const proud = await stahni(port, "/proud", "br, gzip");
+    expect(proud.encoding).toBe("br");
+    expect(brotliDecompressSync(proud.body).length).toBe(20 * 16 * 1024);
   });
 });

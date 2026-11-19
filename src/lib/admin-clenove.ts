@@ -100,6 +100,13 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   if (typeof kandidat["isSuperadmin"] !== "boolean") {
     return false;
   }
+  if ("narozeniny" in kandidat) {
+    const narozeniny = kandidat["narozeniny"];
+    if (narozeniny !== null && typeof narozeniny !== "string") return false;
+  }
+  if ("pocetFotek" in kandidat && typeof kandidat["pocetFotek"] !== "number") {
+    return false;
+  }
   return true;
 }
 

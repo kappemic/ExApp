@@ -20,6 +20,7 @@ export default function VyskakovaciPanel({
   minSirka = 0,
   label,
   role = "dialog",
+  vzhled = "zaklad",
   children,
 }: {
   otevreno: boolean;
@@ -29,6 +30,8 @@ export default function VyskakovaciPanel({
   minSirka?: number;
   label: string;
   role?: "dialog" | "listbox";
+  /** Vzhled z ExApp.pen: výběr data (16 px rohy), času (14 px), nabídka (12 px). */
+  vzhled?: "zaklad" | "datum" | "cas" | "nabidka";
   children: ReactNode;
 }): JSX.Element | null {
   const [box, setBox] = useState<Box | null>(null);
@@ -93,7 +96,15 @@ export default function VyskakovaciPanel({
         bottom: box.nahoru ? window.innerHeight - box.top + 6 : undefined,
         zIndex: 80,
       }}
-      className="nocturne vyskakovaci-panel rounded-xl border border-pole p-2 text-inkoust"
+      className={`nocturne vyskakovaci-panel border border-linka bg-povrch text-inkoust ${box.nahoru ? "origin-bottom" : "origin-top"} ${
+        vzhled === "datum"
+          ? "rounded-2xl p-3.5"
+          : vzhled === "cas"
+            ? "rounded-[14px] p-3"
+            : vzhled === "nabidka"
+              ? "rounded-xl p-1.5"
+              : "rounded-2xl p-2"
+      }`}
     >
       {children}
     </div>,
