@@ -101,7 +101,7 @@ export default function NavigacniRozbalovak({
         width: umisteni.width,
         zIndex: 60,
       }}
-      className="rounded-2xl border border-linka bg-povrch p-2 text-inkoust shadow-denik"
+      className="vyskakovaci-menu rounded-[14px] border border-linka bg-povrch p-2 text-inkoust shadow-modal"
     >
       {children}
     </div>,

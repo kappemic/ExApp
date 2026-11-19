@@ -455,8 +455,8 @@ export default function ZpravaBublina({
       aria-hidden={odchazi ? true : undefined}
     >
       <div
-        className={`flex min-h-0 items-start overflow-hidden motion-safe:transition-transform motion-safe:duration-[240ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
-          zapis ? "" : "gap-1"
+        className={`flex min-h-0 overflow-hidden ${zapis ? "items-start" : "items-end"} motion-safe:transition-transform motion-safe:duration-[240ms] motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+          zapis ? "" : "gap-[9px]"
         } ${
           zapis || !jeMoje ? "flex-row" : "flex-row-reverse"
         } ${
@@ -469,47 +469,47 @@ export default function ZpravaBublina({
             : "translate-x-0 translate-y-0"
         }`}
       >
-      {zapis ? null : skrytHlavicku ? (
+      {zapis || jeMoje ? null : skrytHlavicku ? (
         <span
           aria-hidden="true"
-          className="h-9 w-9 shrink-0 grow-0 basis-9 self-start"
+          className="h-[26px] w-[26px] shrink-0 grow-0 basis-[26px] self-end"
         />
       ) : zprava.autorId !== null ? (
         <TlacitkoProfilu
           id={zprava.autorId}
           jmeno={autorPopisek}
           avatarUrl={zprava.authorAvatarUrl}
-          className="h-9 w-9 shrink-0 self-start p-0 min-h-9!"
+          className="h-[26px] w-[26px] shrink-0 self-end p-0 min-h-[26px]!"
         >
-          <AvatarKruh
-            jmeno={autorPopisek}
-            url={zprava.authorAvatarUrl}
-            ton={jeMoje ? "moje" : "cizi"}
-          />
+          <AvatarKruh jmeno={autorPopisek} url={zprava.authorAvatarUrl} ton="cizi" velikost={26} />
         </TlacitkoProfilu>
       ) : (
-        <AvatarKruh
-          jmeno={autorPopisek}
-          url={zprava.authorAvatarUrl}
-          ton={jeMoje ? "moje" : "cizi"}
-        />
+        <span className="self-end">
+          <AvatarKruh jmeno={autorPopisek} url={zprava.authorAvatarUrl} ton="cizi" velikost={26} />
+        </span>
       )}
 
-      <div className={`min-w-0 ${jenFotky ? "w-full max-w-[min(16rem,82%)]" : zapis ? "max-w-[min(36rem,100%)]" : "w-fit max-w-[min(70ch,100%)]"}`}>
+      <div className={`min-w-0 ${jenFotky ? "w-full max-w-[min(16rem,82%)]" : zapis ? "max-w-[min(36rem,100%)]" : `flex w-fit max-w-[min(392px,85%)] flex-col gap-1 ${jeMoje ? "items-end" : "items-start"}`}`}>
+        {!zapis && !jeMoje && !skrytHlavicku ? (
+          <span className="min-w-0 truncate text-[11px] font-semibold text-ink-3" style={{ overflowWrap: "anywhere" }}>
+            {autorPopisek}
+            {jeOrganizator ? <ZnackaOrganizatora /> : null}
+          </span>
+        ) : null}
         <div
           className={
             zapis
               ? `w-fit max-w-full rounded-2xl text-inkoust ${
                   jeMoje ? "bg-okr/25" : "border border-pole bg-papir"
                 } ${jenFotky ? "p-1" : "px-3 py-2"} ${jeOptimisticka ? "opacity-70" : ""}`
-              : `rounded-2xl border border-linka shadow-denik ${
-                  jenFotky ? "px-1.5 py-1.5" : "px-3 py-2"
-                } ${jeMoje ? "bg-smrk text-papir" : "bg-papir text-inkoust"} ${
+              : `max-w-full rounded-[14px] ${
+                  jenFotky ? "p-1.5" : "px-[13px] py-[9px]"
+                } ${jeMoje ? "rounded-tr-[4px] bg-smrk text-papir" : "rounded-tl-[4px] bg-[#f1ede0] text-inkoust"} ${
                   jeOptimisticka ? "opacity-70" : ""
                 }`
           }
         >
-          {!skrytHlavicku && (
+          {!skrytHlavicku && zapis && (
             <div className={zapis ? "flex min-w-0 items-baseline gap-1.5" : "flex min-w-0 items-baseline justify-between gap-2"}>
               {zprava.autorId !== null ? (
                 <TlacitkoProfilu
@@ -551,13 +551,18 @@ export default function ZpravaBublina({
               )}
             </div>
           )}
-          {skrytHlavicku && cas.length > 0 && (
+          {(skrytHlavicku || !zapis) && cas.length > 0 && (
             <span className="sr-only">
               <time dateTime={zprava.createdAt}>{cas}</time>
             </span>
           )}
           {telo}
         </div>
+        {!zapis && cas.length > 0 ? (
+          <time aria-hidden="true" dateTime={zprava.createdAt} className="text-[10px] font-medium tabular-nums text-[#b3b8a4]">
+            {cas}
+          </time>
+        ) : null}
 
         {(jeOptimisticka || keSmazani.length > 0) && (
         <div className={`flex items-center gap-2 ${zapis ? "" : "mt-1 min-h-[24px]"}`}>

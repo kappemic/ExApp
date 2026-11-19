@@ -86,7 +86,9 @@ Vědomé odchylky: okraj polí `border-pole` místo světlejší linky (kontrast
 
 Druhé kolo (19. 11. 2026): **Detail výpravy** (nadpis 46 px, pás fotky, karty O výpravě / Kdo jede / Diskuze, pravý sloupec Přihlášeno + Sraz a doprava; telefon s fotkou 180 px), **Nová výprava** (karty Základní údaje / Místo a čas / Popis a fotky, kontrolní seznam vpravo, výběr fotek jako plocha), **Kdo jede** (tabulka na počítači, filtry Všichni / Organizuje / Volná místa, barevné avatary), **Zpěvník** (seznam v kartě, tónina, čip Podle abecedy), kostra načítání bez falešné hlavičky, **Chat** rozvržení (hlavička, panel Konverzace jako karta, karta vlákna). Neověřeno vizuálně: Chat po úpravě, řádky písní (v DB nejsou písně).
 
-Zbývá projít do detailu: řádky konverzací a bubliny Chatu, Píseň, Návrhy písní, Chat, Žebříčky, Členové, Člen, Profil, Statistiky, Nastavení, Pozvánkové kódy, Přihlášení a Registrace, zbylé modály (Docházka, Nahrát fotky, Návrh písně, Správa člena, Smazat výpravu) a menu Více / Profil.
+Třetí kolo (19. 11. 2026): **Chat** (seznam konverzací bez vnitřní karty, kompaktní záložky na počítači, záhlaví vlákna s avatarem, bubliny `#F1EDE0` / olivové, čas pod bublinou, pole zprávy s kulatým tlačítkem odeslání), **Žebříčky** (tabulka s kolečkem pořadí a ukazatelem km), **Členové** (tabulka Člen / E-mail / Základna / Rada a vedení / Admin / Výpravy, barevné avatary), **Profil** na počítači (levá karta s identitou, statistikami a instalací, záložky jako přepínač, Odhlásit v hlavičce), **Nastavení** (karty, přepínače `Prepinac.tsx`, dva sloupce), **menu Více a Profil** (ikony, řádky 34 px, odznak návrhů). Vypínače „Veřejný profil“ a „Zobrazit v žebříčku“ z návrhu nejsou implementované (backend je nemá).
+
+Zbývá projít do detailu: Přihlášení a Registrace (vyžaduje odhlášení), Pozvánkové kódy na počítači (pravý sloupec Použité), Píseň, Návrhy písní, Chat, Žebříčky, Členové, Člen, Profil, Statistiky, Nastavení, Pozvánkové kódy, Přihlášení a Registrace, zbylé modály (Docházka, Nahrát fotky, Návrh písně, Správa člena, Smazat výpravu) a menu Více / Profil.
 
 ## E. Doporučené pořadí
 

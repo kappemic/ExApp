@@ -1,3 +1,4 @@
+import Ikona from "../components/Ikona";
 import {
   Suspense,
   lazy,
@@ -78,11 +79,98 @@ function Odhlaseni(): JSX.Element {
   );
 }
 
+function OdhlaseniPocitac(): JSX.Element {
+  const { odhlasit } = useAuth();
+  return (
+    <button
+      type="button"
+      onClick={odhlasit}
+      className="nahled-press hidden h-[46px] items-center gap-2 rounded-xl border border-linka bg-povrch px-[18px] text-sm font-semibold text-inkoust hover:bg-povrch-2 min-[90rem]:inline-flex"
+    >
+      <Ikona nazev="log-out" className="size-4 text-mech" />
+      Odhlásit se
+    </button>
+  );
+}
+
 /** "2007-04-14" → "14. 4. 2007". Neplatné datum zůstane, jak je. */
 function datumCesky(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (m === null) return iso;
   return `${Number(m[3])}. ${Number(m[2])}. ${m[1]}`;
+}
+
+function RadekStatistiky({ popisek, hodnota }: { popisek: string; hodnota: string }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[13px] text-mech">{popisek}</span>
+      <span className="font-display text-base font-bold tabular-nums text-inkoust">{hodnota}</span>
+    </div>
+  );
+}
+
+/** Levá karta profilu na počítači („Profile Card“ v ExApp.pen). */
+function ProfilKarta(): JSX.Element | null {
+  const { profil } = useProfile();
+  const [souhrn, setSouhrn] = useState<ProfilSouhrn>({ vypravy: 0, km: 0, fotek: 0 });
+  const [plochaSheet, setPlochaSheet] = useState(false);
+  useEffect(() => {
+    let zije = true;
+    void getMojeStatistiky().then((stat) => {
+      if (!zije) return;
+      setSouhrn({ vypravy: stat.data.vypravy, km: Math.round(stat.data.kmCelkem), fotek: 0 });
+    });
+    return () => {
+      zije = false;
+    };
+  }, [profil?.id]);
+  if (profil === null) return null;
+  const celeJmeno = [profil.jmeno, profil.prijmeni].filter((d) => (d ?? "").trim().length > 0).join(" ");
+  const od = clenOd(profil.createdAt);
+  const role: string = profil.isSuperadmin ? "Hlavní admin" : profil.isAdmin === true ? "Admin" : nazevRole(profil.role);
+  return (
+    <aside className="flex flex-col gap-[18px] rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+      <div className="flex justify-center">
+        <span
+          aria-hidden="true"
+          className="flex size-[76px] items-center justify-center rounded-full bg-mlha font-display text-[26px] font-bold text-smrk"
+        >
+          {iniciály(profil.jmeno, profil.prijmeni)}
+        </span>
+      </div>
+      <div className="flex flex-col items-center gap-[5px] text-center">
+        <h2 className="font-display text-xl font-bold text-inkoust">{celeJmeno}</h2>
+        <p className="max-w-full break-all text-[12.5px] text-ink-3">{profil.email}</p>
+        <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+          <span className="rounded-full bg-okr-100 px-[9px] py-[3px] text-[11px] font-semibold text-okr">{role}</span>
+          {od !== null ? (
+            <span className="rounded-full bg-povrch-2 px-[9px] py-[3px] text-[11px] font-semibold text-mech">člen od {od}</span>
+          ) : null}
+        </div>
+      </div>
+      <span aria-hidden="true" className="h-px bg-linka" />
+      <RadekStatistiky popisek="Výprav" hodnota={String(souhrn.vypravy)} />
+      <RadekStatistiky popisek="Kilometry" hodnota={String(souhrn.km)} />
+      <RadekStatistiky popisek="Fotky" hodnota={String(souhrn.fotek)} />
+      <div className="flex flex-col gap-[9px]">
+        <span aria-hidden="true" className="h-px bg-linka" />
+        <p className="flex items-center gap-[7px] text-[10px] font-bold uppercase tracking-[0.8px] text-ink-3">
+          <Ikona nazev="smartphone" className="size-[13px]" />
+          Aplikace na plochu
+        </p>
+        <p className="text-[11.5px] leading-relaxed text-mech">Otevře se na celou obrazovku a historie jde i bez sítě.</p>
+        <button
+          type="button"
+          onClick={() => setPlochaSheet(true)}
+          className="nahled-press inline-flex h-[38px] w-full items-center justify-center gap-[7px] rounded-[10px] bg-mlha text-[12.5px] font-semibold text-smrk hover:bg-linka"
+        >
+          <Ikona nazev="download" className="size-3.5" />
+          Nainstalovat aplikaci
+        </button>
+      </div>
+      <PridatNaPlochuSheet otevreno={plochaSheet} onZavrit={() => setPlochaSheet(false)} />
+    </aside>
+  );
 }
 
 function OsobniPanel(): JSX.Element {
@@ -152,7 +240,8 @@ function OsobniPanel(): JSX.Element {
   const roleRadek: string = od !== null ? `${role} · člen od ${od}` : role;
 
   return (
-    <div className="mx-auto w-full max-w-lg text-left">
+    <div className="mx-auto w-full max-w-lg text-left min-[90rem]:max-w-none">
+      <div className="min-[90rem]:hidden">
       <IdentitaProfilu
         inicialy={iniciály(zobrazeny.jmeno, zobrazeny.prijmeni)}
         jmeno={celeJmeno}
@@ -179,9 +268,10 @@ function OsobniPanel(): JSX.Element {
           Nainstalovat aplikaci
         </button>
       </section>
+      </div>
 
       {upravuje ? (
-        <section className="mt-4" aria-label="Úprava osobních údajů">
+        <section className="mt-4 min-[90rem]:mt-0" aria-label="Úprava osobních údajů">
           <div className="mb-2 flex items-center justify-between px-1">
             <h3 className="font-display text-[17px] font-bold text-inkoust">Upravit údaje</h3>
             <button
@@ -203,7 +293,7 @@ function OsobniPanel(): JSX.Element {
           />
         </section>
       ) : (
-        <section className="mt-4" aria-labelledby="profil-udaje">
+        <section className="mt-4 min-[90rem]:mt-0" aria-labelledby="profil-udaje">
           <div className="mb-2 flex items-center justify-between px-1">
             <h3 id="profil-udaje" className="font-display text-[17px] font-bold text-inkoust">
               Osobní údaje
@@ -466,19 +556,29 @@ export default function ProfilPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:max-w-2xl lg:px-8">
-      <header className="border-b border-linka pb-4">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-inkoust">Profil</h1>
+    <main className="mx-auto w-full max-w-lg px-5 pb-16 pt-4 sm:px-6 sm:pt-8 lg:max-w-2xl lg:px-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+      <div className="flex items-end justify-between gap-4">
+        <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+          Profil
+        </h1>
+        <OdhlaseniPocitac />
+      </div>
+      <div className="min-[90rem]:mt-8 min-[90rem]:grid min-[90rem]:grid-cols-[340px_minmax(0,1fr)] min-[90rem]:items-start min-[90rem]:gap-7">
+      <div className="hidden min-[90rem]:block">
+        <ProfilKarta />
+      </div>
+      <div className="min-w-0">
+      <header className="min-[90rem]:pb-0">
 
         <div
-          className="sticky top-0 z-10 -mx-4 bg-papir px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-12 xl:px-12"
+          className="sticky top-0 z-10 -mx-5 bg-papir px-5 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 min-[90rem]:static min-[90rem]:mx-0 min-[90rem]:p-0"
           style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top, 0px))" }}
         >
           <div
             role="tablist"
             aria-label="Sekce profilu"
             onKeyDown={onKeyDown}
-            className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden"
+            className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden min-[90rem]:mx-0 min-[90rem]:inline-flex min-[90rem]:gap-0.5 min-[90rem]:rounded-xl min-[90rem]:bg-povrch-2 min-[90rem]:p-1"
           >
             {TABY.map((tab) => {
               const aktivni = aktivniTab === tab.id;
@@ -492,10 +592,10 @@ export default function ProfilPage(): JSX.Element {
                   aria-controls={aktivni ? `panel-${tab.id}` : undefined}
                   tabIndex={aktivni ? 0 : -1}
                   onClick={() => setAktivniTab(tab.id)}
-                  className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation shrink-0 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-semibold select-none transition-colors motion-reduce:transition-none ${
+                  className={`bez-prejeti min-h-[44px] min-w-[44px] touch-manipulation shrink-0 whitespace-nowrap rounded-full border px-3.5 text-[13px] select-none transition-colors motion-reduce:transition-none min-[90rem]:min-h-0 min-[90rem]:rounded-[9px] min-[90rem]:border-0 min-[90rem]:py-[7px] min-[90rem]:text-[13.5px] ${
                     aktivni
-                      ? "border-transparent bg-smrk text-papir"
-                      : "border-linka bg-povrch text-inkoust hover:bg-mlha/60"
+                      ? "border-transparent bg-smrk font-semibold text-papir min-[90rem]:bg-povrch min-[90rem]:text-inkoust min-[90rem]:shadow-[0_1px_2px_#1c261514]"
+                      : "border-linka bg-povrch font-medium text-mech hover:bg-povrch-2 min-[90rem]:bg-transparent"
                   }`}
                 >
                   {tab.popisek}
@@ -506,7 +606,7 @@ export default function ProfilPage(): JSX.Element {
         </div>
       </header>
 
-      <div className="pt-6">
+      <div className="pt-6 min-[90rem]:pt-5">
         <div
           role="tabpanel"
           id={`panel-${aktivniTab}`}
@@ -534,7 +634,11 @@ export default function ProfilPage(): JSX.Element {
             </Suspense>
           )}
         </div>
-        <Odhlaseni />
+        <div className="min-[90rem]:hidden">
+          <Odhlaseni />
+        </div>
+      </div>
+      </div>
       </div>
     </main>
   );

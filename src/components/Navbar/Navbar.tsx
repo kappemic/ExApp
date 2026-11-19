@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type RefObject } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import LogoKlubu from "../LogoKlubu";
-import Ikona from "../Ikona";
+import Ikona, { type NazevIkony } from "../Ikona";
 import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "../chat/NeprectenaTecka";
 import NavigacniRozbalovak from "./NavigacniRozbalovak";
@@ -39,18 +39,20 @@ const DESKTOP_POLOZKY: PolozkaNavigace[] = [
 ];
 
 const SIRKA_MENU_VICE = 268;
-const SIRKA_MENU_PROFIL = 268;
+const SIRKA_MENU_PROFIL = 276;
 
 function MenuRadek({
   popisek,
   onClick,
   badge,
   zvyrazneno = false,
+  ikona,
 }: {
   popisek: string;
   onClick: () => void;
   badge?: number | null;
   zvyrazneno?: boolean;
+  ikona?: NazevIkony;
 }): JSX.Element {
   return (
     <li role="none">
@@ -58,13 +60,14 @@ function MenuRadek({
         type="button"
         role="menuitem"
         onClick={onClick}
-        className={`nahled-press flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[13.5px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation] ${
-          zvyrazneno ? "bg-mlha font-semibold text-smrk" : "text-inkoust hover:bg-mlha/60"
+        className={`nahled-press flex h-[34px] w-full items-center gap-[9px] rounded-lg px-[9px] text-left text-[12.5px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation] ${
+          zvyrazneno ? "bg-mlha font-semibold text-smrk" : "text-mech hover:bg-povrch-2"
         }`}
       >
+        {ikona !== undefined ? <Ikona nazev={ikona} className={`size-[15px] ${zvyrazneno ? "text-smrk" : "text-ink-3"}`} /> : null}
         <span className="min-w-0 flex-1 truncate">{popisek}</span>
         {badge !== undefined && badge !== null && badge > 0 ? (
-          <span className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-smrk px-1.5 text-[11px] font-semibold tabular-nums text-papir">
+          <span className="inline-flex items-center justify-center rounded-full bg-akcent-100 px-[7px] py-0.5 text-[9.5px] font-semibold tabular-nums text-akcent">
             {badge}
           </span>
         ) : null}
@@ -75,8 +78,8 @@ function MenuRadek({
 
 function MenuOddelovac({ popisek }: { popisek: string }): JSX.Element {
   return (
-    <li role="separator" className="px-3 pb-1 pt-2">
-      <span className="text-[10px] font-bold uppercase tracking-wide text-mech">{popisek}</span>
+    <li role="separator" className="mt-1 border-t border-linka px-[9px] pb-1 pt-2">
+      <span className="text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#b3b8a4]">{popisek}</span>
     </li>
   );
 }
@@ -108,13 +111,14 @@ function MenuVice({ onZavrit }: { onZavrit: () => void }): JSX.Element {
 
   return (
     <ul className="flex flex-col gap-0.5">
-      <MenuRadek popisek="Členové" onClick={() => jdi("/cleny")} />
-      <MenuRadek popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
+      <MenuRadek ikona="users" popisek="Členové" onClick={() => jdi("/cleny")} />
+      <MenuRadek ikona="chart-column" popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
       {jeAdmin ? (
         <>
           <MenuOddelovac popisek="Admin" />
-          <MenuRadek popisek="Pozvánkové kódy" onClick={() => jdi("/admin/kody")} />
+          <MenuRadek ikona="key-round" popisek="Pozvánkové kódy" onClick={() => jdi("/admin/kody")} />
           <MenuRadek
+            ikona="music"
             popisek="Návrhy písní"
             onClick={() => jdi("/zpevnik/fronta")}
             badge={pocetNavrhu}
@@ -122,12 +126,13 @@ function MenuVice({ onZavrit }: { onZavrit: () => void }): JSX.Element {
         </>
       ) : smiFrontu ? (
         <MenuRadek
+          ikona="music"
           popisek="Návrhy písní"
           onClick={() => jdi("/zpevnik/fronta")}
           badge={pocetNavrhu}
         />
       ) : null}
-      <MenuRadek popisek="Nastavení" onClick={() => jdi("/nastaveni")} />
+      <MenuRadek ikona="settings" popisek="Nastavení" onClick={() => jdi("/nastaveni")} />
     </ul>
   );
 }
@@ -146,18 +151,20 @@ function MenuProfil({ onZavrit }: { onZavrit: () => void }): JSX.Element {
 
   return (
   <div className="flex flex-col gap-1">
-    <div className="flex items-center gap-3 px-2 pb-2 pt-1">
-      <AvatarKruh jmeno={celeJmeno} url={user.avatarUrl} />
+    <div className="flex items-center gap-2.5 border-b border-linka px-2 pb-2.5 pt-2">
+      <AvatarKruh jmeno={celeJmeno} url={user.avatarUrl} velikost={34} />
       <div className="min-w-0">
-        <p className="truncate text-[13.5px] font-semibold text-inkoust">{celeJmeno}</p>
-        <p className="truncate text-[12px] font-medium text-mech">{user.email}</p>
+        <p className="truncate text-[12.5px] font-semibold text-inkoust">{celeJmeno}</p>
+        <p className="truncate text-[10.5px] text-ink-3">{user.email}</p>
       </div>
     </div>
-    <ul className="flex flex-col gap-0.5 border-t border-linka pt-1">
-      <MenuRadek popisek="Můj profil" onClick={() => jdi("/profil")} />
-      <MenuRadek popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
-      <MenuRadek popisek="Oznámení" onClick={() => jdi("/nastaveni")} />
+    <ul className="flex flex-col gap-0.5 pt-1">
+      <MenuRadek ikona="user" popisek="Můj profil" onClick={() => jdi("/profil")} />
+      <MenuRadek ikona="chart-column" popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
+      <MenuRadek ikona="bell" popisek="Oznámení" onClick={() => jdi("/nastaveni")} />
+      <li role="separator" aria-hidden="true" className="my-1 h-px bg-linka" />
       <MenuRadek
+        ikona="log-out"
         popisek="Odhlásit se"
         onClick={() => {
           onZavrit();

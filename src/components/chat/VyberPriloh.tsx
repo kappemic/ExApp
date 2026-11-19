@@ -2,7 +2,7 @@ import { useId, useRef, type ChangeEvent, type JSX } from "react";
 import { acceptPriloh } from "../../lib/prilohy-zpravy";
 
 const TLACITKO =
-  "bez-prejeti inline-flex min-h-[44px] min-w-[44px] shrink-0 select-none items-center justify-center rounded-full border-2 border-inkoust/40 bg-papir text-inkoust [-webkit-touch-callout:none] [touch-action:manipulation] active:scale-[0.97] motion-safe:transition-transform disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:border-inkoust";
+  "bez-prejeti inline-flex min-h-[44px] min-w-[44px] shrink-0 select-none items-center justify-center rounded-[10px] bg-povrch-2 text-mech [-webkit-touch-callout:none] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk active:scale-[0.97] motion-safe:transition-transform disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-linka [@media(hover:hover)_and_(pointer:fine)]:hover:text-inkoust";
 
 const TLACITKO_TICHE =
   "bez-prejeti inline-flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 select-none items-center justify-center rounded-lg text-mech [-webkit-touch-callout:none] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk active:scale-[0.97] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:text-inkoust";

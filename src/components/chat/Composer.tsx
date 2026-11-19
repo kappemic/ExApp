@@ -1,3 +1,4 @@
+import Ikona from "../Ikona";
 import { useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from "react";
 import { pridejPrilohy } from "../../lib/prilohy-zpravy";
 import { VALIDACE } from "../../shared/api-types";
@@ -164,7 +165,7 @@ export default function Composer({
     <form
       onSubmit={naSubmit}
       aria-label={popisek}
-      className="rounded-2xl border border-linka bg-papir p-1.5 shadow-denik"
+      className="min-w-0"
     >
       <label htmlFor={poleId} className="sr-only">
         {popisek}
@@ -178,7 +179,7 @@ export default function Composer({
               setVybrany(0);
               poleRef.current?.focus();
             }}
-            className="inline-flex min-h-[44px] items-center rounded-md border border-linka bg-papir px-3 text-sm font-bold text-inkoust [touch-action:manipulation]"
+            className="inline-flex min-h-9 items-center rounded-lg px-2.5 text-[12.5px] font-semibold text-mech hover:bg-povrch-2 [touch-action:manipulation]"
           >
             Označit
           </button>
@@ -188,7 +189,7 @@ export default function Composer({
         <ul
           role="listbox"
           aria-label="Koho označit"
-          className="mb-1 max-h-56 overflow-y-auto rounded-xl border border-linka bg-papir shadow-denik"
+          className="posuvnik mb-2 max-h-56 overflow-y-auto rounded-xl border border-linka bg-povrch p-1.5 shadow-modal"
         >
           {nabidky.map((nabidka, index) => (
             <li key={nabidka.token}>
@@ -198,8 +199,8 @@ export default function Composer({
                 aria-selected={index === vybrany}
                 onMouseDown={(udalost) => udalost.preventDefault()}
                 onClick={() => vloz(nabidka)}
-                className={`flex min-h-[44px] w-full items-center px-3 text-left text-base font-bold [touch-action:manipulation] ${
-                  index === vybrany ? "bg-linka text-inkoust" : "bg-papir text-inkoust"
+                className={`flex min-h-[44px] w-full items-center rounded-lg px-2.5 text-left text-[13.5px] font-medium [touch-action:manipulation] ${
+                  index === vybrany ? "bg-mlha font-semibold text-smrk" : "text-inkoust hover:bg-povrch-2"
                 }`}
               >
                 {nabidka.popisek}
@@ -208,7 +209,7 @@ export default function Composer({
           ))}
         </ul>
       )}
-      <div className="flex min-w-0 items-end gap-1.5">
+      <div className="flex min-w-0 items-end gap-2">
         <TlacitkoPrilohy disabled={odesilaSe} onVyber={naVyberSouboru} />
         <textarea
           id={poleId}
@@ -229,15 +230,17 @@ export default function Composer({
           enterKeyHint="send"
           autoFocus={autoFocus}
           aria-describedby={ukazPocitadlo ? pocitadloId : undefined}
-          className="block max-h-24 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-2 border-inkoust/25 bg-papir px-3 py-2 text-base leading-snug placeholder:text-inkoust/40"
+          className="block max-h-24 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto rounded-[10px] border border-transparent bg-povrch-2 px-[13px] py-[11px] text-base leading-snug text-inkoust placeholder:text-ink-3 focus:border-pole focus:outline-none min-[90rem]:text-[13px]"
         />
         <button
           type="submit"
           disabled={!muze}
           title={odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu"}
-          className="inline-flex min-h-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl bg-smrk px-4 text-sm font-bold text-papir min-[90rem]:bg-akcent [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu"}
+          className="nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-smrk text-papir transition-opacity min-[90rem]:bg-akcent [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {odesilaSe ? "Posílám…" : "Poslat"}
+          <Ikona nazev="arrow-up" className="size-4" />
+          <span className="sr-only">{odesilaSe ? "Posílám…" : "Poslat"}</span>
         </button>
       </div>
       <ChipyPriloh soubory={soubory} disabled={odesilaSe} onOdebrat={naOdebratSoubor} />

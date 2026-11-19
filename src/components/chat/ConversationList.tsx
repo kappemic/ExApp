@@ -1,3 +1,4 @@
+import Ikona from "../Ikona";
 import {
   useCallback,
   useEffect,
@@ -360,12 +361,12 @@ function RadekKonverzace({
         aria-label={`${polozka.nazev} — ${maNeprectene ? popisekNeprectenychKonverzace(polozka.unreadCount) : "přečteno"}`}
         title={polozka.nazev}
         onClick={() => onVybrat(polozka.key)}
-        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-inkoust [touch-action:pan-y] motion-safe:transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk ${
+        className={`flex min-h-[64px] w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-inkoust [touch-action:pan-y] motion-safe:transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-[62px] min-[90rem]:min-h-0 min-[90rem]:gap-2.5 min-[90rem]:px-5 min-[90rem]:py-0 ${
           onUpravit !== undefined ? "pr-12" : ""
         } ${
           vybrana
-            ? "bg-mlha"
-            : "motion-safe:hover:bg-mlha/50"
+            ? "bg-mlha min-[90rem]:bg-[#fbf8ef]"
+            : "motion-safe:hover:bg-povrch-2/60"
         }`}
       >
         {clen !== null ? (
@@ -376,10 +377,12 @@ function RadekKonverzace({
           <span
             aria-hidden="true"
             title={znacka.popis}
-            className={`flex h-10 w-10 shrink-0 grow-0 basis-10 select-none items-center justify-center rounded-full border-2 text-base font-extrabold ${
+            className={`flex h-10 w-10 shrink-0 grow-0 basis-10 select-none items-center justify-center rounded-full text-[13px] font-semibold min-[90rem]:h-9 min-[90rem]:w-9 min-[90rem]:basis-9 min-[90rem]:text-[11.5px] ${
               polozka.channel === "dulezite"
-                ? "border-jantar bg-jantar text-papir"
-                : "border-smrk bg-smrk text-papir"
+                ? "bg-okr-100 text-okr"
+                : vybrana
+                  ? "bg-mlha text-smrk min-[90rem]:bg-mlha"
+                  : "bg-povrch-2 text-mech"
             }`}
           >
             {znacka.znak}
@@ -390,7 +393,7 @@ function RadekKonverzace({
             <NeprectenaTecka viditelna={maNeprectene} velikost="nadpis" nazevVypravy={polozka.nazev} />
             <span
               title={polozka.nazev}
-              className="min-w-0 flex-1 truncate text-[14px] font-extrabold"
+              className={`min-w-0 flex-1 truncate text-sm min-[90rem]:text-[13.5px] ${maNeprectene ? "font-bold" : "font-semibold"}`}
               style={{ overflowWrap: "anywhere" }}
             >
               {polozka.nazev}
@@ -398,7 +401,7 @@ function RadekKonverzace({
             {cas.length > 0 && (
               <time
                 dateTime={polozka.lastMessageAt ?? undefined}
-                className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-ink-3"
+                className="shrink-0 whitespace-nowrap text-[11px] font-medium tabular-nums text-[#b3b8a4] min-[90rem]:text-[10px]"
               >
                 {cas}
               </time>
@@ -406,7 +409,7 @@ function RadekKonverzace({
           </span>
           <span
             title={nahled}
-            className="mt-0.5 block min-w-0 break-words text-[13px] leading-snug text-mech [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden"
+            className="mt-0.5 block min-w-0 break-words text-xs leading-snug text-ink-3 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden min-[90rem]:text-[11.5px] min-[90rem]:[-webkit-line-clamp:1]"
             style={{ overflowWrap: "anywhere" }}
           >
             {nahled}
@@ -417,7 +420,7 @@ function RadekKonverzace({
             role="status"
             aria-label={popisekNeprectenychKonverzace(polozka.unreadCount)}
             title={popisekNeprectenychKonverzace(polozka.unreadCount)}
-            className={`inline-flex h-7 min-w-7 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-akcent px-2 text-[12px] font-extrabold tabular-nums text-papir`}
+            className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-akcent px-1.5 text-[10.5px] font-bold tabular-nums text-papir min-[90rem]:h-[18px] min-[90rem]:min-w-[18px] min-[90rem]:text-[10px]`}
           >
             {polozka.unreadCount > 99 ? "99+" : String(polozka.unreadCount)}
           </span>
@@ -538,7 +541,7 @@ function SekceSeznamu({
   if (radky.length === 0) return null;
   return (
     <section className="min-w-0 space-y-2">
-      <h3 className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-mech">
+      <h3 className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-3 min-[90rem]:pb-1 min-[90rem]:pt-3">
         {nadpis}
       </h3>
       <ul
@@ -546,7 +549,7 @@ function SekceSeznamu({
         role="listbox"
         aria-label={nadpis}
         onScroll={onScroll}
-        className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
+        className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain min-[90rem]:-mx-4 min-[90rem]:max-h-none min-[90rem]:overflow-visible min-[90rem]:rounded-none min-[90rem]:border-0 min-[90rem]:bg-transparent min-[90rem]:shadow-none min-[90rem]:divide-y-0 ${
           scrolluje ? "seznam-scrolluje" : ""
         }`}
       >
@@ -761,17 +764,22 @@ export default function ConversationList({
   return (
     <div className="min-w-0 space-y-3">
       {segment !== "soukrome" && (
-        <input
-          type="search"
-          value={dotaz}
-          onChange={(udalost) => setDotaz(udalost.target.value)}
-          aria-label="Hledat v konverzacích"
-          placeholder="Hledat v konverzacích"
-          autoComplete="off"
-          className="w-full min-h-[44px] rounded-xl border border-pole bg-povrch px-3.5 text-base text-inkoust outline-none placeholder:text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-        />
+        <div className="relative">
+          <span aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 min-[90rem]:left-[11px]">
+            <Ikona nazev="search" className="size-4 min-[90rem]:size-[15px]" />
+          </span>
+          <input
+            type="search"
+            value={dotaz}
+            onChange={(udalost) => setDotaz(udalost.target.value)}
+            aria-label="Hledat v konverzacích"
+            placeholder="Hledat v konverzacích"
+            autoComplete="off"
+            className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust outline-none placeholder:text-[#9aa189] focus:border-pole focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-[38px] min-[90rem]:rounded-[10px] min-[90rem]:border-transparent min-[90rem]:bg-povrch-2 min-[90rem]:pl-[34px] min-[90rem]:text-[12.5px] min-[90rem]:placeholder:text-ink-3"
+          />
+        </div>
       )}
-      <div role="tablist" aria-label="Druh konverzací" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div role="tablist" aria-label="Druh konverzací" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[90rem]:gap-1.5">
         {SEGMENTY.map((polozka) => {
           const vybrana: boolean = segment === polozka.id;
           const maNeprectene: boolean = maNeprecteneVSegmentu(polozky, polozka.id);
@@ -784,10 +792,10 @@ export default function ConversationList({
               aria-selected={vybrana}
               aria-controls={panelId}
               onClick={() => onSegment(polozka.id)}
-              className={`bez-prejeti inline-flex min-h-8 shrink-0 whitespace-nowrap touch-manipulation items-center justify-center gap-1.5 rounded-full border px-2.5 text-[13px] font-semibold select-none transition-colors motion-reduce:transition-none ${
+              className={`bez-prejeti inline-flex h-8 shrink-0 whitespace-nowrap touch-manipulation items-center justify-center gap-1.5 rounded-full border px-3 text-[13px] select-none transition-colors motion-reduce:transition-none min-[90rem]:h-auto min-[90rem]:rounded-lg min-[90rem]:border-0 min-[90rem]:px-2.5 min-[90rem]:py-1.5 min-[90rem]:text-xs ${
                 vybrana
-                  ? "border-transparent bg-smrk text-papir"
-                  : "border-linka bg-povrch text-inkoust hover:bg-mlha/60"
+                  ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-povrch-2 min-[90rem]:text-inkoust"
+                  : "border-linka bg-povrch font-medium text-mech hover:bg-povrch-2 min-[90rem]:bg-transparent min-[90rem]:text-ink-3"
               }`}
             >
               <span>{polozka.nazev}</span>
@@ -813,7 +821,7 @@ export default function ConversationList({
           <button
             type="button"
             onClick={onNovaSkupina}
-            className="nahled-prejeti relative inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-linka bg-papir px-3 text-sm font-extrabold text-inkoust [touch-action:manipulation] motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-denik"
+            className="nahled-press relative inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-linka bg-povrch px-3 text-sm font-semibold text-mech [touch-action:manipulation] hover:bg-povrch-2 min-[90rem]:hidden"
           >
             <span className="relative z-10">
               Nová skupina
@@ -893,7 +901,7 @@ export default function ConversationList({
             role="listbox"
             aria-label={SEGMENTY.find((z) => z.id === segment)?.nazev}
             onScroll={naScrollSeznamu}
-            className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain ${
+            className={`seznam-scroll ${SEZNAM_KARTA_TRIDA} max-lg:overflow-visible lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain min-[90rem]:-mx-4 min-[90rem]:max-h-none min-[90rem]:overflow-visible min-[90rem]:rounded-none min-[90rem]:border-0 min-[90rem]:bg-transparent min-[90rem]:shadow-none min-[90rem]:divide-y-0 ${
               scrolluje ? "seznam-scrolluje" : ""
             }`}
           >

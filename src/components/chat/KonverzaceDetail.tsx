@@ -1,3 +1,5 @@
+import Ikona from "../Ikona";
+import { inicialyProAvatar } from "../../lib/storage/avatar";
 import {
   useCallback,
   useEffect,
@@ -602,28 +604,31 @@ export default function KonverzaceDetail({
 
   return (
     <section aria-label={`Konverzace ${nazev}`} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-w-0 items-center gap-2 border-b border-linka pb-2 lg:pb-3">
+      <header className="flex min-w-0 items-center gap-[11px] border-b border-linka px-4 py-3 min-[90rem]:h-[66px] min-[90rem]:px-5 min-[90rem]:py-0">
         {onZpet !== undefined && (
           <button
             type="button"
             onClick={onZpet}
             aria-label="Zpět na seznam konverzací"
-            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-linka bg-papir px-3 text-sm font-bold [touch-action:manipulation] lg:hidden"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust [touch-action:manipulation] lg:hidden"
           >
-            ←
+            <Ikona nazev="chevron-left" className="size-[18px]" />
           </button>
         )}
+        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mlha text-[11.5px] font-semibold text-smrk">
+          {inicialyProAvatar(nazev)}
+        </span>
         <div className="min-w-0 flex-1">
           <h2
             ref={nadpisRef}
             tabIndex={-1}
             title={nazev}
-            className="min-w-0 truncate text-lg font-extrabold tracking-tight lg:text-xl"
+            className="min-w-0 truncate text-[14.5px] font-semibold text-inkoust"
             style={{ overflowWrap: "anywhere" }}
           >
             {nazev}
           </h2>
-          <p className="mt-0.5 min-w-0 truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-inkoust/60">
+          <p className={`mt-px min-w-0 truncate text-[11.5px] text-ink-3 ${konverzace.channel === "general" ? "sr-only" : ""}`}>
             {jeSoukrome
               ? "Soukromá zpráva · jen vy dva"
               : jeSkupina
@@ -635,7 +640,7 @@ export default function KonverzaceDetail({
                   : "Vlákno výpravy"}
           </p>
           {konverzace.channel === "general" && (
-            <p className="mt-0.5 min-w-0 truncate text-[12px] text-mech">
+            <p className="mt-px min-w-0 truncate text-[11.5px] text-ink-3">
               {clenove.length > 0
                 ? `${tvarClenu(clenove.length)} · 0 online`
                 : "—"}
@@ -655,13 +660,13 @@ export default function KonverzaceDetail({
         )}
       </header>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {stav === "nacitani" && (
           <KostraZpravy popisek={`Načítám konverzaci ${nazev}`} />
         )}
 
         {stav === "chyba" && (
-          <div className="rounded-2xl border-2 border-inkoust/20 bg-papir p-4 text-center">
+          <div className="m-4 rounded-2xl border border-linka bg-povrch p-4 text-center">
             <p role="alert" className="text-sm font-semibold">
               {chybaNacteni ?? "Zprávy se nepodařilo načíst."}
             </p>
@@ -687,12 +692,12 @@ export default function KonverzaceDetail({
             <div
               ref={vlaknoRef}
               data-vlakno-scroll="konverzace"
-              className="mt-2 min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl border border-inkoust/15 bg-papir/60 p-2 lg:p-3"
+              className="posuvnik min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-5 min-[90rem]:px-5"
             >
             {bloky.length === 0 ? (
               <p
                 role="status"
-                className="min-w-0 break-words rounded-xl border border-dashed border-inkoust/25 bg-papir/60 p-4 text-center text-sm text-inkoust/70"
+                className="min-w-0 break-words rounded-2xl bg-povrch-2/60 p-4 text-center text-[13px] text-ink-3"
               >
                 Zatím tu není žádná zpráva — začni domluvu první vzkazem níže.
               </p>
@@ -714,9 +719,9 @@ export default function KonverzaceDetail({
                       {ukázatDen && den.length > 0 && (
                         <p
                           aria-label={den}
-                          className="mb-2 text-center text-[11px] font-extrabold uppercase tracking-[0.16em] text-inkoust/50"
+                          className="mb-4 text-center text-[10.5px] font-semibold text-ink-3"
                         >
-                          <span className="inline-block rounded-full border border-inkoust/20 bg-papir px-3 py-1">
+                          <span className="inline-block rounded-full bg-povrch-2 px-2.5 py-[3px] first-letter:uppercase">
                             {den}
                           </span>
                         </p>
@@ -784,8 +789,8 @@ export default function KonverzaceDetail({
 
             {/* Composer sits under the thread so history can use the rest of the phone. */}
             <div
-              className="mt-2 shrink-0"
-              style={{ paddingBottom: "calc(0.25rem + env(safe-area-inset-bottom, 0px))" }}
+              className="shrink-0 border-t border-linka px-4 pt-3.5 min-[90rem]:px-5"
+              style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
             >
               {!prihlasen ? (
                 <p
@@ -798,7 +803,7 @@ export default function KonverzaceDetail({
               ) : !smiPsat ? (
                 <p
                   role="status"
-                  className="rounded-2xl border-2 border-jantar/50 bg-papir p-3 text-center text-sm text-inkoust/80 shadow-denik"
+                  className="rounded-2xl border border-linka bg-povrch-2 p-3 text-center text-sm text-mech"
                 >
                   {jeSkupina
                     ? "Do téhle skupiny smíš jen číst. Psát může role, které to vedení povolilo."

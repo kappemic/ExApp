@@ -1,3 +1,5 @@
+import Ikona from "../components/Ikona";
+import Prepinac from "../components/Prepinac";
 import { useState, type FormEvent, type JSX } from "react";
 import HlavickaZpet from "../components/HlavickaZpet";
 import { chybaKombinace3D, smiNaVypravy } from "../config/roles";
@@ -50,13 +52,25 @@ export default function NastaveniPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
-      <HlavickaZpet zpet="/vice" zpetPopisek="Zpět na Více" titulek="Nastavení" varianta="nadpis" />
+    <main className="mx-auto w-full max-w-lg px-5 pb-16 pt-4 sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+      <HlavickaZpet zpet="/vice" zpetPopisek="Zpět na Více" titulek="Nastavení" varianta="nadpis" className="min-[90rem]:hidden" />
+      <div className="hidden items-end justify-between min-[90rem]:flex">
+        <h1 className="font-display text-[46px] font-bold leading-[0.98] tracking-[-1.4px] text-inkoust">Nastavení</h1>
+        <button
+          type="submit"
+          form="nastaveni-form"
+          className="nahled-press inline-flex h-[46px] items-center gap-2 rounded-xl bg-smrk px-[18px] text-sm font-semibold text-papir hover:opacity-90"
+        >
+          <Ikona nazev="check" className="size-4" />
+          Uložit změny
+        </button>
+      </div>
 
-      <form className="mt-6 flex flex-col gap-4" onSubmit={naUlozit}>
-        <section className="rounded-3xl bg-povrch p-4">
-          <h2 className="font-display text-lg font-bold text-inkoust">Oprávnění</h2>
-          <ul className="mt-3 flex flex-col gap-3 text-base leading-relaxed text-inkoust">
+      <form id="nastaveni-form" className="mt-6 grid gap-4 min-[90rem]:mt-8 min-[90rem]:grid-cols-[minmax(0,1fr)_340px] min-[90rem]:items-start min-[90rem]:gap-7" onSubmit={naUlozit}>
+        <div className="flex min-w-0 flex-col gap-4 min-[90rem]:gap-5">
+        <section className="rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+          <h2 className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">Oprávnění</h2>
+          <ul className="mt-4 flex flex-col divide-y divide-linka text-sm leading-relaxed text-mech [&>li]:py-3 [&>li:first-child]:pt-0 [&>li:last-child]:pb-0">
             <li>
               Výpravu zakládá aktivní člen
               {AKTIVNI ? "" : " (pravidlo teď aktivního člena nepouští)"}.
@@ -80,41 +94,32 @@ export default function NastaveniPage(): JSX.Element {
           </ul>
         </section>
 
-        <section className="rounded-3xl bg-povrch p-4">
-          <h2 className="font-display text-lg font-bold text-inkoust">Discord oznámení</h2>
-          <p className="mt-1 text-sm text-mech">Stav webhooku z aplikace nevidíme — přepínače jsou jen náhled.</p>
-          <div className="mt-4 flex flex-col gap-3">
-            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-2xl bg-papir px-4">
-              <span className="text-base font-medium text-inkoust">Nová výprava</span>
-              <input
-                type="checkbox"
-                checked={discordVyprava}
-                onChange={(e) => setDiscordVyprava(e.target.checked)}
-                className="h-5 w-5 accent-smrk"
-              />
-            </label>
-            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-2xl bg-papir px-4">
-              <span className="text-base font-medium text-inkoust">Důležitá oznámení</span>
-              <input
-                type="checkbox"
-                checked={discordDulezite}
-                onChange={(e) => setDiscordDulezite(e.target.checked)}
-                className="h-5 w-5 accent-smrk"
-              />
-            </label>
+        <section className="rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+          <h2 className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">Discord oznámení</h2>
+          <p className="mt-1 text-[12.5px] text-ink-3">Stav webhooku z aplikace nevidíme — přepínače jsou jen náhled.</p>
+          <div className="mt-3 flex flex-col divide-y divide-linka">
+            <div className="flex items-center justify-between gap-3 py-1">
+              <span className="text-sm font-medium text-inkoust">Nová výprava</span>
+              <Prepinac zapnuto={discordVyprava} onZmena={setDiscordVyprava} popisek={`Discord: Nová výprava`} />
+            </div>
+            <div className="flex items-center justify-between gap-3 py-1">
+              <span className="text-sm font-medium text-inkoust">Důležitá oznámení</span>
+              <Prepinac zapnuto={discordDulezite} onZmena={setDiscordDulezite} popisek={`Discord: Důležitá oznámení`} />
+            </div>
           </div>
         </section>
 
-        <section className="rounded-3xl bg-povrch p-4">
-          <h2 className="font-display text-lg font-bold text-inkoust">Push oznámení</h2>
-          <p className="mt-2 text-base leading-relaxed text-mech">
+        </div>
+        <section className="rounded-2xl border border-linka bg-povrch p-5 shadow-jemny">
+          <h2 className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">Push oznámení</h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-mech">
             Push jde zapnout v nainstalované aplikaci. Na iPhonu nejdřív přidej ExApp na plochu.
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <button
               type="button"
               disabled={bezi}
-              className="min-h-11 rounded-2xl bg-smrk px-4 text-base font-bold text-papir disabled:opacity-60"
+              className="nahled-press min-h-11 rounded-xl bg-smrk px-4 text-sm font-semibold text-papir disabled:opacity-60"
               onClick={() => void prepnout(true)}
             >
               Zapnout oznámení
@@ -122,7 +127,7 @@ export default function NastaveniPage(): JSX.Element {
             <button
               type="button"
               disabled={bezi}
-              className="min-h-11 rounded-2xl border border-pole bg-papir px-4 text-base font-bold text-inkoust disabled:opacity-60"
+              className="nahled-press min-h-11 rounded-xl border border-linka bg-povrch px-4 text-sm font-semibold text-mech hover:bg-povrch-2 disabled:opacity-60"
               onClick={() => void prepnout(false)}
             >
               Vypnout oznámení
@@ -131,14 +136,14 @@ export default function NastaveniPage(): JSX.Element {
         </section>
 
         {hlaska !== null ? (
-          <p role="status" className="text-base text-inkoust">
+          <p role="status" className="text-sm text-inkoust min-[90rem]:col-span-2">
             {hlaska}
           </p>
         ) : null}
 
         <button
           type="submit"
-          className="min-h-11 w-full rounded-2xl bg-smrk px-4 text-base font-bold text-papir"
+          className="nahled-press h-12 w-full rounded-xl bg-smrk px-4 text-sm font-semibold text-papir min-[90rem]:hidden"
         >
           Uložit změny
         </button>

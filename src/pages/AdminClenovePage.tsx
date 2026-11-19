@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
+import Ikona from "../components/Ikona";
+import { getZebricek } from "../lib/zebricky-api";
 import { Link } from "react-router-dom";
 import {
   mapujRoliNaProfil,
@@ -141,56 +143,104 @@ export default function AdminClenovePage(): JSX.Element {
     [clenove, vybranyId],
   );
 
+  const [vypravyClena, setVypravyClena] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    let zive = true;
+    void getZebricek("celkem").then((vysledek) => {
+      if (!zive) return;
+      setVypravyClena(new Map(vysledek.data.zebricky.map((r) => [r.userId, r.vypravy])));
+    });
+    return () => {
+      zive = false;
+    };
+  }, []);
+
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:max-w-2xl">
-      <header className="border-b border-linka pb-4">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-inkoust">Členové</h1>
-        <p className="mt-1 text-base text-mech">
-          {stav === "hotovo" ? `${clenove.length} členů` : "Načítám seznam…"}
-        </p>
-        {isAdmin ? (
-          <Link
-            to="/admin/kody"
-            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-2xl bg-smrk px-5 text-base font-bold text-papir"
-          >
-            Pozvat
-          </Link>
-        ) : null}
-        <div className="mt-4">
-          <label htmlFor="clenove-hledani" className="sr-only">
-            Hledat členy
-          </label>
-          <input
-            id="clenove-hledani"
-            type="search"
-            value={hledani}
-            onChange={(e) => setHledani(e.target.value)}
-            placeholder="Hledat jméno, e-mail…"
-            className="min-h-11 w-full rounded-2xl border border-pole bg-povrch px-4 text-base text-inkoust placeholder:text-mech"
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Filtr členů">
-          {CHIPY.map((chip) => {
-            const aktivni = aktivniTab === chip.id;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                role="tab"
-                aria-selected={aktivni}
-                onClick={() => setAktivniTab(chip.id)}
-                className={`min-h-9 rounded-full px-4 text-sm font-bold ${
-                  aktivni ? "bg-inkoust text-papir" : "border border-pole bg-papir text-inkoust"
-                }`}
+    <main className="mx-auto w-full max-w-lg px-5 pb-16 pt-4 sm:px-6 sm:pt-8 lg:max-w-2xl min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+      <header className="flex flex-col gap-5 min-[90rem]:gap-8">
+        <div className="flex items-center justify-between gap-3 min-[90rem]:items-end">
+          <div className="flex flex-col gap-0.5">
+            <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+              Členové
+            </h1>
+            <p className="text-xs text-ink-3 min-[90rem]:hidden">
+              {stav === "hotovo" ? `${clenove.length} členů` : "Načítám seznam…"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="relative hidden w-[232px] min-[90rem]:block">
+            <label htmlFor="clenove-hledani-pc" className="sr-only">
+              Hledat členy
+            </label>
+            <span aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
+              <Ikona nazev="search" className="size-4 min-[90rem]:size-[17px]" />
+            </span>
+            <input
+              id="clenove-hledani-pc"
+              type="search"
+              value={hledani}
+              onChange={(e) => setHledani(e.target.value)}
+              placeholder="Hledat člena"
+              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-[#9aa189] focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
+            />
+          </div>
+            {isAdmin ? (
+              <Link
+                to="/admin/kody"
+                className="nahled-press inline-flex h-11 items-center gap-1.5 rounded-xl bg-smrk px-3.5 text-[13.5px] font-semibold text-papir hover:opacity-90 min-[90rem]:h-[46px] min-[90rem]:gap-2 min-[90rem]:px-[18px] min-[90rem]:text-sm"
               >
-                {chip.popisek}
-              </button>
-            );
-          })}
+                <Ikona nazev="user-plus" className="size-4" />
+                Pozvat
+              </Link>
+            ) : null}
+          </div>
+        </div>
+          <div className="relative min-[90rem]:hidden">
+            <label htmlFor="clenove-hledani" className="sr-only">
+              Hledat členy
+            </label>
+            <span aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
+              <Ikona nazev="search" className="size-4 min-[90rem]:size-[17px]" />
+            </span>
+            <input
+              id="clenove-hledani"
+              type="search"
+              value={hledani}
+              onChange={(e) => setHledani(e.target.value)}
+              placeholder="Hledat člena"
+              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-[#9aa189] focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
+            />
+          </div>
+        <div className="flex items-center justify-between gap-3 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4">
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtr členů">
+            {CHIPY.map((chip) => {
+              const aktivni = aktivniTab === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  role="tab"
+                  id={`clenove-chip-${chip.id}`}
+                  aria-selected={aktivni}
+                  onClick={() => setAktivniTab(chip.id)}
+                  className={`inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors min-[90rem]:h-auto min-[90rem]:px-3.5 min-[90rem]:py-2 ${
+                    aktivni
+                      ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
+                      : "border-linka bg-povrch font-medium text-mech hover:bg-povrch-2 min-[90rem]:bg-transparent"
+                  }`}
+                >
+                  {chip.popisek}
+                </button>
+              );
+            })}
+          </div>
+          <p className="hidden text-[13px] font-medium text-ink-3 min-[90rem]:block">
+            {stav === "hotovo" ? `${clenove.length} členů` : ""}
+          </p>
         </div>
       </header>
 
-      <div className="pt-6">
+      <div className="pt-5 min-[90rem]:pt-8">
         {stav === "nacteni" && (
           <KostraRadky pocet={6} popisek="Načítám členy" sAvatarem />
         )}
@@ -198,7 +248,7 @@ export default function AdminClenovePage(): JSX.Element {
         {stav === "chyba" && (
           <div
             role="alert"
-            className="rounded-lg border border-linka bg-povrch px-5 py-8 text-center shadow-denik"
+            className="rounded-2xl border border-linka bg-povrch px-5 py-8 text-center shadow-jemny"
           >
             <p className="text-base font-bold">Seznam se nepodařilo načíst</p>
             <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-inkoust/70">
@@ -220,8 +270,9 @@ export default function AdminClenovePage(): JSX.Element {
             id={`clenove-panel-${aktivniTab}`}
             aria-labelledby={`clenove-chip-${aktivniTab}`}
           >
-            <div className="mt-3">
+            <div>
               <ClenoveTable
+                vypravyClena={vypravyClena}
                 clenove={[...filtrovani]}
                 vybranyId={vybranyId}
                 onVyber={(clen) => setVybranyId(clen.id)}

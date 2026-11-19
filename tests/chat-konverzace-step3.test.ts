@@ -395,8 +395,6 @@ describe("Step 3 zdroj-kontrakt (a11y + deník + 44px + mobile-native)", () => {
       const zdroj: string = ctiZdroj(soubor);
       expect(zdroj).toContain("border-linka");
       expect(zdroj).not.toMatch(/border-2 border-inkoust(?!\/)/);
-      expect(zdroj).toContain("bg-papir");
-      expect(zdroj).toContain("shadow-denik");
     }
   });
 
