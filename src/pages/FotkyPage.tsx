@@ -23,7 +23,7 @@ import { IkonaLupa, IkonaObrazek } from "../components/SeznamIkony";
 import HlavickaZpet, { ZpetPocitac } from "../components/HlavickaZpet";
 import Ikona from "../components/Ikona";
 import { zneplatniBazenZastupnych } from "../lib/zastupne-fotky";
-import { jeAlbumNahledu } from "../shared/fotky-nahledy";
+import { jeAlbumNahledu, smiNahratDoAlba } from "../shared/fotky-nahledy";
 import { velikostiAlb } from "../lib/alba-prehled";
 import { formatCelyDatum } from "../lib/expedition-utils";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
@@ -35,7 +35,7 @@ import {
 } from "../lib/alba-api";
 
 const POPIS_ALBA_NAHLEDU =
-  "Z těchto fotek se náhodně vybírá obrázek nadcházejících výprav. Dvě výpravy po sobě nikdy nedostanou stejný. Dokud tu nejsou aspoň dvě fotky, doplňují se z alb proběhlých výprav.";
+  "Z těchto fotek se náhodně vybírá obrázek nadcházejících výprav, přidávají je vedoucí. Dvě výpravy po sobě nikdy nedostanou stejný. Dokud tu nejsou aspoň dvě fotky, doplňují se z alb proběhlých výprav.";
 
 type StavSeznamu = "nacitani" | "hotovo" | "chyba";
 type SegmentAlba = "vsechna" | "vypravy" | "ruzne";
@@ -212,6 +212,12 @@ export default function FotkyPage(): JSX.Element {
   const albaVPrehledu = filtrujAlba(alba, hledaniAlba, segmentAlba).filter((album) => album.druh !== "kos");
   const bezFiltru = segmentAlba === "vsechna" && hledaniAlba.trim().length === 0;
   const albumKos = alba.find((album) => album.druh === "kos");
+  const albaKNahrani = alba.filter(
+    (album) => album.druh !== "kos" && smiNahratDoAlba(album.id, isAdmin),
+  );
+  const vybraneKNahrani = albaKNahrani.some((album) => album.id === vybraneId)
+    ? vybraneId
+    : (albaKNahrani[0]?.id ?? "");
   const albumKeSmazani =
     isAdmin && otevrene !== null && otevrene.druh === "vlastni" && !jeAlbumNahledu(otevrene.id)
       ? otevrene
@@ -409,7 +415,7 @@ export default function FotkyPage(): JSX.Element {
           </div>
           {otevrene.druh !== "kos" && !vyberFotek ? (
             <div className="flex gap-2 min-[90rem]:shrink-0 min-[90rem]:flex-row-reverse min-[90rem]:gap-2.5">
-              {prihlasen ? (
+              {prihlasen && smiNahratDoAlba(otevrene.id, isAdmin) ? (
                 <button
                   type="button"
                   data-fotky-rozbal-nahravani
@@ -459,8 +465,8 @@ export default function FotkyPage(): JSX.Element {
       {otevrene?.druh !== "kos" ? (
         <FotkyNahravaciPanel
           isAdmin={isAdmin}
-          alba={alba.filter((polozka) => polozka.druh !== "kos")}
-          vybraneId={vybraneId}
+          alba={albaKNahrani}
+          vybraneId={vybraneKNahrani}
           onVyber={setVybraneId}
           onNahrano={poNahrani}
           onVytvoreno={poNovemAlbu}

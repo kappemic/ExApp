@@ -2,7 +2,8 @@
  * tests/alba.test.ts — album name, kind split, list order, extra-album object keys.
  * Pure helpers only: no database, no network, no secrets.
  */
-import { ALBUM_NAHLEDY_ID } from "../src/shared/fotky-nahledy";
+import { ALBUM_NAHLEDY_ID, smiNahratDoAlba } from "../src/shared/fotky-nahledy";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   albumNahledu,
@@ -187,6 +188,23 @@ describe("sestavSeznamAlb", () => {
 });
 
 describe("albumNahledu", () => {
+  it("nahrává do něj jen vedoucí, do ostatních alb každý člen", () => {
+    expect(smiNahratDoAlba(ALBUM_NAHLEDY_ID, true)).toBe(true);
+    expect(smiNahratDoAlba(ALBUM_NAHLEDY_ID, false)).toBe(false);
+    expect(smiNahratDoAlba(ALBUM_NAHLEDY_ID.toUpperCase(), false)).toBe(false);
+    expect(smiNahratDoAlba(UUID, false)).toBe(true);
+    expect(smiNahratDoAlba("sumava", false)).toBe(true);
+  });
+
+  it("route nahrávání ověří právo dřív, než čte tělo a zakládá řádek alba", () => {
+    const routes = readFileSync("server/src/alba-routes.ts", "utf8");
+    const nahravani = routes.slice(routes.indexOf('app.post("/api/alba/:id/fotky"'));
+    const guard = nahravani.indexOf("smiNahratDoAlba(");
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(nahravani.indexOf("ctiSuroveTelo("));
+    expect(guard).toBeLessThan(nahravani.indexOf("zajistiAlbumNahledu("));
+  });
+
   it("je vlastní album s pevným id, i prázdné", () => {
     expect(albumNahledu(0, null)).toEqual({
       id: ALBUM_NAHLEDY_ID,

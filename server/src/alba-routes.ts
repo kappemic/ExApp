@@ -41,6 +41,7 @@ import {
   ALBUM_NAHLEDY_ID,
   ALBUM_NAHLEDY_NAZEV,
   jeAlbumNahledu,
+  smiNahratDoAlba,
 } from "../../src/shared/fotky-nahledy";
 import {
   fotkaVlastniApi,
@@ -626,6 +627,11 @@ export function registrujAlba(app: Express): void {
         const id = ctiParam(req, "id");
         if (id.length === 0) {
           posliChybu(res, "NENALEZENO", "Album nenalezeno.");
+          return;
+        }
+        const { isAdmin, isSuperadmin } = (req as AutentizovanyRequest).uzivatel;
+        if (!smiNahratDoAlba(id, isAdmin || isSuperadmin)) {
+          posliChybu(res, "ZAKAZANO", "Do tohoto alba nahrávají fotky jen vedoucí.");
           return;
         }
         let cil: CilNahrani;

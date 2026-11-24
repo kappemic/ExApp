@@ -12,3 +12,8 @@ export const ALBUM_NAHLEDY_MIN_FOTEK = 2;
 export function jeAlbumNahledu(albumId: string): boolean {
   return albumId.trim().toLowerCase() === ALBUM_NAHLEDY_ID;
 }
+
+/** Fotky z alba náhledů vidí všichni na hlavní stránce, přidávají je jen vedoucí (admin). */
+export function smiNahratDoAlba(albumId: string, isAdmin: boolean): boolean {
+  return isAdmin || !jeAlbumNahledu(albumId);
+}

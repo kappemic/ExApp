@@ -14,7 +14,7 @@ describe("Fotky master–detail layout", () => {
 
   it("výběr alba v nahrávání drží zvolenou hodnotu a nenechává transform", () => {
     const page = cti("src/pages/FotkyPage.tsx");
-    expect(page).toContain("vybraneId={vybraneId}");
+    expect(page).toContain("vybraneId={vybraneKNahrani}");
     expect(page).not.toContain("albumId ?? vybraneId");
     const css = cti("src/index.css");
     expect(css).toContain("fotky-disclosure-enter 160ms ease-out backwards");

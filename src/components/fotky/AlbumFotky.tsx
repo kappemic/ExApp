@@ -23,6 +23,7 @@ import {
 } from "../../lib/fotky-mazani";
 import { smazFotku } from "../../lib/expedition-fotky";
 import { KOS_RETENTION_DAYS } from "../../shared/fotky-kos";
+import { smiNahratDoAlba } from "../../shared/fotky-nahledy";
 import {
   albumProFotku,
   nactiFotkyAlba,
@@ -375,7 +376,9 @@ export default function AlbumFotky({
         text={
           jeKos
             ? `Fotky v koši se po ${KOS_RETENTION_DAYS} dnech smažou natrvalo.`
-            : "Přidej první fotky tlačítkem Nahrát."
+            : smiNahratDoAlba(album.id, isAdmin)
+              ? "Přidej první fotky tlačítkem Nahrát."
+              : "Fotky sem přidávají vedoucí."
         }
       >
         {isAdmin && !jeKos && onNahrati === undefined ? (

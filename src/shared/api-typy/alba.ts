@@ -13,6 +13,7 @@
 /*   GET /api/alba/:id/fotky/:fotkaId/soubor.                          */
 /* One `vlastni` album is permanent: ALBUM_NAHLEDY_ID                  */
 /* (src/shared/fotky-nahledy.ts). Always listed, never deletable.      */
+/* POST …/fotky there is ADMIN, other members get 403 ZAKAZANO.        */
 /* Errors are only ApiErrorResponse.                                   */
 /* ------------------------------------------------------------------ */
 
