@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
-import { and, asc, count, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type {
   AlbaListResponse,
   AlbumFotkyResponse,
@@ -20,6 +20,7 @@ import { expeditions } from "../../drizzle/schema/expeditions";
 import { photos } from "../../drizzle/schema/photos";
 import {
   albumKos,
+  albumNahledu,
   jeVypravaSViditelnymAlbem,
   rozhodniSmazaniAlba,
   sestavSeznamAlbZeShrnuti,
@@ -36,6 +37,11 @@ import { lzeDoplnitArchiv } from "./vyprava-termin";
 import { getDb, type Db } from "./db";
 import { chceNahled, maBezpecneRozmery, OBRAZEK_PRILIS_VELKY, rozmeryUlozenychBajtu } from "./obrazek-nahled";
 import { jeAlbumKos } from "../../src/shared/fotky-kos";
+import {
+  ALBUM_NAHLEDY_ID,
+  ALBUM_NAHLEDY_NAZEV,
+  jeAlbumNahledu,
+} from "../../src/shared/fotky-nahledy";
 import {
   fotkaVlastniApi,
   fotkaVypravyApi,
@@ -218,6 +224,14 @@ async function nactiHlavuKose(
   };
 }
 
+/** The cover album has a fixed id, so its row can be added with the first photo. */
+async function zajistiAlbumNahledu(db: Db): Promise<void> {
+  await db
+    .insert(alba)
+    .values({ id: ALBUM_NAHLEDY_ID, nazev: ALBUM_NAHLEDY_NAZEV })
+    .onConflictDoNothing({ target: alba.id });
+}
+
 type CilNahrani =
   | { druh: "vyprava"; id: string }
   | { druh: "vlastni"; id: string };
@@ -247,7 +261,8 @@ export function registrujAlba(app: Express): void {
           .where(eq(expeditions.stav, "proběhlá"));
         const vlastni = await db
           .select({ id: alba.id, nazev: alba.nazev, createdAt: alba.createdAt })
-          .from(alba);
+          .from(alba)
+          .where(ne(alba.id, ALBUM_NAHLEDY_ID));
         const [vypravyShrnuti, vlastniShrnuti] = await Promise.all([
           nactiShrnutiFotek(db, "photos"),
           nactiShrnutiFotek(db, "alba_fotky"),
@@ -260,6 +275,13 @@ export function registrujAlba(app: Express): void {
           vlastniShrnuti.pocty,
           vlastniShrnuti.nahledy,
         );
+        seznam = [
+          ...seznam,
+          albumNahledu(
+            vlastniShrnuti.pocty.get(ALBUM_NAHLEDY_ID) ?? 0,
+            vlastniShrnuti.nahledy.get(ALBUM_NAHLEDY_ID) ?? null,
+          ),
+        ];
         if (session?.isAdmin === true) {
           await purgeKosBestEffort(db);
           const [kosVyprav, kosVlastni] = await Promise.all([
@@ -579,7 +601,7 @@ export function registrujAlba(app: Express): void {
           return;
         }
         const album = await db.select({ id: alba.id }).from(alba).where(eq(alba.id, id)).limit(1);
-        if (album.length === 0) {
+        if (album.length === 0 && !jeAlbumNahledu(id)) {
           posliChybu(res, "NENALEZENO", "Album nenalezeno.");
           return;
         }
@@ -629,6 +651,8 @@ export function registrujAlba(app: Express): void {
           } else if (!jeUuid(id)) {
             posliChybu(res, "NENALEZENO", "Album nenalezeno.");
             return;
+          } else if (jeAlbumNahledu(id)) {
+            cil = { druh: "vlastni", id: ALBUM_NAHLEDY_ID };
           } else {
             const nalezene = await dbPred
               .select({ id: alba.id })
@@ -786,6 +810,7 @@ export function registrujAlba(app: Express): void {
             res.status(201).json(telo);
             return;
           }
+          if (jeAlbumNahledu(id)) await zajistiAlbumNahledu(db);
           const album = await db.select({ id: alba.id }).from(alba).where(eq(alba.id, id)).limit(1);
           if (album.length === 0) {
             await uklidR2(nastaveniR2, nahrane.map((polozka) => polozka.klic));

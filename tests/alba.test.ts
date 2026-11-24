@@ -2,8 +2,10 @@
  * tests/alba.test.ts — album name, kind split, list order, extra-album object keys.
  * Pure helpers only: no database, no network, no secrets.
  */
+import { ALBUM_NAHLEDY_ID } from "../src/shared/fotky-nahledy";
 import { describe, expect, it } from "vitest";
 import {
+  albumNahledu,
   rozhodniSmazaniAlba,
   sestavSeznamAlb,
   seznamPoSmazaniAlba,
@@ -184,6 +186,19 @@ describe("sestavSeznamAlb", () => {
   });
 });
 
+describe("albumNahledu", () => {
+  it("je vlastní album s pevným id, i prázdné", () => {
+    expect(albumNahledu(0, null)).toEqual({
+      id: ALBUM_NAHLEDY_ID,
+      nazev: "Náhledy výprav",
+      druh: "vlastni",
+      expeditionId: null,
+      pocetFotek: 0,
+      nahledFotkaId: null,
+    });
+  });
+});
+
 describe("rozhodniSmazaniAlba", () => {
   it("vlastní album jde smazat", () => {
     expect(rozhodniSmazaniAlba(UUID, ["sumava"], [UUID])).toBe("smazat");
@@ -191,6 +206,13 @@ describe("rozhodniSmazaniAlba", () => {
 
   it("id výpravy nesmaže, ani když stejné id leží mezi vlastními", () => {
     expect(rozhodniSmazaniAlba("sumava", ["sumava"], ["sumava", UUID])).toBe("nenalezeno");
+  });
+
+  it("album náhledů nejde smazat", () => {
+    expect(rozhodniSmazaniAlba(ALBUM_NAHLEDY_ID, [], [ALBUM_NAHLEDY_ID])).toBe("nenalezeno");
+    expect(rozhodniSmazaniAlba(ALBUM_NAHLEDY_ID.toUpperCase(), [], [ALBUM_NAHLEDY_ID.toUpperCase()])).toBe(
+      "nenalezeno",
+    );
   });
 
   it("neznámé nebo prázdné id je nenalezeno", () => {

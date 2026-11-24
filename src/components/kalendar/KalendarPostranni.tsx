@@ -36,7 +36,7 @@ function KartaVypravyDne({
   return (
     <article className="overflow-hidden rounded-2xl border border-linka bg-povrch shadow-denik">
       <button type="button" onClick={onDetail} className={`bez-prejeti relative block h-[148px] w-full ${FOKUS}`} aria-label={`Detail výpravy ${expedice.nazev}`}>
-        <ZastupnySnimek id={expedice.id} datum={expedice.datum} povolit />
+        <ZastupnySnimek id={expedice.id} datum={expedice.datum} povolit={!probehla && expedice.stav !== "proběhlá"} />
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 border-b border-black/[0.08]" />
       </button>
       <div className="flex flex-col gap-3 p-[18px]">

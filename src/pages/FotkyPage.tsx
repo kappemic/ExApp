@@ -22,6 +22,8 @@ import { KARET_NA_DAVKU } from "../lib/strankovani";
 import { IkonaLupa, IkonaObrazek } from "../components/SeznamIkony";
 import HlavickaZpet, { ZpetPocitac } from "../components/HlavickaZpet";
 import Ikona from "../components/Ikona";
+import { zneplatniBazenZastupnych } from "../lib/zastupne-fotky";
+import { jeAlbumNahledu } from "../shared/fotky-nahledy";
 import { velikostiAlb } from "../lib/alba-prehled";
 import { formatCelyDatum } from "../lib/expedition-utils";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
@@ -31,6 +33,9 @@ import {
   smazAlbum,
   type ApiAlbum,
 } from "../lib/alba-api";
+
+const POPIS_ALBA_NAHLEDU =
+  "Z těchto fotek se náhodně vybírá obrázek nadcházejících výprav. Dvě výpravy po sobě nikdy nedostanou stejný. Dokud tu nejsou aspoň dvě fotky, doplňují se z alb proběhlých výprav.";
 
 type StavSeznamu = "nacitani" | "hotovo" | "chyba";
 type SegmentAlba = "vsechna" | "vypravy" | "ruzne";
@@ -208,13 +213,17 @@ export default function FotkyPage(): JSX.Element {
   const bezFiltru = segmentAlba === "vsechna" && hledaniAlba.trim().length === 0;
   const albumKos = alba.find((album) => album.druh === "kos");
   const albumKeSmazani =
-    isAdmin && otevrene !== null && otevrene.druh === "vlastni"
+    isAdmin && otevrene !== null && otevrene.druh === "vlastni" && !jeAlbumNahledu(otevrene.id)
       ? otevrene
       : isAdmin
-        ? (alba.find((album) => album.id === vybraneId && album.druh === "vlastni") ?? null)
+        ? (alba.find(
+            (album) =>
+              album.id === vybraneId && album.druh === "vlastni" && !jeAlbumNahledu(album.id),
+          ) ?? null)
         : null;
 
   function poNahrani(): void {
+    zneplatniBazenZastupnych();
     setObnova((hodnota) => hodnota + 1);
     void nacti();
   }
@@ -392,6 +401,11 @@ export default function FotkyPage(): JSX.Element {
             <p className="text-[13px] text-ink-3 min-[90rem]:text-[15px] min-[90rem]:leading-[23px] min-[90rem]:text-mech">
               {metaAlbaDetail(otevrene, datumOtevreneho)}
             </p>
+            {jeAlbumNahledu(otevrene.id) ? (
+              <p className="max-w-prose text-[13px] leading-[19px] text-mech min-[90rem]:text-[15px] min-[90rem]:leading-[23px]">
+                {POPIS_ALBA_NAHLEDU}
+              </p>
+            ) : null}
           </div>
           {otevrene.druh !== "kos" && !vyberFotek ? (
             <div className="flex gap-2 min-[90rem]:shrink-0 min-[90rem]:flex-row-reverse min-[90rem]:gap-2.5">
@@ -480,6 +494,7 @@ export default function FotkyPage(): JSX.Element {
               obnova={obnova}
               isAdmin={isAdmin}
               onZmenaAlba={() => {
+                zneplatniBazenZastupnych();
                 void nacti();
               }}
               onZnovu={() => {

@@ -4,6 +4,11 @@
  */
 import type { ApiAlbum } from "../../src/shared/api-types";
 import { ALBUM_KOS_ID } from "../../src/shared/fotky-kos";
+import {
+  ALBUM_NAHLEDY_ID,
+  ALBUM_NAHLEDY_NAZEV,
+  jeAlbumNahledu,
+} from "../../src/shared/fotky-nahledy";
 import { sestavMapuNahledu, type NahledKandidat } from "./vypravy";
 
 export const ALBUM_NAZEV_MIN = 2;
@@ -49,6 +54,7 @@ export type RozhodnutiSmazaniAlba = "smazat" | "nenalezeno";
 /**
  * DELETE /api/alba/:id. Only an extra album (`alba`) is deletable.
  * An expedition id is never deletable, even when the same string is also a vlastni id.
+ * Neither is the permanent cover album (`ALBUM_NAHLEDY_ID`).
  * The route still requires `vyzadujAdmina` before this decision.
  */
 export function rozhodniSmazaniAlba(
@@ -58,6 +64,7 @@ export function rozhodniSmazaniAlba(
 ): RozhodnutiSmazaniAlba {
   const orezane = id.trim();
   if (orezane.length === 0) return "nenalezeno";
+  if (jeAlbumNahledu(orezane)) return "nenalezeno";
   if (expeditionIds.includes(orezane)) return "nenalezeno";
   if (vlastniIds.includes(orezane)) return "smazat";
   return "nenalezeno";
@@ -173,6 +180,18 @@ export function sestavSeznamAlbZeShrnuti(
     nahledFotkaId: nahledyVlastni.get(album.id) ?? null,
   }));
   return [...zVyprav, ...zVlastnich];
+}
+
+/** Permanent cover album. Listed even before its row exists in `alba`. */
+export function albumNahledu(pocetFotek: number, nahledFotkaId: string | null): ApiAlbum {
+  return {
+    id: ALBUM_NAHLEDY_ID,
+    nazev: ALBUM_NAHLEDY_NAZEV,
+    druh: "vlastni",
+    expeditionId: null,
+    pocetFotek,
+    nahledFotkaId,
+  };
 }
 
 /** Virtual trash folder appended for admins after `sestavSeznamAlb`. */

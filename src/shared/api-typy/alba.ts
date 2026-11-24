@@ -11,6 +11,8 @@
 /*   GET /api/expeditions/:id/fotky/:fotkaId/soubor.                   */
 /* - vlastni: row in `alba`, photos in `alba_fotky`. Bytes:           */
 /*   GET /api/alba/:id/fotky/:fotkaId/soubor.                          */
+/* One `vlastni` album is permanent: ALBUM_NAHLEDY_ID                  */
+/* (src/shared/fotky-nahledy.ts). Always listed, never deletable.      */
 /* Errors are only ApiErrorResponse.                                   */
 /* ------------------------------------------------------------------ */
 

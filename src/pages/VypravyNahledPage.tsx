@@ -50,7 +50,7 @@ import {
 } from "../lib/schuzky-api";
 import type { Expedition } from "../lib/mock-expeditions";
 import { VYPRAVA_PARAM, parseVypravaId } from "../lib/vyprava-deep-link";
-import { nastavZadateleZastupnych, zajistiBazenZastupnych } from "../lib/zastupne-fotky";
+import { nactiBazenNahledu, nastavZadateleZastupnych, zajistiBazenZastupnych } from "../lib/zastupne-fotky";
 import type {
   ApiExpedice,
   ApiSchuzka,
@@ -378,12 +378,18 @@ export default function VypravyNahledPage(): JSX.Element {
   const historieZeServeru = historie !== null;
   useEffect(() => {
     if (nacita) return;
-    nastavZadateleZastupnych([...probihajici, ...nadchazejici].map((vyprava) => vyprava.id));
-  }, [nacita, probihajici, nadchazejici]);
+    nastavZadateleZastupnych(
+      [...expedice]
+        .sort((a, b) => a.datum.localeCompare(b.datum) || a.id.localeCompare(b.id))
+        .map((vyprava) => vyprava.id),
+    );
+  }, [nacita, expedice]);
   useEffect(() => {
     if (nacita) return;
     let zruseno = false;
     void (async () => {
+      const albumStaci = await nactiBazenNahledu();
+      if (zruseno || albumStaci) return;
       // Wider than the archive page, so each current trip can borrow a different photo.
       const ziva = await getExpeditions({ stav: "proběhlá", page: 1, pageSize: 24 });
       if (zruseno) return;

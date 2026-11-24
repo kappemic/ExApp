@@ -18,6 +18,7 @@ import type {
   UserListItem,
 } from "../src/shared/api-types.ts";
 import type { ApiZpevnikPisen, ApiZpevnikNavrh } from "../src/shared/zpevnik.ts";
+import { ALBUM_NAHLEDY_ID, ALBUM_NAHLEDY_NAZEV } from "../src/shared/fotky-nahledy.ts";
 import { parsujVlozeni, textZTela, type Blok, type TeloPisne } from "../src/shared/zpevnik.ts";
 import { SKUPINA_ROLE, type PravoSkupiny } from "../src/lib/skupiny-pristup.ts";
 
@@ -330,6 +331,7 @@ export const ALBA: ApiAlbum[] = [
   { id: "demo-podyji", nazev: "Podyjí – vinice a vyhlídky", druh: "vyprava", expeditionId: "demo-podyji", pocetFotek: 0, nahledFotkaId: null },
   { id: "album-ruzne", nazev: "Různé", druh: "vlastni", expeditionId: null, pocetFotek: 8, nahledFotkaId: "album-ruzne-f1" },
   { id: "album-klubovna", nazev: "Klubovna a schůzky", druh: "vlastni", expeditionId: null, pocetFotek: 5, nahledFotkaId: "album-klubovna-f1" },
+  { id: ALBUM_NAHLEDY_ID, nazev: ALBUM_NAHLEDY_NAZEV, druh: "vlastni", expeditionId: null, pocetFotek: 4, nahledFotkaId: `${ALBUM_NAHLEDY_ID}-f1` },
   { id: "kos", nazev: "Koš", druh: "kos", expeditionId: null, pocetFotek: 2, nahledFotkaId: null },
 ];
 
