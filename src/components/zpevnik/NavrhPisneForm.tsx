@@ -135,6 +135,9 @@ export function NavrhPisneForm({
               onChange={(udalost) => setText(udalost.target.value)}
               className={`block min-h-[88px] resize-none overflow-x-auto whitespace-pre ${OBLAST_FORMULARE}`}
             />
+            <span className="mt-1.5 block text-[12.5px] leading-[17px] text-mech min-[90rem]:text-[11px] min-[90rem]:leading-[15px]">
+              Akordy piš na řádek nad slovy. Prázdný řádek oddělí sloku, refrén začni „R:“.
+            </span>
           </label>
           {chyba !== null && (
             <p role="alert" className="text-[13px] font-semibold text-akcent">

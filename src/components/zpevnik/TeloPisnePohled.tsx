@@ -93,7 +93,10 @@ function opravBloky(bloky: Blok[]): Blok[] {
 
 type Usek = { akord: string | null; text: string };
 
-/** Rozdělí řádek na slova, každé slovo na úseky začínající akordem. */
+/**
+ * Rozdělí řádek na slova, každé slovo na úseky začínající akordem. Slovo kratší
+ * než jeho akord se spojí s dalším, aby akord nedělal v textu díru.
+ */
 function slovaRadku(radek: Radek): Usek[][] {
   const slova: Usek[][] = [];
   let slovo: Usek[] = [];
@@ -106,23 +109,44 @@ function slovaRadku(radek: Radek): Usek[][] {
     // Mezera zůstává na konci slova, aby se řádek lámal za ní.
     for (const kus of slabika.text.split(/(?<=\s)(?=\S)/)) {
       if (kus.length === 0 && akord === null) continue;
-      const posledni = slovo[slovo.length - 1];
+      if (akord !== null && /\s$/.test(slovo.at(-1)?.text ?? "")) uzavri();
+      const posledni = slovo.at(-1);
       if (akord === null && posledni !== undefined) posledni.text += kus;
       else slovo.push({ akord, text: kus });
       akord = null;
-      if (/\s$/.test(kus)) uzavri();
+      if (/\s$/.test(kus) && !akordPresahuje(slovo.at(-1))) uzavri();
     }
-    if (slabika.text.length === 0 && akord !== null) slovo.push({ akord, text: "" });
   }
   uzavri();
   return slova;
 }
 
-function RadekPisne({ radek }: { radek: Radek }): JSX.Element {
+function akordPresahuje(usek: Usek | undefined): boolean {
+  return usek !== undefined && usek.akord !== null && usek.text.trimEnd().length <= usek.akord.length;
+}
+
+const AKORD =
+  "pr-1 text-[0.8em] font-bold leading-[1.25] text-okr min-[90rem]:text-[0.75em] min-[90rem]:leading-[1.33] min-[90rem]:tracking-[1.2px] min-[90rem]:text-akcent";
+
+function RadekPisne({ radek, akordy }: { radek: Radek; akordy: boolean }): JSX.Element | null {
+  const text = textRadku(radek);
   const maAkord = radek.slabiky.some((slabika) => slabika.akord !== undefined);
-  if (!maAkord) {
-    const text = textRadku(radek);
-    return <p className="whitespace-pre-wrap break-inside-avoid">{text.length > 0 ? text : "\u00a0"}</p>;
+  if (maAkord && text.trim().length === 0) {
+    if (!akordy) return null;
+    return (
+      <p className="flex flex-wrap gap-x-2.5 break-inside-avoid">
+        {radek.slabiky.map((slabika, i) =>
+          slabika.akord === undefined ? null : (
+            <span key={i} className={AKORD}>
+              {slabika.akord}
+            </span>
+          ),
+        )}
+      </p>
+    );
+  }
+  if (!maAkord || !akordy) {
+    return <p className="whitespace-pre-wrap break-inside-avoid">{text.length > 0 ? text : " "}</p>;
   }
   return (
     <p className="break-inside-avoid">
@@ -130,10 +154,8 @@ function RadekPisne({ radek }: { radek: Radek }): JSX.Element {
         <span key={i} className="inline-flex max-w-full items-end whitespace-pre align-bottom">
           {slovo.map((usek, j) => (
             <span key={j} className="inline-flex flex-col gap-0.5 min-[90rem]:gap-0">
-              <span className="h-[15px] pr-1 text-xs font-bold leading-[15px] text-okr min-[90rem]:h-[14px] min-[90rem]:text-[10.5px] min-[90rem]:leading-[14px] min-[90rem]:tracking-[1.2px] min-[90rem]:text-akcent">
-                {usek.akord ?? ""}
-              </span>
-              <span>{usek.text.length > 0 ? usek.text : "\u00a0"}</span>
+              {usek.akord !== null ? <span className={AKORD}>{usek.akord}</span> : null}
+              <span>{usek.text.length > 0 ? usek.text : " "}</span>
             </span>
           ))}
         </span>
@@ -142,16 +164,33 @@ function RadekPisne({ radek }: { radek: Radek }): JSX.Element {
   );
 }
 
-export function TeloPisnePohled({ telo }: { telo: TeloPisne }): JSX.Element {
-  const bloky = opravBloky(telo.bloky);
+/** `--pismo` je násobek velikosti písma z nastavení čtení. */
+export function TeloPisnePohled({ telo, akordy = true }: { telo: TeloPisne; akordy?: boolean }): JSX.Element {
+  // Předehra bez akordů nemá co ukázat, prázdný refrén je značka opakování.
+  const bloky = opravBloky(telo.bloky).filter(
+    (blok) => akordy || blok.typ === "refren" || blok.radky.some((radek) => textRadku(radek).trim().length > 0),
+  );
+  // Jednolitá píseň ze starého importu se mezi sloupce rozdělit musí.
+  const vcelku = bloky.length > 1 ? "break-inside-avoid" : "";
   return (
-    <div className="text-[15px] text-inkoust min-[90rem]:text-sm min-[90rem]:leading-5">
+    <div className="text-[length:calc(15px*var(--pismo,1))] text-inkoust min-[90rem]:text-[length:calc(14px*var(--pismo,1))] min-[90rem]:leading-[1.43]">
       {bloky.map((blok, index) => (
-        <section key={`${blok.typ}-${index}`} className={index === 0 ? "" : "mt-5 min-[90rem]:mt-[22px]"}>
-          <h2 className="sr-only">{POPISEK[blok.typ]}</h2>
+        <section
+          key={`${blok.typ}-${index}`}
+          className={`${vcelku} ${index === 0 ? "" : "pt-5 min-[90rem]:pt-[22px]"} ${blok.typ === "refren" ? "pl-4" : ""}`}
+        >
+          <h3
+            className={
+              blok.typ === "refren"
+                ? "mb-1.5 text-[11px] font-bold uppercase leading-4 tracking-[0.8px] text-ink-3"
+                : "sr-only"
+            }
+          >
+            {POPISEK[blok.typ]}
+          </h3>
           <div className="flex flex-col gap-2.5 min-[90rem]:block min-[90rem]:space-y-1.5">
             {blok.radky.map((radek, i) => (
-              <RadekPisne key={i} radek={radek} />
+              <RadekPisne key={i} radek={radek} akordy={akordy} />
             ))}
           </div>
         </section>

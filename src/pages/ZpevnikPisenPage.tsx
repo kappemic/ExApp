@@ -1,25 +1,34 @@
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type JSX } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import HlavickaZpet, { ZpetPocitac } from "../components/HlavickaZpet";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import Ikona from "../components/Ikona";
+import SpodniSheet from "../components/shell/SpodniSheet";
 import { akordyZTela } from "../components/zpevnik/AkordovyProuzek";
+import { Krokovac } from "../components/zpevnik/Krokovac";
 import { TeloPisnePohled } from "../components/zpevnik/TeloPisnePohled";
 import { PosouvaniLista, PosouvaniPilulka } from "../components/zpevnik/ZpevnikOvladaniPrecteni";
+import { ZpevnikZobrazeni } from "../components/zpevnik/ZpevnikZobrazeni";
 import { usePosouvani } from "../hooks/usePosouvani";
 import { useAuth } from "../hooks/useAuth";
 import { nactiPisen, smazPisen } from "../lib/zpevnik-api";
+import { ctiNastaveni, zapisNastaveni, type NastaveniCteni } from "../lib/zpevnik-cteni";
 import { ctiPosun, zapisPosun } from "../lib/zpevnik-transpozice";
-import { maAkordy, opravRozpadleAkordy, posunTelo, prvniAkord, type ApiZpevnikPisen } from "../shared/zpevnik";
+import { maAkordy, opravRozpadleAkordy, pocetRadkuLyriky, posunTelo, prvniAkord, type ApiZpevnikPisen } from "../shared/zpevnik";
 
 function jeSchvalovatel(user: { isAdmin?: boolean; isSuperadmin?: boolean; funkce?: string | null } | null): boolean {
   if (user === null) return false;
   return user.isAdmin === true || user.isSuperadmin === true || user.funkce === "vedeni";
 }
 
+/** Delší píseň by se ve dvou sloupcích nevešla na obrazovku a při posouvání by se musela vracet nahoru. */
+const RADKU_DO_DVOU_SLOUPCU = 30;
+
 export default function ZpevnikPisenPage(): JSX.Element {
-  const posouvani = usePosouvani();
   const { id } = useParams();
+  const [nastaveni, setNastaveni] = useState<NastaveniCteni>(() => ctiNastaveni(localStorage));
+  const [zobrazeni, setZobrazeni] = useState(false);
+  const posouvani = usePosouvani(id, nastaveni.prodleva);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -44,7 +53,7 @@ export default function ZpevnikPisenPage(): JSX.Element {
     };
   }, [id]);
 
-  function zmenPosun(krok: number): void {
+  function zmenPosun(krok: -1 | 1): void {
     if (id === undefined || pisen === null) return;
     const dalsi = posun + krok;
     setPosun(dalsi);
@@ -59,6 +68,11 @@ export default function ZpevnikPisenPage(): JSX.Element {
   const ukazPosun = pisen !== null && maAkordy(pisen.telo);
   const akordy = telo === null ? [] : akordyZTela(telo);
 
+  function zmenNastaveni(dalsi: NastaveniCteni): void {
+    setNastaveni(dalsi);
+    zapisNastaveni(localStorage, dalsi);
+  }
+
   async function smazat(): Promise<void> {
     if (id === undefined) return;
     const vysledek = await smazPisen(id);
@@ -70,23 +84,13 @@ export default function ZpevnikPisenPage(): JSX.Element {
     void navigate("/zpevnik");
   }
 
-  const tlacitkoPosunu =
-    "nahled-press flex size-10 items-center justify-center rounded-[7px] text-mech hover:bg-povrch min-[90rem]:size-6";
-  // Návrh ukazuje posun v půltónech („0“), na telefonu je u akordů.
-  const stepper =
-    ukazPosun && tonina !== null ? (
-      <div className="inline-flex items-center gap-0.5 rounded-[9px] bg-povrch-2 p-[3px]">
-        <button type="button" aria-label="Půltón dolů" className={tlacitkoPosunu} onClick={() => zmenPosun(-1)}>
-          <Ikona nazev="minus" className="size-3.5 min-[90rem]:size-3" />
-        </button>
-        <span className="min-w-6 text-center text-[13px] font-semibold text-inkoust min-[90rem]:text-xs" aria-label={`Tónina ${tonina}`}>
-          {posun > 0 ? `+${posun}` : posun}
-        </span>
-        <button type="button" aria-label="Půltón nahoru" className={tlacitkoPosunu} onClick={() => zmenPosun(1)}>
-          <Ikona nazev="plus" className="size-3.5 min-[90rem]:size-3" />
-        </button>
-      </div>
-    ) : null;
+  const dvaSloupce = telo !== null && pocetRadkuLyriky(telo) <= RADKU_DO_DVOU_SLOUPCU;
+  const posunPopis = posun > 0 ? `+${posun}` : `${posun}`;
+
+  function transpozice(hodnota: string): JSX.Element | null {
+    if (!ukazPosun || tonina === null || !nastaveni.akordy) return null;
+    return <Krokovac hodnota={hodnota} popisHodnoty={`Tónina ${tonina}`} dolu="Půltón dolů" nahoru="Půltón nahoru" onKrok={zmenPosun} />;
+  }
 
   return (
     <main className="mx-auto w-full max-w-[46rem] bg-papir px-5 pb-6 pt-4 text-inkoust sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
@@ -143,52 +147,75 @@ export default function ZpevnikPisenPage(): JSX.Element {
             )}
           </div>
 
-          <div className="mt-5 flex items-center justify-between gap-3 min-[90rem]:hidden">
-            <p className="text-[13px] text-mech">Text a akordy</p>
+          {/* Telefon: tónina a zobrazení hned pod nadpisem. */}
+          <div className="mt-4 flex items-center justify-between gap-2 min-[90rem]:hidden">
+            {transpozice(posun === 0 ? (tonina ?? "") : `${tonina ?? ""} ${posunPopis}`) ?? <span />}
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setZobrazeni(true)}
+              className="nahled-press inline-flex h-11 items-center gap-2 rounded-xl border border-linka bg-povrch px-3.5 text-[13px] font-semibold text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+            >
+              <Ikona nazev="a-large-small" className="size-[18px]" />
+              Zobrazení
+            </button>
+          </div>
+
+          <p className="mt-3 flex h-11 items-center text-[13px] text-mech max-[23rem]:invisible min-[90rem]:hidden">Text a akordy</p>
+          {/* Přímý potomek <main>, aby pilulka držela nahoře po celou délku písně. */}
+          <div className="pointer-events-none sticky top-[calc(env(safe-area-inset-top,0px)+8px)] z-20 -mt-11 flex justify-end min-[90rem]:hidden">
             <PosouvaniPilulka posouvani={posouvani} />
           </div>
 
-          <div className="mt-5 min-[90rem]:mt-8 min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_340px] min-[90rem]:items-start min-[90rem]:gap-7">
+          <div className="mt-4 min-[90rem]:mt-8 min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_340px] min-[90rem]:items-start min-[90rem]:gap-7">
             <section aria-labelledby="pisen-text" className="flex flex-col gap-4 rounded-2xl border border-linka bg-povrch p-4 shadow-karta min-[90rem]:gap-5 min-[90rem]:p-5">
               <h2 id="pisen-text" className="sr-only font-display text-lg font-bold tracking-[-0.4px] text-inkoust min-[90rem]:not-sr-only">
                 Text a akordy
               </h2>
               <PosouvaniLista posouvani={posouvani} />
-              <div className="min-[90rem]:columns-2 min-[90rem]:gap-8 [&_*]:break-inside-avoid">
-                <TeloPisnePohled telo={telo} />
+              <div
+                className={dvaSloupce ? "min-[90rem]:columns-2 min-[90rem]:gap-8" : ""}
+                style={{ "--pismo": nastaveni.pismo } as CSSProperties}
+              >
+                <TeloPisnePohled telo={telo} akordy={nastaveni.akordy} />
               </div>
               <p className="hidden items-center gap-[7px] text-[11px] text-ink-4 min-[90rem]:flex">
                 <Ikona nazev="hand" className="size-3 text-ink-5" />
-                Dotyk posouvání pozastaví.
+                Dotyk nebo kolečko posouvání podrží, po puštění jede dál.
               </p>
             </section>
 
-            {akordy.length > 0 ? (
-              <aside className="mt-5 flex flex-wrap items-center gap-2 min-[90rem]:mt-0 min-[90rem]:flex-col min-[90rem]:flex-nowrap min-[90rem]:items-stretch min-[90rem]:gap-3.5 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:p-5 ">
-                <h2 className="font-sans text-[11px] font-bold uppercase tracking-[0.6px] text-ink-3 min-[90rem]:text-[10.5px] min-[90rem]:tracking-[1.2px]">
-                  Akordy <span className="hidden min-[90rem]:inline">v písni</span>
-                </h2>
-                <ul aria-label="Akordy v písni" className="flex flex-wrap gap-2">
-                  {akordy.map((akord) => (
-                    <li
-                      key={akord}
-                      className="inline-flex size-9 items-center justify-center rounded-[10px] bg-okr-100 font-display text-sm font-bold text-okr min-[90rem]:size-[52px] min-[90rem]:rounded-xl min-[90rem]:bg-povrch-2 min-[90rem]:text-[17px] min-[90rem]:text-inkoust"
-                    >
-                      {akord}
-                    </li>
-                  ))}
-                </ul>
-                {stepper !== null ? (
-                  <div className="ml-auto flex items-center min-[90rem]:ml-0 min-[90rem]:justify-between min-[90rem]:border-t min-[90rem]:border-linka min-[90rem]:pt-3">
-                    <span className="hidden text-[12.5px] font-medium text-mech min-[90rem]:inline">Transponovat</span>
-                    {stepper}
+            <aside className="hidden flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 min-[90rem]:sticky min-[90rem]:top-[88px] min-[90rem]:flex">
+              {akordy.length > 0 && nastaveni.akordy ? (
+                <>
+                  <h2 className="font-sans text-[10.5px] font-bold uppercase tracking-[1.2px] text-ink-3">Akordy v písni</h2>
+                  <ul aria-label="Akordy v písni" className="flex flex-wrap gap-2">
+                    {akordy.map((akord) => (
+                      <li
+                        key={akord}
+                        className="inline-flex h-[52px] min-w-[52px] items-center justify-center rounded-xl bg-povrch-2 px-2.5 font-display text-[17px] font-bold text-inkoust"
+                      >
+                        {akord}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center justify-between border-t border-linka pt-3">
+                    <span className="text-[12.5px] font-medium text-mech">Transponovat</span>
+                    {transpozice(posunPopis)}
                   </div>
-                ) : null}
-              </aside>
-            ) : null}
+                </>
+              ) : null}
+              <div className={akordy.length > 0 && nastaveni.akordy ? "border-t border-linka pt-3" : ""}>
+                <ZpevnikZobrazeni nastaveni={nastaveni} onZmena={zmenNastaveni} sAkordy={ukazPosun} />
+              </div>
+            </aside>
           </div>
         </>
       )}
+
+      <SpodniSheet otevreno={zobrazeni} titulek="Zobrazení" podtitul="Platí pro všechny písně v tomhle zařízení." onZavrit={() => setZobrazeni(false)}>
+        <ZpevnikZobrazeni nastaveni={nastaveni} onZmena={zmenNastaveni} sAkordy={ukazPosun} />
+      </SpodniSheet>
 
       <ConfirmDialog
         otevreno={maze}

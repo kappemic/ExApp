@@ -187,24 +187,57 @@ function radekSAkordy(akordy: readonly UmistenyAkord[], lyric: string): Radek {
   return { slabiky };
 }
 
+/** "R:", "R2:", "Ref.", "Refrén:" before the text, or "Refrén" alone on its row. */
+const ZNACKA_REFRENU = /^\s*(?:R\d?\s*:|Ref(?:r(?:[eé]n)?)?\s*[:.]|Refr[eé]n\s*$)\s*/i;
+/** "2. " opens the next verse even without a blank row. The number stays in the text. */
+const CISLO_SLOKY = /^\s*\d{1,2}\s*[.)]\s+\S/;
+
 /**
  * Chord line directly above a lyric seats each token on the grapheme
  * at that column. A lyric with no chord line above is one slabika.
+ * A blank row ends the block. A refrain mark opens a refrain; alone with no
+ * text it is a repeat, stored as a refrain without rows.
  * Whitespace-only input fails with `{ ok: false, duvod: "chybi_text" }`.
  */
 export function parsujVlozeni(text: string): VysledekVlozeni {
-  if (text.trim().length === 0) {
-    return { ok: false, duvod: "chybi_text" };
-  }
-
   const radkyTextu = text.split(/\r?\n/);
-  const radky: Radek[] = [];
+  const bloky: Blok[] = [];
+  let blok: Blok | null = null;
+  const otevri = (typ: TypBloku): Blok => {
+    const novy: Blok = { typ, radky: [] };
+    bloky.push(novy);
+    blok = novy;
+    return novy;
+  };
+  const pridej = (radek: Radek): void => {
+    (blok ?? otevri("sloka")).radky.push(radek);
+  };
+  /** Lyric without its refrain mark; opens the block the lyric belongs to. */
+  const zacniVers = (lyric: string): { lyric: string; odriznuto: number } => {
+    const odriznuto = ZNACKA_REFRENU.exec(lyric)?.[0].length ?? 0;
+    if (odriznuto > 0) otevri("refren");
+    else if (CISLO_SLOKY.test(lyric)) otevri("sloka");
+    return { lyric: lyric.slice(odriznuto), odriznuto };
+  };
+
   let i = 0;
   while (i < radkyTextu.length) {
-    const radek = radkyTextu[i];
-    if (radek === undefined || jePrazdnyRadek(radek)) {
+    let radek = radkyTextu[i] ?? "";
+    if (jePrazdnyRadek(radek)) {
+      blok = null;
       i += 1;
       continue;
+    }
+    const znacka = ZNACKA_REFRENU.exec(radek)?.[0].length ?? 0;
+    const zaZnackou = radek.slice(znacka);
+    if (znacka > 0 && (jePrazdnyRadek(zaZnackou) || akordyNaRadku(zaZnackou) !== null)) {
+      otevri("refren");
+      if (jePrazdnyRadek(zaZnackou)) {
+        i += 1;
+        continue;
+      }
+      // Chords keep their columns over the lyric below.
+      radek = `${" ".repeat(znacka)}${zaZnackou}`;
     }
     const akordy = akordyNaRadku(radek);
     const dalsi = radkyTextu[i + 1];
@@ -212,26 +245,32 @@ export function parsujVlozeni(text: string): VysledekVlozeni {
       akordy !== null &&
       dalsi !== undefined &&
       !jePrazdnyRadek(dalsi) &&
+      !jePrazdnyRadek(dalsi.replace(ZNACKA_REFRENU, "")) &&
       akordyNaRadku(dalsi) === null
     ) {
-      radky.push(radekSAkordy(akordy, dalsi));
+      const { lyric, odriznuto } = zacniVers(dalsi);
+      pridej(
+        radekSAkordy(
+          akordy.map((polozka) => ({ ...polozka, index: Math.max(0, polozka.index - odriznuto) })),
+          lyric,
+        ),
+      );
       i += 2;
       continue;
     }
-    if (akordy !== null) {
-      radky.push(radekSAkordy(akordy, ""));
-      i += 1;
-      continue;
-    }
-    radky.push({ slabiky: [{ text: radek }] });
+    if (akordy !== null) pridej(radekSAkordy(akordy, ""));
+    else pridej({ slabiky: [{ text: zacniVers(radek).lyric }] });
     i += 1;
   }
 
-  if (radky.length === 0) {
+  if (bloky.every((polozka) => polozka.radky.length === 0)) {
     return { ok: false, duvod: "chybi_text" };
   }
-
-  return { ok: true, telo: { bloky: [{ typ: "sloka", radky }] } };
+  // Double-spaced text (OCR, copied web pages) is not a stack of one-row verses.
+  if (bloky.length >= 4 && bloky.every((polozka) => polozka.typ === "sloka" && polozka.radky.length === 1)) {
+    return { ok: true, telo: { bloky: [{ typ: "sloka", radky: bloky.flatMap((polozka) => polozka.radky) }] } };
+  }
+  return { ok: true, telo: { bloky } };
 }
 
 /**
@@ -424,32 +463,43 @@ export function posunTelo(telo: TeloPisne, pultony: number): TeloPisne {
   };
 }
 
+function radkyBloku(blok: Blok): string[] {
+  const radky: string[] = blok.typ === "refren" ? ["R:"] : [];
+  blok.radky.forEach((radek, poradi) => {
+    const lyric = radek.slabiky.map((slabika) => slabika.text).join("");
+    const ma = radek.slabiky.some((slabika) => slabika.akord !== undefined);
+    if (!ma) {
+      radky.push(lyric);
+      return;
+    }
+    let akordovy = "";
+    let sloupec = 0;
+    for (const slabika of radek.slabiky) {
+      if (slabika.akord !== undefined) {
+        if (akordovy.length < sloupec) akordovy += " ".repeat(sloupec - akordovy.length);
+        else if (akordovy.length > 0) akordovy += " ";
+        akordovy += slabika.akord;
+      }
+      sloupec += slabika.text.length;
+    }
+    radky.push(akordovy);
+    if (!jePrazdnyRadek(lyric)) {
+      radky.push(lyric);
+      return;
+    }
+    // An interlude row must not seat its chords on a plain lyric below it.
+    const dalsi = blok.radky[poradi + 1];
+    if (dalsi !== undefined && dalsi.slabiky.every((slabika) => slabika.akord === undefined)) radky.push("");
+  });
+  return radky;
+}
+
 /** Chord line above lyrics, so the edit form can load a published song. */
 export function textZTela(telo: TeloPisne): string {
-  const radky: string[] = [];
-  for (const blok of telo.bloky) {
-    for (const radek of blok.radky) {
-      const lyric = radek.slabiky.map((slabika) => slabika.text).join("");
-      const ma = radek.slabiky.some((slabika) => slabika.akord !== undefined);
-      if (!ma) {
-        radky.push(lyric);
-        continue;
-      }
-      let akordovy = "";
-      let sloupec = 0;
-      for (const slabika of radek.slabiky) {
-        if (slabika.akord !== undefined) {
-          if (akordovy.length < sloupec) akordovy += " ".repeat(sloupec - akordovy.length);
-          else if (akordovy.length > 0) akordovy += " ";
-          akordovy += slabika.akord;
-        }
-        sloupec += slabika.text.length;
-      }
-      radky.push(akordovy);
-      radky.push(lyric);
-    }
-  }
-  return radky.join("\n");
+  return telo.bloky
+    .map((blok) => radkyBloku(blok).join("\n"))
+    .filter((blok) => blok.length > 0)
+    .join("\n\n");
 }
 
 /** First non-empty lyric line for list previews. */

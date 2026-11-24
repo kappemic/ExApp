@@ -11,6 +11,7 @@ import {
   parsujVlozeni,
   prvniAkord,
   seradPisne,
+  textZTela,
   type TeloPisne,
 } from "../src/shared/zpevnik";
 
@@ -69,6 +70,15 @@ describe("normalizujAkord", () => {
     expect(normalizujAkord("H7!")).toBeNull();
   });
 });
+
+/** Typ bloku a texty jeho řádků. */
+function tvar(vysledek: ReturnType<typeof parsujVlozeni>): string[][] {
+  if (!vysledek.ok) return [];
+  return vysledek.telo.bloky.map((blok) => [
+    blok.typ,
+    ...blok.radky.map((radek) => radek.slabiky.map((slabika) => slabika.text).join("")),
+  ]);
+}
 
 describe("parsujVlozeni", () => {
   it("posadí akord na grafém ve sloupci začátku tokenu a nechá B být", () => {
@@ -187,47 +197,41 @@ describe("parsujVlozeni", () => {
     });
   });
 
-  it("složí víc dvojic do jednoho bloku sloka a prázdný řádek jen oddělí", () => {
-    const druhy = "Druhý řádek";
-    const vysledek = parsujVlozeni(`H\nAhoj\n\nC\n${druhy}`);
+  it("složí víc dvojic bez prázdného řádku do jednoho bloku", () => {
+    const vysledek = parsujVlozeni("H\nAhoj\nC\nDruhý řádek");
+    expect(tvar(vysledek)).toEqual([["sloka", "Ahoj", "Druhý řádek"]]);
+  });
 
+  it("prázdný řádek oddělí sloku a R: otevře refrén", () => {
+    const text = "H\nAhoj\nDruhý\n\nR: G   D\nRefrén první\ndalší\n\nSloka\ntext\n\nR:";
+    expect(tvar(parsujVlozeni(text))).toEqual([
+      ["sloka", "Ahoj", "Druhý"],
+      ["refren", "Refrén první", "další"],
+      ["sloka", "Sloka", "text"],
+      ["refren"],
+    ]);
+  });
+
+  it("značku před textem odřízne a akord posune na jeho slabiku", () => {
+    const vysledek = parsujVlozeni("   C  D\nR: Ahoj\nverš\n2. druhá");
+    expect(tvar(vysledek)).toEqual([["refren", "Ahoj", "verš"], ["sloka", "2. druhá"]]);
+    expect(vysledek.ok && vysledek.telo.bloky[0]?.radky[0]?.slabiky).toEqual([
+      { text: "A", akord: "C" },
+      { text: "h" },
+      { text: "o" },
+      { text: "j", akord: "D" },
+    ]);
+  });
+
+  it("text prokládaný prázdnými řádky zůstane jednou slokou", () => {
+    expect(tvar(parsujVlozeni("a a\n\nb b\n\nc c\n\nd d"))).toEqual([["sloka", "a a", "b b", "c c", "d d"]]);
+  });
+
+  it("sloky, refrén, předehra i opakování přežijí úpravu ve formuláři", () => {
+    const vysledek = parsujVlozeni("G  D\n\nC\nAhoj\nA  H\nC\nVerš\n\nR:\nG\nRefrén tu\ndál\n\nKonec\npísně\n\nR:");
     expect(vysledek.ok).toBe(true);
     if (!vysledek.ok) return;
-
-    expect(vysledek.telo.bloky).toEqual([
-      {
-        typ: "sloka",
-        radky: [
-          {
-            slabiky: [
-              { text: "A", akord: "H" },
-              { text: "h" },
-              { text: "o" },
-              { text: "j" },
-            ],
-          },
-          {
-            slabiky: [
-              { text: "D", akord: "C" },
-              { text: "r" },
-              { text: "u" },
-              { text: "h" },
-              { text: "ý" },
-              { text: " " },
-              { text: "ř" },
-              { text: "á" },
-              { text: "d" },
-              { text: "e" },
-              { text: "k" },
-            ],
-          },
-        ],
-      },
-    ]);
-    const textDruheho = vysledek.telo.bloky[0]?.radky[1]?.slabiky
-      .map((slabika) => slabika.text)
-      .join("");
-    expect(textDruheho).toBe(druhy);
+    expect(parsujVlozeni(textZTela(vysledek.telo))).toEqual(vysledek);
   });
 
   it("akord za koncem textu přidá jako slabiku s prázdným textem", () => {

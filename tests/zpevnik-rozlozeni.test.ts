@@ -133,7 +133,7 @@ describe("PDF souřadnice akordů", () => {
     const vlozeni = parsujVlozeni(text);
     expect(vlozeni.ok).toBe(true);
     if (!vlozeni.ok) return;
-    const radky = vlozeni.telo.bloky[0]?.radky ?? [];
+    const radky = vlozeni.telo.bloky.flatMap((blok) => blok.radky);
     const akordy = radky.map((radek) => radek.slabiky.flatMap((s) => (s.akord === undefined ? [] : [s.akord])));
     expect(akordy).toEqual([[], ["D", "A", "D"], ["C"]]);
     expect(radky[1]?.slabiky.map((s) => s.text).join("")).toBe("");

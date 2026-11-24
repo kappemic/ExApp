@@ -18,7 +18,7 @@ import type {
   UserListItem,
 } from "../src/shared/api-types.ts";
 import type { ApiZpevnikPisen, ApiZpevnikNavrh } from "../src/shared/zpevnik.ts";
-import { parsujVlozeni } from "../src/shared/zpevnik.ts";
+import { parsujVlozeni, textZTela, type Blok, type TeloPisne } from "../src/shared/zpevnik.ts";
 import { SKUPINA_ROLE, type PravoSkupiny } from "../src/lib/skupiny-pristup.ts";
 
 /* ---------------------------------------------------------------- */
@@ -392,16 +392,118 @@ const SLOKY: Array<[string, string, string]> = [
   ["Batoh", "Klub", "Emi      D\nBatoh těžký jako kámen,\nC         H7\nco v něm vlastně nesu já?\nEmi      D\nTři svetry a čtyři buchty,\nC     H7     Emi\na kytaru bez strun."],
 ];
 
-export const PISNE: ApiZpevnikPisen[] = SLOKY.map(([nazev, autor, text], i) => {
-  const vysledek = parsujVlozeni(text);
-  return {
-    id: `pisen-${i + 1}`,
-    nazev,
-    autor,
-    telo: vysledek.ok ? vysledek.telo : { bloky: [] },
-    schvalenoAt: cas(-200 + i * 5, 12),
-  };
-});
+/**
+ * Dlouhá ukázka na ladění detailu písně. Akordy jsou v hranatých závorkách před
+ * slabikou, prázdný řádek dělí sloky, „R:“ na prvním řádku znamená refrén.
+ */
+const DLOUHA_PISEN = `[G] [D/F#] [Em7] [Cadd9]
+
+[G]Ve čtyři ráno [D/F#]budík zvoní, [Em7]venku je tma a [Cadd9]déšť,
+[G]ponožky schnou nám [D/F#]na topení, [C]jednu jsi ztratil [D]včera už [Dsus4]též.
+[G]Na nádraží [D/F#]v bufetu svítí, [Em7]paní nám nalije [Cadd9]čaj,
+[Am7]kdo zaspal, ten ať [D7]dobíhá vlakem, [G]my už jedem [C]za tratí v [G]kraj.
+
+[G]Za Berounem [D/F#]mlha se trhá, [Em7]průvodčí počítá [Cadd9]nás,
+[G]dvacet a jeden, [D/F#]dvacet a jeden, [C]někdo se schoval [D]zas a [Dsus4]zas.
+[G]Mapu jsme nechali [D/F#]ležet v klubovně, [Em7]kompas má Zdeněk, ten [Cadd9]spí,
+[Am7]cestu nám poradí [D7]pes u hájovny, [G]ten jediný to [C]vážně [G]ví.
+
+R:
+[G]Čtyřicet [D]kilometrů [Em]pod nohama [C]máme,
+[G]čtyřicet [D]důvodů [C]zůstat [D]stát,
+[G]ale když [D]jednou už [Em]batohy [C]zvedáme,
+[Am]tak se to [D]musí [G]dochodit a [C]dozpí[G]vat.
+
+[G]Po žluté značce [D/F#]do kopce vzhůru, [Em7]kořeny, bláto a [Cadd9]kámen,
+[G]Tereza vpředu [D/F#]udává tempo, [C]vzadu už slyšet je [D]první [Dsus4]amen.
+[G]Puchýř na patě, [D/F#]druhý na prstu, [Em7]třetí si teprve [Cadd9]hledá,
+[Am7]a kdo řekl včera, že [D7]trasa je rovná, [G]ten dneska radši [C]moc [G]nemluví a nezvedá hlavu od země, aby ho nikdo nepoznal.
+
+[G]U lomu stojíme, [D/F#]svačina v trávě, [Em7]rohlíky, paštika, [Cadd9]sýr,
+[G]někdo má řízek a [D/F#]nechce se dělit, [C]tím končí na dnešek [D]klid a [Dsus4]mír.
+[G]Adam nám ukáže [D/F#]zkamenělinu, [Em7]trilobit, říká, je [Cadd9]to,
+[Am7]Natálka tvrdí, že [D7]šlápl na sušenku, [G]a že ji hledá [C]všude [G]možně.
+
+R:
+[G]Čtyřicet [D]kilometrů [Em]pod nohama [C]máme,
+[G]čtyřicet [D]důvodů [C]zůstat [D]stát,
+[G]ale když [D]jednou už [Em]batohy [C]zvedáme,
+[Am]tak se to [D]musí [G]dochodit a [C]dozpí[G]vat.
+
+[Em]A když se v poledne [Hm7]zatáhne nebe
+[C]a první kapky už [G]ťukají do plachty,
+[Em]vytáhnem pláštěnky, [Hm7]co kdysi držely,
+[Am7]dneska jsou z nich spíš jen [Dsus4]záclony a [D7]krajky.
+Mluvené: Tak kdo měl na starosti počasí?
+(ticho, někdo dupe v kaluži)
+
+[G]K večeru konečně [D/F#]komín a světla, [Em7]v chalupě voní to [Cadd9]zelím,
+[G]boty jdou do řady, [D/F#]promočené všechny, [C]s nikým se o kamna [D]dneska [Dsus4]nedělím.
+[G]Kytara obíhá [D/F#]od ruky k ruce, [Em7]struna je prasklá, no [Cadd9]co,
+[Am7]na pěti strunách to [D7]zní skoro stejně, [G]jen trochu víc jako [C]vítr a [G]mlýnské kolo.
+
+[G]Ráno se probudíš, [D/F#]nohy jak z olova, [Em7]venku je azuro, [Cadd9]sníh,
+[G]někdo už na plotně [D/F#]smaží nám vajíčka, [C]ze stropu visí [D]deset mokrých [Dsus4]knih.
+[G]Deník má skvrny a [D/F#]rozpité písmo, [Em7]přesto tam napíšem [Cadd9]dál:
+[Am7]ušli jsme kus cesty, [D7]kterou si vymyslel [G]ten, kdo se celou [C]dobu [G]smál.
+
+R:
+[A]Čtyřicet [E]kilometrů [F#m]pod nohama [D]máme,
+[A]čtyřicet [E]důvodů [D]zůstat [E]stát,
+[A]ale když [E]jednou už [F#m]batohy [D]zvedáme,
+[Hm]tak se to [E]musí [A]dochodit a [D]dozpí[A]vat.
+
+[D]Tak se to [E]musí, [C#m7]tak se to [F#m]musí,
+[Hm7]dochodit, [E7sus4]dojet, [E7]dobelhat,
+[A] [E/G#] [F#m7] [Dadd9]
+[A]a pak jít [Amaj7]spát.`;
+
+function radekZeZavorek(radek: string): Blok["radky"][number] {
+  const [uvod = "", ...zbytek] = radek.split(/\[([^\]]+)\]/);
+  const slabiky: Blok["radky"][number]["slabiky"] = uvod.length > 0 ? [{ text: uvod }] : [];
+  for (let i = 0; i < zbytek.length; i += 2) {
+    slabiky.push({ text: zbytek[i + 1] ?? "", akord: zbytek[i] });
+  }
+  return { slabiky };
+}
+
+const TELO_DLOUHE: TeloPisne = {
+  bloky: DLOUHA_PISEN.split("\n\n").map((odstavec): Blok => {
+    const radky = odstavec.split("\n");
+    const refren = radky[0] === "R:";
+    return { typ: refren ? "refren" : "sloka", radky: (refren ? radky.slice(1) : radky).map(radekZeZavorek) };
+  }),
+};
+
+/** Tentýž text po průchodu formulářem, jak ho uloží skutečné vložení písně. */
+const DLOUHA_VLOZENA = parsujVlozeni(textZTela(TELO_DLOUHE));
+
+export const PISNE: ApiZpevnikPisen[] = [
+  {
+    id: "pisen-dlouha",
+    nazev: "Čtyřicet kilometrů",
+    autor: "Klub",
+    telo: TELO_DLOUHE,
+    schvalenoAt: cas(-4, 12),
+  },
+  {
+    id: "pisen-dlouha-vlozena",
+    nazev: "Čtyřicet kilometrů (vložený text)",
+    autor: "Klub",
+    telo: DLOUHA_VLOZENA.ok ? DLOUHA_VLOZENA.telo : { bloky: [] },
+    schvalenoAt: cas(-3, 12),
+  },
+  ...SLOKY.map(([nazev, autor, text], i) => {
+    const vysledek = parsujVlozeni(text);
+    return {
+      id: `pisen-${i + 1}`,
+      nazev,
+      autor,
+      telo: vysledek.ok ? vysledek.telo : { bloky: [] },
+      schvalenoAt: cas(-200 + i * 5, 12),
+    };
+  }),
+];
 
 export const NAVRHY: ApiZpevnikNavrh[] = [
   ["Lesní cesta", "Eliška Procházková", "G        D\nLesní cestou jdeme spolu,\nC         G\nlistí šustí pod nohama."],

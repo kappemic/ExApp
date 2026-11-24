@@ -91,6 +91,7 @@ export default function ZpevnikUpravaPage(): JSX.Element {
             className="mt-2 w-full overflow-x-auto whitespace-pre rounded-md border border-linka bg-papir px-3 py-3 font-mono text-base"
           />
         </label>
+        <p className="text-sm text-mech">Akordy piš na řádek nad slovy. Prázdný řádek oddělí sloku, refrén začni „R:“.</p>
         {chyba !== null && <p>{chyba}</p>}
         <button
           type="submit"
