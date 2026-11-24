@@ -90,6 +90,8 @@ export function validujRegistraci(telo: unknown): VysledekValidace<CistaRegistra
 export interface CistePrihlaseni {
   email: string;
   heslo: string;
+  /** Chybějící pole v těle je false (session cookie, starý klient). */
+  zustat: boolean;
 }
 
 /** Validace POST /api/login — heslo se tu jen čte, porovná ho hash na serveru. */
@@ -110,10 +112,36 @@ export function validujPrihlaseni(telo: unknown): VysledekValidace<CistePrihlase
   } else {
     heslo = hesloRaw;
   }
+  let zustat = false;
+  if (Object.hasOwn(telo, "zustat")) {
+    if (typeof telo["zustat"] !== "boolean") {
+      pridej(chyby, "zustat", "Zůstat přihlášený musí být ano nebo ne.");
+    } else {
+      zustat = telo["zustat"];
+    }
+  }
   if (email === null || heslo === null || Object.keys(chyby).length > 0) {
     return { uspech: false, data: null, chybyPoli: chyby };
   }
-  return { uspech: true, data: { email, heslo }, chybyPoli: {} };
+  return { uspech: true, data: { email, heslo, zustat }, chybyPoli: {} };
+}
+
+export function validujOvereniKodu(
+  telo: unknown,
+): VysledekValidace<{ kod: string }> {
+  const chyby: ChybyPoli = {};
+  if (!jeRecord(telo)) {
+    return {
+      uspech: false,
+      data: null,
+      chybyPoli: { telo: ["Požadavek musí být JSON objekt."] },
+    };
+  }
+  const kod = overTvarKodu(chyby, ctiString(telo, "kod"));
+  if (kod === null || Object.keys(chyby).length > 0) {
+    return { uspech: false, data: null, chybyPoli: chyby };
+  }
+  return { uspech: true, data: { kod }, chybyPoli: {} };
 }
 
 /** Validace POST /api/admin/codes — vstup je záměrně jen nepovinná poznámka. */

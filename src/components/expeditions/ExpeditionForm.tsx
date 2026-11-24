@@ -1,5 +1,5 @@
 import Ikona from "../Ikona";
-import { OBLAST_FORMULARE, POLE_FORMULARE, POPISEK_POLE } from "../formular-tridy";
+import { OBLAST_FORMULARE, POLE_STRANKY, POPISEK_POLE } from "../formular-tridy";
 import { useEffect, useId, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
 import {
   VALIDACE,
@@ -282,7 +282,7 @@ function validujKlientsky(
   };
 }
 
-const VSTUP_TRIDY = POLE_FORMULARE;
+const VSTUP_TRIDY = POLE_STRANKY;
 
 export interface KontrolaVypravy {
   nazev: boolean;
@@ -293,7 +293,7 @@ export interface KontrolaVypravy {
 
 /** Karta skupiny polí na počítači; na telefonu jen sloupec polí bez rámu. */
 const SKUPINA =
-  "space-y-4 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:p-5 min-[90rem]:shadow-jemny";
+  "space-y-5 min-[90rem]:space-y-4 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:p-5 min-[90rem]:shadow-denik";
 const NADPIS_SKUPINY =
   "hidden font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust min-[90rem]:block";
 
@@ -305,6 +305,7 @@ function VyberSnimku({
   ulozene,
   disabled,
   onVyber,
+  onPretazeni,
   onOdebrat,
   onSmazatUlozeny,
 }: {
@@ -315,20 +316,29 @@ function VyberSnimku({
   ulozene: readonly UlozenySnimekCesty[];
   disabled: boolean;
   onVyber: (udalost: ChangeEvent<HTMLInputElement>) => void;
+  /** Fotky přetažené myší do plochy. */
+  onPretazeni: (soubory: File[]) => void;
   onOdebrat: (index: number) => void;
   onSmazatUlozeny?: (id: string) => void;
 }): JSX.Element {
   return (
     <div>
       <p className={`mb-2 ${POPISEK_POLE}`}>
-        {nadpis} <span className="font-normal text-ink-3">(nepovinné)</span>
+        {nadpis} (nepovinné)
       </p>
       <label
         htmlFor={id}
-        className={`flex h-24 cursor-pointer flex-col items-center justify-center gap-[5px] rounded-[11px] border border-dashed border-pole bg-papir text-mech transition-colors motion-reduce:transition-none hover:bg-povrch-2 focus-within:border-smrk min-[90rem]:bg-[#f6f2e6] ${disabled ? "pointer-events-none opacity-60" : ""}`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (!disabled) onPretazeni([...e.dataTransfer.files]);
+        }}
+        className={`flex h-24 cursor-pointer flex-col items-center justify-center gap-[5px] rounded-[11px] border border-linka bg-pole-podklad text-mech transition-colors motion-reduce:transition-none hover:bg-povrch-2 focus-within:border-smrk min-[90rem]:bg-[#f6f2e6] ${disabled ? "pointer-events-none opacity-60" : ""}`}
       >
-        <Ikona nazev="image-plus" className="size-[17px] text-ink-3" />
-        <span className="text-[11.5px] font-medium">Vyber fotky</span>
+        <Ikona nazev="image-plus" className="size-[17px] text-ink-3 min-[90rem]:hidden" />
+        <Ikona nazev="upload" className="hidden size-[17px] text-ink-3 min-[90rem]:block" />
+        <span className="text-[11.5px] font-medium min-[90rem]:hidden">Vyber fotky</span>
+        <span className="hidden text-[11.5px] font-medium min-[90rem]:inline">Přetáhni fotky nebo vyber</span>
         <input
           id={id}
           type="file"
@@ -336,10 +346,10 @@ function VyberSnimku({
           multiple
           disabled={disabled}
           onChange={onVyber}
+          aria-label={`${nadpis}. ${napoveda}`}
           className="sr-only"
         />
       </label>
-      <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">{napoveda}</p>
       {(ulozene.length > 0 || soubory.length > 0) && (
         <ul className="mt-2 flex flex-wrap gap-2">
           {ulozene.map((snimek) => (
@@ -465,12 +475,16 @@ export default function ExpeditionForm({
   }
 
   function pridejSoubory(smer: "tam" | "zpet", udalost: ChangeEvent<HTMLInputElement>): void {
-    const seznam = udalost.target.files;
+    const seznam = udalost.target.files === null ? [] : Array.from(udalost.target.files);
     udalost.target.value = "";
-    if (seznam === null || seznam.length === 0) return;
+    pridejPole(smer, seznam);
+  }
+
+  function pridejPole(smer: "tam" | "zpet", nove: File[]): void {
+    if (nove.length === 0) return;
     const stavajici = smer === "tam" ? snimkyTam : snimkyZpet;
     const obsazeno = smer === "tam" ? ulozeneTam.length : ulozeneZpet.length;
-    const vysledek = pridejSnimky(stavajici, Array.from(seznam), obsazeno);
+    const vysledek = pridejSnimky(stavajici, nove, obsazeno);
     if (smer === "tam") setSnimkyTam(vysledek.soubory);
     else setSnimkyZpet(vysledek.soubory);
     setChybaSnimku(vysledek.chyba);
@@ -547,8 +561,8 @@ export default function ExpeditionForm({
       <div
         className={
           skrytAkce
-            ? "space-y-4 min-[90rem]:space-y-5"
-            : "min-h-0 flex-1 space-y-4 min-[90rem]:space-y-5 overflow-y-auto overscroll-y-contain px-5 pb-4 pt-5 [touch-action:pan-y] lg:block lg:overflow-visible lg:px-0 lg:pb-0 lg:pt-0 lg:[touch-action:auto]"
+            ? "space-y-5"
+            : "min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-y-contain [touch-action:pan-y] lg:block lg:overflow-visible lg:px-0 lg:pb-0 lg:pt-0 lg:[touch-action:auto]"
         }
       >
         <section aria-label="Základní údaje" className={SKUPINA}>
@@ -568,7 +582,7 @@ export default function ExpeditionForm({
             onChange={(e) => zmenPole("nazev", e.target.value, setNazev)}
             aria-invalid={poleChybi("nazev")}
             aria-describedby={poleChybi("nazev") ? chybaPro("nazev") : undefined}
-            placeholder="Např. Podzimní Šumava"
+            placeholder="Např. Podzimní Šumava – Tříjezerní slať"
             className={`${VSTUP_TRIDY} ${poleChybi("nazev") ? "!border-red-800" : ""}`}
           />
           {chyby.nazev !== undefined && (
@@ -601,8 +615,7 @@ export default function ExpeditionForm({
 
           <div>
             <label htmlFor={idPro("datumDo")} className={`mb-1.5 block ${POPISEK_POLE}`}>
-              Datum do{" "}
-              <span className="font-normal text-ink-3">(nepovinné)</span>
+              Datum do <span className="hidden min-[90rem]:inline">(nepovinné)</span>
             </label>
             <DatumVstup
               id={idPro("datumDo")}
@@ -623,8 +636,7 @@ export default function ExpeditionForm({
 
           <div className="col-span-2">
             <label htmlFor={idPro("kapacitaCelkem")} className={`mb-1.5 block ${POPISEK_POLE}`}>
-              Kapacita{" "}
-              <span className="font-normal text-ink-3">(nepovinná)</span>
+              Kapacita <span className="hidden min-[90rem]:inline">(nepovinná)</span>
             </label>
             <input
               id={idPro("kapacitaCelkem")}
@@ -642,7 +654,7 @@ export default function ExpeditionForm({
                   ? chybaPro("kapacitaCelkem")
                   : napovedaPro("kapacitaCelkem")
               }
-              placeholder="Bez omezení…"
+              placeholder="Bez omezení"
               className={`${VSTUP_TRIDY} ${poleChybi("kapacitaCelkem") ? "!border-red-800" : ""}`}
             />
             {chyby.kapacitaCelkem !== undefined ? (
@@ -650,7 +662,7 @@ export default function ExpeditionForm({
                 {chyby.kapacitaCelkem}
               </p>
             ) : (
-              <p id={napovedaPro("kapacitaCelkem")} className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
+              <p id={napovedaPro("kapacitaCelkem")} className="mt-[5px] hidden text-[11.5px] text-ink-3 min-[90rem]:block">
                 Prázdné nebo 0 = bez omezení míst.
               </p>
             )}
@@ -676,9 +688,9 @@ export default function ExpeditionForm({
             aria-invalid={poleChybi("sraz")}
             aria-describedby={poleChybi("sraz") ? chybaPro("sraz") : undefined}
             placeholder="Např. Praha hl. n., 7:40"
-            className={`${VSTUP_TRIDY} pr-10 ${poleChybi("sraz") ? "!border-red-800" : ""}`}
+            className={`${VSTUP_TRIDY} min-[90rem]:pr-10 ${poleChybi("sraz") ? "!border-red-800" : ""}`}
           />
-          <Ikona nazev="map-pin" className="pointer-events-none absolute right-3.5 top-[34px] size-[15px] text-ink-3 min-[90rem]:top-[32px]" />
+          <Ikona nazev="map-pin" className="pointer-events-none absolute right-3.5 top-9 hidden size-[15px] text-ink-3 min-[90rem]:block" />
           {chyby.sraz !== undefined && (
             <p id={chybaPro("sraz")} role="alert" className="mt-1 text-sm font-semibold text-red-800">
               {chyby.sraz}
@@ -688,8 +700,7 @@ export default function ExpeditionForm({
 
         <div className="relative">
           <label htmlFor={idPro("trasaOdkaz")} className={`mb-1.5 block ${POPISEK_POLE}`}>
-            Odkaz na trasu{" "}
-            <span className="font-normal text-ink-3">(nepovinný, mapy.com)</span>
+            Odkaz na trasu <span className="hidden min-[90rem]:inline">(nepovinný)</span>
           </label>
           <input
             id={idPro("trasaOdkaz")}
@@ -706,16 +717,16 @@ export default function ExpeditionForm({
                 ? chybaPro("trasaOdkaz")
                 : napovedaPro("trasaOdkaz")
             }
-            placeholder="Např. https://mapy.com/…"
-            className={`${VSTUP_TRIDY} pr-10 ${poleChybi("trasaOdkaz") ? "!border-red-800" : ""}`}
+            placeholder="https://mapy.com/…"
+            className={`${VSTUP_TRIDY} min-[90rem]:pr-10 ${poleChybi("trasaOdkaz") ? "!border-red-800" : ""}`}
           />
-          <Ikona nazev="link" className="pointer-events-none absolute right-3.5 top-[34px] size-[15px] text-ink-3 min-[90rem]:top-[32px]" />
+          <Ikona nazev="link" className="pointer-events-none absolute right-3.5 top-9 hidden size-[15px] text-ink-3 min-[90rem]:block" />
           {chyby.trasaOdkaz !== undefined ? (
             <p id={chybaPro("trasaOdkaz")} role="alert" className="mt-1 text-sm font-semibold text-red-800">
               {chyby.trasaOdkaz}
             </p>
           ) : (
-            <p id={napovedaPro("trasaOdkaz")} className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
+            <p id={napovedaPro("trasaOdkaz")} className="sr-only">
               Vlož odkaz na naplánovanou cestu (mapy.com). Začíná https://.
             </p>
           )}
@@ -727,7 +738,7 @@ export default function ExpeditionForm({
         <h3 aria-hidden="true" className={NADPIS_SKUPINY}>Popis a fotky</h3>
         <div>
           <label htmlFor={idPro("popis")} className={`mb-1.5 block ${POPISEK_POLE}`}>
-            Popis <span className="font-normal text-ink-3">(nepovinný)</span>
+            Popis (nepovinný)
           </label>
           <textarea
             id={idPro("popis")}
@@ -738,8 +749,8 @@ export default function ExpeditionForm({
             onChange={(e) => zmenPole("popis", e.target.value, setPopis)}
             aria-invalid={poleChybi("popis")}
             aria-describedby={poleChybi("popis") ? chybaPro("popis") : undefined}
-            placeholder="Trasa, náročnost, co s sebou…"
-            className={`${OBLAST_FORMULARE} min-h-[110px] resize-y ${poleChybi("popis") ? "!border-red-800" : ""}`}
+            placeholder="Např. 12 km po vinicích, lehká trasa"
+            className={`${OBLAST_FORMULARE} max-[90rem]:bg-povrch min-[90rem]:rounded-[11px] min-[90rem]:px-3.5 min-[90rem]:py-3 min-[90rem]:text-[13.5px] min-h-[110px] resize-y ${poleChybi("popis") ? "!border-red-800" : ""}`}
           />
           {chyby.popis !== undefined && (
             <p id={chybaPro("popis")} role="alert" className="mt-1 text-sm font-semibold text-red-800">
@@ -748,7 +759,7 @@ export default function ExpeditionForm({
           )}
         </div>
 
-        <div className="grid gap-4 min-[90rem]:grid-cols-2">
+        <div className="grid gap-5 min-[90rem]:grid-cols-2 min-[90rem]:gap-4">
         <VyberSnimku
           id={`${zaklad}-cesta-tam`}
           nadpis="Cesta tam"
@@ -757,6 +768,7 @@ export default function ExpeditionForm({
           ulozene={ulozeneTam}
           disabled={odesilaSe}
           onVyber={(e) => pridejSoubory("tam", e)}
+          onPretazeni={(nove) => pridejPole("tam", nove)}
           onOdebrat={(index) => setSnimkyTam((prev) => prev.filter((_, i) => i !== index))}
           onSmazatUlozeny={onSmazatSnimek}
         />
@@ -768,6 +780,7 @@ export default function ExpeditionForm({
           ulozene={ulozeneZpet}
           disabled={odesilaSe}
           onVyber={(e) => pridejSoubory("zpet", e)}
+          onPretazeni={(nove) => pridejPole("zpet", nove)}
           onOdebrat={(index) => setSnimkyZpet((prev) => prev.filter((_, i) => i !== index))}
           onSmazatUlozeny={onSmazatSnimek}
         />
@@ -781,12 +794,13 @@ export default function ExpeditionForm({
       </div>
 
       {!skrytAkce && (
-        <div className={`flex shrink-0 flex-col-reverse gap-2 border-t border-linka bg-papir px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:static lg:mt-6 lg:flex-row lg:justify-end lg:border-0 lg:bg-transparent lg:px-0 lg:pb-3 ${akceVHlavicce ? "min-[90rem]:hidden" : ""}`}>
+        <div className={`mt-5 flex shrink-0 flex-col-reverse gap-2 lg:static lg:mt-6 lg:flex-row lg:justify-end lg:border-0 lg:bg-transparent lg:px-0 lg:pb-3 ${akceVHlavicce ? "min-[90rem]:hidden" : ""}`}>
           <button
             type="button"
             onClick={onZrusit}
             disabled={odesilaSe}
             title={odesilaSe ? "Ukládání probíhá…" : "Zrušit úpravy"}
+            hidden={akceVHlavicce}
             className="nahled-press inline-flex min-h-[48px] min-w-[44px] items-center justify-center rounded-xl bg-mlha px-6 py-2 text-base font-semibold text-inkoust hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
           >
             Zrušit

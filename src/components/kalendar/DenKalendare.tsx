@@ -1,7 +1,7 @@
 import type { JSX } from "react";
-import { isoCasNaEvropsky } from "../../lib/evropsky-cas";
 import { barvaVypravy, TRIDY_BARVY } from "../../lib/kalendar-barvy";
 import {
+  kratkyNazevUdalosti,
   schuzkyDne,
   vypravyDne,
   type KalendarniUdalost,
@@ -21,7 +21,7 @@ export function HlavickaDnu(): JSX.Element {
   return (
     <div
       aria-hidden="true"
-      className="grid grid-cols-7 min-[90rem]:h-[38px] min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:bg-[#fbf8ef]"
+      className="grid grid-cols-7 min-[90rem]:h-[38px] min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:bg-zahlavi"
     >
       {DNY_V_TYDNU.map((den) => (
         <span
@@ -68,11 +68,11 @@ function tvarProuzku(pozice: PoziceVPasu): string {
 }
 
 /**
- * Buňka dne podle ExApp.pen, sdílená měsícem i týdnem.
+ * Buňka dne podle ExApp.pen, měsíční mřížka.
  * Telefon: dlaždice 44 px, číslo a pod ním tečky (schůzka okrová, výprava
  * ve své barvě); vícedenní výpravy jsou tenké proužky, které navazují.
  * Vybraný den je olivový. Počítač (1440+): buňka 128 px, číslo vlevo
- * nahoře, pod ním štítky událostí s barevnou značkou; dnešek má teplý
+ * nahoře, pod ním štítky událostí s barevnou značkou; vybraný den má teplý
  * podklad, terakotové číslo a tečku. Název události nese `aria-label`.
  */
 export function DenKalendare({
@@ -85,7 +85,7 @@ export function DenKalendare({
   zacatekRadku,
   label,
   onDen,
-  datumVypravy,
+  pruhy,
   delkaVypravy,
 }: {
   den: string;
@@ -99,56 +99,70 @@ export function DenKalendare({
   zacatekRadku: boolean;
   label: string;
   onDen: (datum: string) => void;
-  datumVypravy: (id: string) => string;
+  /** Číslo pruhu každé výpravy dne (viz `pruhyVyprav`). */
+  pruhy: ReadonlyMap<string, number>;
   /** Počet dní výpravy pro štítek „Beskydy · 3 dny“. */
   delkaVypravy?: (id: string) => number;
 }): JSX.Element {
-  // Stabilní pořadí: dřív začínající výprava nahoře, aby pásy nepřeskakovaly.
-  const vypravy = [...vypravyDne(udalosti)].sort((a, b) => {
-    const rozdil = datumVypravy(a.id).localeCompare(datumVypravy(b.id));
-    return rozdil !== 0 ? rozdil : a.id.localeCompare(b.id);
-  });
+  const pruh = (id: string): number => pruhy.get(id) ?? 0;
+  const vypravy = [...vypravyDne(udalosti)].sort((a, b) => pruh(a.id) - pruh(b.id));
   const schuzky = schuzkyDne(udalosti);
   const cislo = Number(den.slice(8, 10));
   const pozice = new Map(vypravy.map((v) => [v.id, pozicePro(v.id)]));
   const maPas = vypravy.some((v) => pozice.get(v.id) !== "single");
 
-  type Stitek = { klic: string; nazev: string; barva: keyof typeof TRIDY_BARVY; pozice: PoziceVPasu; popisek: boolean };
-  const stitky: Stitek[] = [
-    ...vypravy.map((v): Stitek => {
-      const p = pozice.get(v.id) ?? "single";
-      const delka = delkaVypravy?.(v.id) ?? 1;
-      return {
-        klic: `v-${v.id}`,
-        nazev: delka > 1 ? `${v.nazev} · ${delka} ${sklonujDny(delka)}` : v.nazev,
-        barva: barvaVypravy(v.id),
-        pozice: p,
-        popisek: p === "start" || p === "single" || zacatekRadku,
-      };
-    }),
-    ...schuzky.map((s): Stitek => {
-      const cas = isoCasNaEvropsky(s.cas ?? "");
-      return {
-        klic: `s-${s.id}`,
-        nazev: cas.length > 0 ? `${cas} ${s.nazev}` : s.nazev,
-        barva: "okr",
-        pozice: "single",
-        popisek: true,
-      };
-    }),
-  ];
-  const viditelne = stitky.slice(0, MAX_STITKU);
-  const navic = stitky.length - viditelne.length;
+  type Stitek = {
+    klic: string;
+    nazev: string;
+    barva: keyof typeof TRIDY_BARVY;
+    pozice: PoziceVPasu;
+    popisek: boolean;
+    vicedenni: boolean;
+  };
+  // Řádky štítků: výprava drží svůj pruh, schůzka zabere první volný.
+  const radky: Array<Stitek | undefined> = [];
+  for (const v of vypravy) {
+    const p = pozice.get(v.id) ?? "single";
+    const delka = delkaVypravy?.(v.id) ?? 1;
+    const nazev = kratkyNazevUdalosti(v.nazev, "vyprava");
+    radky[pruh(v.id)] = {
+      klic: `v-${v.id}`,
+      nazev: delka > 1 && p === "start" ? `${nazev} · ${delka} ${sklonujDny(delka)}` : nazev,
+      barva: barvaVypravy(v.id),
+      pozice: p,
+      popisek: p === "start" || p === "single" || zacatekRadku,
+      vicedenni: delka > 1,
+    };
+  }
+  for (const s of schuzky) {
+    let volny = 0;
+    while (radky[volny] !== undefined) volny += 1;
+    radky[volny] = {
+      klic: `s-${s.id}`,
+      nazev: kratkyNazevUdalosti(s.nazev, "schuzka"),
+      barva: "okr",
+      pozice: "single",
+      popisek: true,
+      vicedenni: false,
+    };
+  }
+  const viditelne = Array.from({ length: Math.min(radky.length, MAX_STITKU) }, (_, i) => radky[i]);
+  const navic = radky.slice(MAX_STITKU).filter((r) => r !== undefined).length;
+  // Proužky na telefonu: pruhy výprav i s mezerami.
+  const prouzky = Array.from(
+    { length: Math.min(MAX_STITKU, Math.max(0, ...vypravy.map((v) => pruh(v.id) + 1))) },
+    (_, i) => vypravy.find((v) => pruh(v.id) === i),
+  );
 
   const barvaCisla = vybrano
     ? "text-papir font-bold"
     : jeDnes
       ? "text-akcent font-bold"
       : mimoMesic
-        ? "text-[#b3b8a4] font-normal"
+        ? "text-ink-5 font-medium min-[90rem]:font-normal"
         : maPas
           ? "text-inkoust font-semibold"
-          : "text-inkoust font-medium";
+          : "text-inkoust font-medium min-[90rem]:font-semibold";
 
   const tecky = [
     ...vypravy.filter((v) => pozice.get(v.id) === "single").map((v) => TRIDY_BARVY[barvaVypravy(v.id)].tecka),
@@ -162,33 +176,35 @@ export function DenKalendare({
       aria-pressed={vybrano}
       aria-current={jeDnes ? "date" : undefined}
       onClick={() => onDen(den)}
-      className={`bez-prejeti relative flex min-h-11 min-w-0 flex-col tabular-nums transition-colors motion-reduce:transition-none [touch-action:pan-y] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk max-[90rem]:rounded-xl ${
+      className={`bez-prejeti relative flex min-h-11 min-w-0 flex-col transition-colors motion-reduce:transition-none [touch-action:pan-y] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk max-[90rem]:rounded-xl ${
         vybrano ? "max-[90rem]:bg-smrk" : "max-[90rem]:hover:bg-povrch-2"
       } min-[90rem]:h-32 min-[90rem]:gap-[5px] min-[90rem]:py-[9px] ${
-        jeDnes
+        vybrano
           ? "min-[90rem]:bg-[#f8e9df]"
-          : vybrano
-            ? "min-[90rem]:bg-povrch-2"
-            : "min-[90rem]:bg-povrch min-[90rem]:hover:bg-povrch-2/60"
+          : "min-[90rem]:bg-povrch min-[90rem]:hover:bg-povrch-2/60"
       }`}
     >
       {/* Telefon */}
       <span
-        className={`flex h-full w-full flex-col items-center min-[90rem]:hidden ${
-          maPas ? "justify-between gap-1 px-0.5 pb-[5px] pt-1" : "justify-center gap-[3px] py-1"
+        className={`flex w-full flex-col items-center min-[90rem]:hidden ${
+          maPas ? "h-[58px] justify-between gap-1 px-0.5 pb-[5px] pt-1" : "h-11 justify-center gap-[3px]"
         }`}
       >
-        <span className={`text-[13px] leading-none ${barvaCisla}`}>{cislo}</span>
+        <span className={`text-[13px] ${barvaCisla}`}>{cislo}</span>
         {maPas ? (
           <span aria-hidden="true" className="flex w-full flex-col gap-0.5">
-            {vypravy.slice(0, MAX_STITKU).map((v) => (
-              <span
-                key={v.id}
-                className={`block h-[5px] ${tvarProuzku(pozice.get(v.id) ?? "single")} ${
-                  vybrano ? "bg-papir/70" : TRIDY_BARVY[barvaVypravy(v.id)].podklad
-                }`}
-              />
-            ))}
+            {prouzky.map((v, i) =>
+              v === undefined ? (
+                <span key={`mezera-${i}`} className="block h-[5px]" />
+              ) : (
+                <span
+                  key={v.id}
+                  className={`block h-[5px] ${tvarProuzku(pozice.get(v.id) ?? "single")} ${
+                    vybrano ? "bg-papir/70" : TRIDY_BARVY[barvaVypravy(v.id)].podklad
+                  }`}
+                />
+              ),
+            )}
           </span>
         ) : (
           <span aria-hidden="true" className="flex h-1 items-center gap-[3px]">
@@ -201,14 +217,15 @@ export function DenKalendare({
 
       {/* Počítač */}
       <span className="hidden h-5 shrink-0 items-center justify-between px-2.5 min-[90rem]:flex">
-        <span className={`text-sm leading-none ${vybrano ? (jeDnes ? "text-akcent font-bold" : "text-inkoust font-semibold") : barvaCisla}`}>
+        <span className={`font-display text-sm leading-[14px] ${vybrano ? "font-bold text-akcent" : barvaCisla}`}>
           {cislo}
         </span>
-        {jeDnes ? <span aria-hidden="true" className="block size-[5px] rounded-full bg-akcent" /> : null}
+        {vybrano ? <span aria-hidden="true" className="block size-[5px] rounded-full bg-akcent" /> : null}
       </span>
       {viditelne.length > 0 ? (
         <span aria-hidden="true" className="hidden w-full min-w-0 flex-col gap-[5px] min-[90rem]:flex">
-          {viditelne.map((s) => {
+          {viditelne.map((s, i) => {
+            if (s === undefined) return <span key={`mezera-${i}`} className="block h-5" />;
             const tridy = TRIDY_BARVY[s.barva];
             return (
               <span
@@ -218,7 +235,7 @@ export function DenKalendare({
                 {s.popisek ? (
                   <>
                     <span className={`block h-2.5 w-[3px] shrink-0 rounded-sm ${tridy.znacka}`} />
-                    <span className={`min-w-0 truncate text-left text-[10.5px] font-semibold leading-none tracking-[0.1px] ${tridy.text}`}>
+                    <span className={`min-w-0 truncate text-left text-[10.5px] font-semibold tracking-[0.1px] ${s.vicedenni && s.barva === "akcent" ? "text-akcent" : tridy.text}`}>
                       {s.nazev}
                     </span>
                   </>

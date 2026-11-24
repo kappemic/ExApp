@@ -1,5 +1,5 @@
-import { lazy, Suspense, type JSX, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from "react-router-dom";
+import { lazy, Suspense, useLayoutEffect, useRef, type JSX, type ReactNode } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType, useSearchParams } from "react-router-dom";
 import RequireAuth from "./components/Auth/RequireAuth";
 import StrankaKostra from "./components/StrankaKostra";
 import { ClenProfilProvider } from "./components/clen/ClenProfil";
@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { KonverzacePrehledProvider } from "./hooks/useKonverzacePrehled";
 import DomuPage from "./pages/DomuPage";
 import LoginPage from "./pages/LoginPage";
+import { useNabeh } from "./lib/pohyb";
 
 const AdminClenovePage = lazy(() => import("./pages/AdminClenovePage"));
 const AdminKodyPage = lazy(() => import("./pages/AdminKodyPage"));
@@ -23,6 +24,7 @@ const VypravyNahledPage = lazy(() => import("./pages/VypravyNahledPage"));
 const VypravaDetailPage = lazy(() => import("./pages/VypravaDetailPage"));
 const KdoJedePage = lazy(() => import("./pages/KdoJedePage"));
 const NovaVypravaPage = lazy(() => import("./pages/NovaVypravaPage"));
+const KilometryPage = lazy(() => import("./pages/KilometryPage"));
 const ZebrickyPage = lazy(() => import("./pages/ZebrickyPage"));
 const ZpevnikPage = lazy(() => import("./pages/ZpevnikPage"));
 const ZpevnikPisenPage = lazy(() => import("./pages/ZpevnikPisenPage"));
@@ -52,10 +54,61 @@ function NeznamaCesta(): JSX.Element {
   return <Navigate to={user === null ? "/" : "/vypravy"} replace />;
 }
 
+/** Posun stránky podle záznamu v historii, drží se jen po dobu běhu aplikace. */
+const posunyStranek = new Map<string, number>();
+
+/**
+ * Nová stránka začíná nahoře, zpět a vpřed se vrací tam, kde člověk byl.
+ * Prohlížeč to sám neumí, protože data se načítají až po návratu a stránka je
+ * chvíli kratší: posun se proto zkouší, dokud obsah nedoroste.
+ */
+function usePosunStranky(): void {
+  const { pathname, key } = useLocation();
+  const typ = useNavigationType();
+  const predchozi = useRef(pathname);
+  const klic = useRef(key);
+
+  useLayoutEffect(() => {
+    window.history.scrollRestoration = "manual";
+    const zapis = (): void => {
+      posunyStranek.set(klic.current, window.scrollY);
+    };
+    window.addEventListener("scroll", zapis, { passive: true });
+    return () => window.removeEventListener("scroll", zapis);
+  }, []);
+
+  useLayoutEffect(() => {
+    klic.current = key;
+    if (predchozi.current === pathname) return;
+    predchozi.current = pathname;
+    const cil = typ === "POP" ? (posunyStranek.get(key) ?? 0) : 0;
+    window.scrollTo(0, cil);
+    if (cil === 0) return;
+    const konec = performance.now() + 2000;
+    let snimek = 0;
+    const dorovnej = (): void => {
+      if (Math.abs(window.scrollY - cil) > 1) window.scrollTo(0, cil);
+      if (Math.abs(window.scrollY - cil) > 1 && performance.now() < konec) snimek = requestAnimationFrame(dorovnej);
+    };
+    const prerus = (): void => cancelAnimationFrame(snimek);
+    snimek = requestAnimationFrame(dorovnej);
+    window.addEventListener("wheel", prerus, { passive: true, once: true });
+    window.addEventListener("touchstart", prerus, { passive: true, once: true });
+    return () => {
+      prerus();
+      window.removeEventListener("wheel", prerus);
+      window.removeEventListener("touchstart", prerus);
+    };
+  }, [pathname, key, typ]);
+}
+
 /** Vnitřek pod AuthProviderem — umí podmínit Navbar podle session (varianta A). */
 function AppObsah(): JSX.Element {
   const { user, isLoading } = useAuth();
   const prihlasen = !isLoading && user !== null;
+  const { pathname } = useLocation();
+  const strankaRef = useNabeh<HTMLDivElement>(pathname, "zadna");
+  usePosunStranky();
   if (isLoading) {
     return (
       <DenikPlocha>
@@ -69,7 +122,7 @@ function AppObsah(): JSX.Element {
     <DenikPlocha>
       <div className="flex min-h-dvh flex-col bg-papir text-inkoust">
         {prihlasen ? <Navbar /> : null}
-        <div className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
+        <div ref={strankaRef} className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
           <Routes>
             <Route path="/" element={<DomuPage />} />
             <Route
@@ -179,6 +232,16 @@ function AppObsah(): JSX.Element {
                 <RequireAuth>
                   <OdlozenaStranka>
                     <ZebrickyPage />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/zebricky/kilometry"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <KilometryPage />
                   </OdlozenaStranka>
                 </RequireAuth>
               }

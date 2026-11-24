@@ -9,11 +9,14 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { useOdchod, zmizeniNabidky } from "../../lib/pohyb";
 
 type Umisteni = {
   top: number;
   left: number;
   width: number;
+  nahoru: boolean;
+  puvod: number;
 };
 
 type NavigacniRozbalovakProps = {
@@ -39,6 +42,8 @@ export default function NavigacniRozbalovak({
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const [umisteni, setUmisteni] = useState<Umisteni | null>(null);
+  const viditelne = otevreno && umisteni !== null;
+  useOdchod(panelRef, viditelne, zmizeniNabidky);
 
   useLayoutEffect(() => {
     if (!otevreno) {
@@ -53,7 +58,15 @@ export default function NavigacniRozbalovak({
         zarovnani === "end"
           ? Math.min(Math.max(8, rect.right - sirka), window.innerWidth - sirka - 8)
           : Math.min(Math.max(8, rect.left), window.innerWidth - sirka - 8);
-      setUmisteni({ top: rect.bottom + 8, left, width: sirka });
+      const vyska = panelRef.current?.offsetHeight ?? 0;
+      const nahoru = rect.bottom + 8 + vyska > window.innerHeight - 8 && rect.top - 8 - vyska > 8;
+      setUmisteni({
+        top: nahoru ? rect.top - 8 - vyska : rect.bottom + 8,
+        left,
+        width: sirka,
+        nahoru,
+        puvod: Math.min(Math.max(rect.left + rect.width / 2 - left, 16), sirka - 16),
+      });
     }
     mer();
     window.addEventListener("resize", mer);
@@ -62,14 +75,41 @@ export default function NavigacniRozbalovak({
       window.removeEventListener("resize", mer);
       window.removeEventListener("scroll", mer, true);
     };
-  }, [otevreno, kotvaRef, sirka, zarovnani]);
+  }, [otevreno, viditelne, kotvaRef, sirka, zarovnani]);
+
+  // Otevření klávesnicí přesune fokus na první položku.
+  useEffect(() => {
+    if (!viditelne) return;
+    const kotva = kotvaRef.current;
+    if (kotva !== null && kotva === document.activeElement && kotva.matches(":focus-visible")) {
+      panelRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    }
+    // Fokus, který byl v menu, se vrací na tlačítko (dialog si ho pak převezme).
+    return () => {
+      if (document.activeElement === null || document.activeElement === document.body) kotva?.focus({ preventScroll: true });
+    };
+  }, [viditelne, kotvaRef]);
 
   useEffect(() => {
     if (!otevreno) return;
     function klavesa(udalost: KeyboardEvent): void {
+      if (udalost.key === "ArrowDown" || udalost.key === "ArrowUp") {
+        const polozky = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+        if (polozky.length === 0) return;
+        udalost.preventDefault();
+        const index = polozky.findIndex((polozka) => polozka === document.activeElement);
+        const smer = udalost.key === "ArrowDown" ? 1 : -1;
+        polozky[index < 0 ? (smer === 1 ? 0 : polozky.length - 1) : (index + smer + polozky.length) % polozky.length]?.focus();
+        return;
+      }
+      if (udalost.key === "Tab") {
+        onZavrit();
+        return;
+      }
       if (udalost.key !== "Escape") return;
       udalost.preventDefault();
       onZavrit();
+      kotvaRef.current?.focus();
     }
     function venku(udalost: PointerEvent): void {
       const cil = udalost.target;
@@ -99,9 +139,10 @@ export default function NavigacniRozbalovak({
         top: umisteni.top,
         left: umisteni.left,
         width: umisteni.width,
+        transformOrigin: `${umisteni.puvod}px ${umisteni.nahoru ? "100%" : "0"}`,
         zIndex: 60,
       }}
-      className="vyskakovaci-menu rounded-[14px] border border-linka bg-povrch p-2 text-inkoust shadow-modal"
+      className="nocturne vyskakovaci-menu rounded-[14px] border border-linka bg-povrch p-2 text-inkoust shadow-modal"
     >
       {children}
     </div>,

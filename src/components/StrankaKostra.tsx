@@ -47,7 +47,7 @@ export function KostraAlba({ pocet = 4 }: { pocet?: number }): JSX.Element {
   return (
     <div role="status" aria-busy="true" aria-label="Načítám alba" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
       {mista(pocet).map((index) => (
-        <div key={index} className="overflow-hidden rounded-lg border-2 border-inkoust/15 bg-white/60 shadow-denik">
+        <div key={index} className="overflow-hidden rounded-lg border-2 border-inkoust/15 bg-white/60 shadow-karta">
           <div className={`aspect-[16/9] rounded-none ${PULS}`} />
           <div className="space-y-2 px-4 py-3">
             <span className={`block h-4 w-2/3 ${PULS}`} />
@@ -158,7 +158,7 @@ export default function StrankaKostra({
       </header>
       ) : null}
 
-      <main className="mx-auto w-full flex-1 px-5 pb-24 pt-6 sm:px-6 sm:pt-10 min-[90rem]:px-10 min-[90rem]:pt-11">
+      <main className="mx-auto w-full flex-1 px-5 pb-6 pt-6 sm:px-6 sm:pt-10 min-[90rem]:px-10 min-[90rem]:pt-11">
         <span className={`block h-3 w-40 ${PULS}`} />
         <span className={`mt-3 block h-10 w-52 max-w-full bg-inkoust/10 ${PULS}`} />
         <span className={`mt-4 block h-4 w-full max-w-md ${PULS}`} />
@@ -167,7 +167,7 @@ export default function StrankaKostra({
           {["w-2/3", "w-1/2", "w-3/5", "w-2/5"].map((sirka, index) => (
             <div
               key={index}
-              className="rounded-2xl border border-linka bg-povrch px-4 py-4 shadow-jemny"
+              className="rounded-2xl border border-linka bg-povrch px-4 py-4 shadow-karta"
             >
               <span className={`block h-4 ${sirka} ${PULS}`} />
               <span className={`mt-3 block h-3 w-1/3 ${PULS}`} />

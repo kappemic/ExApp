@@ -73,8 +73,7 @@ describe("ExpeditionPhotos delete-mode gallery header", () => {
     expect(expedition).toContain("onZacniMazani");
   });
 
-  it("prázdný stav a obálka používají PapirObal", () => {
-    expect(expedition).toContain("PapirObal");
+  it("prázdný stav hlásí, že tu zatím nic není", () => {
     expect(expedition).toContain("role=\"status\"");
     expect(expedition).toContain("Zatím tu není žádná fotka");
   });

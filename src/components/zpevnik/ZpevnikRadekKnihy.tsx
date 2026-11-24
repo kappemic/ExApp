@@ -25,7 +25,7 @@ export function ZpevnikRadekKnihy({
         className="nahled-press flex items-center gap-3 px-3.5 py-3 transition-colors [touch-action:manipulation] hover:bg-povrch-2/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-[62px] min-[90rem]:gap-3.5 min-[90rem]:px-5 min-[90rem]:py-0"
       >
         <span
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-povrch-2 text-xs font-semibold tabular-nums text-mech min-[90rem]:size-auto min-[90rem]:min-w-5 min-[90rem]:bg-transparent min-[90rem]:font-medium min-[90rem]:text-[#b3b8a4]"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-povrch-2 text-xs font-semibold text-mech min-[90rem]:size-auto min-[90rem]:min-w-5 min-[90rem]:bg-transparent min-[90rem]:font-medium min-[90rem]:text-[#b3b8a4]"
           aria-hidden="true"
         >
           {poradi}

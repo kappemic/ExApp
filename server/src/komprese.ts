@@ -114,8 +114,27 @@ export function kompreseOdpovedi(req: Request, res: Response, next: NextFunction
     res.setHeader("Content-Encoding", kodovani);
     const kompresor = vytvorProud(kodovani);
     proud = kompresor;
+    // File responses write in chunks and wait for `drain`. Forward the
+    // compressor's drain, and pause it when the socket cannot take more.
+    // Otherwise a large script stalls after the first compressed block.
+    let socketCeka = false;
     kompresor.on("data", (chunk: Buffer) => {
-      puvodniWrite(chunk);
+      const prijal = puvodniWrite(chunk);
+      if (!prijal) {
+        socketCeka = true;
+        kompresor.pause();
+      }
+    });
+    res.on("drain", () => {
+      if (!socketCeka) return;
+      socketCeka = false;
+      kompresor.resume();
+    });
+    kompresor.on("drain", () => {
+      // Defer so a waiting writer does not re-enter write from inside write.
+      queueMicrotask(() => {
+        res.emit("drain");
+      });
     });
     kompresor.on("end", () => {
       if (cekaKonec !== undefined) puvodniEnd(cekaKonec);

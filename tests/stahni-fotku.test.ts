@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   idsFotekKeStazeni,
+  jeVybranoVse,
+  prepniIdVeVyberu,
+  prepniVyberVsech,
 } from "../src/lib/fotky-stahovani";
 import {
   lzeSdiletSoubory,
@@ -194,6 +197,33 @@ describe("idsFotekKeStazeni", () => {
 
   it("returns selected ids for vybrane", () => {
     expect(idsFotekKeStazeni(fotky, new Set(["a", "c"]), "vybrane")).toEqual(["a", "c"]);
+  });
+});
+
+describe("výběr fotek ke stažení", () => {
+  const fotky = [{ id: "a" }, { id: "b" }];
+
+  it("označí a odznačí jednu fotku beze změny původní sady", () => {
+    const puvodni = new Set(["a"]);
+    expect([...prepniIdVeVyberu(puvodni, "b")]).toEqual(["a", "b"]);
+    expect([...prepniIdVeVyberu(puvodni, "a")]).toEqual([]);
+    expect([...puvodni]).toEqual(["a"]);
+  });
+
+  it("vybere vše, a když je vybráno vše, výběr zruší", () => {
+    expect([...prepniVyberVsech(fotky, new Set(["a"]))]).toEqual(["a", "b"]);
+    expect([...prepniVyberVsech(fotky, new Set(["a", "b"]))]).toEqual([]);
+    expect(jeVybranoVse([], new Set())).toBe(false);
+  });
+
+  it("hlavička alba pouští do režimu výběru a uložení do galerie je v lepivé liště", () => {
+    const page = cti("src/pages/FotkyPage.tsx");
+    expect(page).toContain("data-fotky-vybrat-ke-stazeni");
+    expect(page).toContain("vyberFotky()");
+    const hlavicka = cti("src/components/fotky/FotkyStahovaciHlavicka.tsx");
+    expect(hlavicka).toContain("Vybrat vše");
+    expect(hlavicka).toContain("Zrušit výběr");
+    expect(hlavicka).toContain("Uložit do galerie");
   });
 });
 

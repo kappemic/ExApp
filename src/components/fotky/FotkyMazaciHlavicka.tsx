@@ -1,8 +1,9 @@
 import type { JSX } from "react";
 import {
-  fotkyHoverBgJantar,
-  fotkyHoverBgJantarPlne,
   fotkyLightboxIkona,
+  fotkyTlacitkoOdebrat,
+  fotkyTlacitkoSekundarni,
+  fotkyTlacitkoSmazat,
   fotkyTlacitkoZaklad,
 } from "./fotky-ui";
 
@@ -38,11 +39,6 @@ export default function FotkyMazaciHlavicka({
 }: FotkyMazaciHlavickaProps): JSX.Element | null {
   if (!isAdmin || !maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} border px-3 text-sm font-bold disabled:opacity-60`;
-  const destruktivni = `${zaklad} rounded-lg border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
-  const destruktivniPlne = `${zaklad} rounded-lg border-jantar bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
-  const neutralni = `${zaklad} rounded-lg border-linka bg-povrch text-inkoust shadow-denik`;
-
   if (!mazaciRezim) {
     return (
       <button
@@ -72,7 +68,7 @@ export default function FotkyMazaciHlavicka({
         type="button"
         onClick={onZrusMazani}
         disabled={mazeSe}
-        className={`${neutralni} order-2 w-full sm:order-1 sm:w-auto`}
+        className={`${fotkyTlacitkoSekundarni} order-2 w-full sm:order-1 sm:w-auto`}
       >
         Zrušit
       </button>
@@ -80,7 +76,7 @@ export default function FotkyMazaciHlavicka({
         type="button"
         onClick={onSmazatVybrane}
         disabled={vybranyPocet === 0 || mazeSe}
-        className={`${destruktivniPlne} order-1 col-span-2 w-full sm:order-3 sm:w-auto`}
+        className={`${fotkyTlacitkoSmazat} order-1 col-span-2 w-full sm:order-3 sm:w-auto`}
       >
         Smazat vybrané
       </button>
@@ -88,7 +84,7 @@ export default function FotkyMazaciHlavicka({
         type="button"
         onClick={onSmazatVse}
         disabled={mazeSe}
-        className={`${destruktivni} order-3 w-full sm:order-2 sm:w-auto`}
+        className={`${fotkyTlacitkoOdebrat} order-3 w-full sm:order-2 sm:w-auto`}
       >
         Smazat vše
       </button>

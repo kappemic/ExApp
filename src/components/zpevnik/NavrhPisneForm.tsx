@@ -1,24 +1,23 @@
 import { useRef, useState, type FormEvent, type JSX } from "react";
 import { nahrejSoubor, vytvorNavrh } from "../../lib/zpevnik-api";
 import { parsujVlozeni } from "../../shared/zpevnik";
-import { ZpevnikChip, ZpevnikChipLista } from "./ZpevnikChipy";
+import Ikona, { type NazevIkony } from "../Ikona";
+import { OBLAST_FORMULARE, POLE_FORMULARE, POPISEK_POLE } from "../formular-tridy";
+import {
+  NADPIS_ODDILU_PANELU,
+  OBSAH_PANELU,
+  PATICKA_SHEETU,
+  TLACITKO_PATICKY_HLAVNI,
+  TLACITKO_PATICKY_ZRUSIT,
+} from "../shell/SpodniSheet";
 
 type ZalozkaNavrhu = "zapsat" | "fotka" | "pdf";
 
-const ZALOZKY: readonly { id: ZalozkaNavrhu; nazev: string }[] = [
-  { id: "zapsat", nazev: "Zapsat" },
-  { id: "fotka", nazev: "Z fotky" },
-  { id: "pdf", nazev: "Z PDF" },
+const ZALOZKY: readonly { id: ZalozkaNavrhu; nazev: string; ikona: NazevIkony }[] = [
+  { id: "zapsat", nazev: "Zapsat", ikona: "pen-line" },
+  { id: "fotka", nazev: "Z fotky", ikona: "image" },
+  { id: "pdf", nazev: "Z PDF", ikona: "file-text" },
 ];
-
-const POLE =
-  "mt-2 w-full rounded-xl border border-pole bg-papir px-3 py-3 text-base text-inkoust";
-
-const PRIMARNI =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60";
-
-const VEDLEJSI =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-pole bg-papir px-4 text-sm font-bold text-inkoust disabled:opacity-60";
 
 /**
  * Proposal entry. Text calls `vytvorNavrh`. Photo and PDF call the existing import.
@@ -70,64 +69,78 @@ export function NavrhPisneForm({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={OBSAH_PANELU}>
       {zalozka === "zapsat" && (
         <>
-          <label className="block text-sm font-bold text-inkoust" htmlFor="nazev-pisne">
+          <label className={`block ${POPISEK_POLE}`} htmlFor="nazev-pisne">
             Název písně
             <input
               id="nazev-pisne"
               required
               value={nazev}
               onChange={(udalost) => setNazev(udalost.target.value)}
-              className={POLE}
+              className={`mt-1.5 font-normal min-[90rem]:mt-[5px] ${POLE_FORMULARE}`}
             />
           </label>
-          <label className="block text-sm font-bold text-inkoust" htmlFor="autor-pisne">
+          <label className={`block ${POPISEK_POLE}`} htmlFor="autor-pisne">
             Autor
             <input
               id="autor-pisne"
               required
               value={autor}
               onChange={(udalost) => setAutor(udalost.target.value)}
-              className={POLE}
+              className={`mt-1.5 font-normal min-[90rem]:mt-[5px] ${POLE_FORMULARE}`}
             />
           </label>
         </>
       )}
 
-      <p className="text-xs font-bold tracking-wide text-mech">Jak zadat text</p>
-      <ZpevnikChipLista>
-        {ZALOZKY.map((polozka) => (
-          <ZpevnikChip
-            key={polozka.id}
-            vybrany={zalozka === polozka.id}
-            onClick={() => {
-              setZalozka(polozka.id);
-              setChyba(null);
-            }}
-          >
-            {polozka.nazev}
-          </ZpevnikChip>
-        ))}
-      </ZpevnikChipLista>
+      <p className={NADPIS_ODDILU_PANELU}>Jak zadat text</p>
+      <div className="flex gap-2">
+        {ZALOZKY.map((polozka) => {
+          const vybrana = zalozka === polozka.id;
+          return (
+            <button
+              key={polozka.id}
+              type="button"
+              aria-pressed={vybrana}
+              onClick={() => {
+                setZalozka(polozka.id);
+                setChyba(null);
+              }}
+              className={`nahled-press flex h-9 items-center justify-center gap-[5px] rounded-full border px-3 text-[13px] font-semibold min-[90rem]:h-auto min-[90rem]:flex-1 min-[90rem]:flex-col min-[90rem]:rounded-[10px] min-[90rem]:px-2.5 min-[90rem]:py-[11px] min-[90rem]:text-[11px] ${
+                vybrana
+                  ? "border-transparent bg-smrk text-povrch min-[90rem]:border-smrk min-[90rem]:bg-mlha min-[90rem]:text-smrk"
+                  : "border-linka bg-papir text-mech min-[90rem]:border-transparent min-[90rem]:bg-pole-podklad"
+              }`}
+            >
+              <Ikona nazev={polozka.ikona} className={`hidden size-4 min-[90rem]:block ${vybrana ? "text-smrk" : "text-ink-3"}`} />
+              {polozka.nazev}
+            </button>
+          );
+        })}
+      </div>
 
       {zalozka === "zapsat" && (
-        <form className="space-y-4" onSubmit={(udalost) => void odeslatText(udalost)}>
-          <label className="block text-sm font-bold text-inkoust" htmlFor="text-pisne">
-            Text a akordy
+        <form className={OBSAH_PANELU} onSubmit={(udalost) => void odeslatText(udalost)}>
+          <label className="block" htmlFor="text-pisne">
+            <span className="sr-only">Text a akordy</span>
             <textarea
               id="text-pisne"
               required
-              rows={8}
+              rows={3}
               wrap="off"
               placeholder="Text a akordy…"
               value={text}
               onChange={(udalost) => setText(udalost.target.value)}
-              className={`${POLE} overflow-x-auto whitespace-pre font-mono`}
+              className={`block min-h-[88px] resize-none overflow-x-auto whitespace-pre ${OBLAST_FORMULARE}`}
             />
           </label>
-          {chyba !== null && <p className="text-sm text-inkoust">{chyba}</p>}
+          {chyba !== null && (
+            <p role="alert" className="text-[13px] font-semibold text-akcent">
+              {chyba}
+            </p>
+          )}
           <Akce
             odesila={odesila}
             onZavrit={onZavrit}
@@ -138,8 +151,9 @@ export function NavrhPisneForm({
       )}
 
       {zalozka !== "zapsat" && (
-        <div className="space-y-4">
-          <p className="text-sm text-mech">
+        <div className={OBSAH_PANELU}>
+          <p className="flex gap-2.5 rounded-[10px] bg-povrch-2 p-[11px] text-[12.5px] leading-[17px] text-mech min-[90rem]:text-[11px] min-[90rem]:leading-[15px]">
+            <Ikona nazev={zalozka === "fotka" ? "image" : "file-text"} className="size-3.5 text-ink-3" />
             {zalozka === "fotka"
               ? "Fotka not nebo textu se pošle do stejného importu jako PDF."
               : "PDF se pošle do importu a ve frontě zůstane jako návrh."}
@@ -160,7 +174,11 @@ export function NavrhPisneForm({
               void nahrej(soubor);
             }}
           />
-          {chyba !== null && <p className="text-sm text-inkoust">{chyba}</p>}
+          {chyba !== null && (
+            <p role="alert" className="text-[13px] font-semibold text-akcent">
+              {chyba}
+            </p>
+          )}
           <Akce
             odesila={odesila}
             onZavrit={onZavrit}
@@ -189,18 +207,18 @@ function Akce({
   submitLabel: string;
 }): JSX.Element {
   return (
-    <div className="flex gap-2 pt-2">
+    <div className={`${PATICKA_SHEETU} -mt-[18px] min-[90rem]:!mt-1.5`}>
       {onZavrit !== undefined && (
-        <button type="button" disabled={odesila} onClick={onZavrit} className={VEDLEJSI}>
+        <button type="button" disabled={odesila} onClick={onZavrit} className={TLACITKO_PATICKY_ZRUSIT}>
           Zrušit
         </button>
       )}
       {submit === true ? (
-        <button type="submit" disabled={odesila} className={PRIMARNI}>
+        <button type="submit" disabled={odesila} className={TLACITKO_PATICKY_HLAVNI}>
           {submitLabel}
         </button>
       ) : (
-        <button type="button" disabled={odesila} onClick={onVybrat} className={PRIMARNI}>
+        <button type="button" disabled={odesila} onClick={onVybrat} className={TLACITKO_PATICKY_HLAVNI}>
           {submitLabel}
         </button>
       )}

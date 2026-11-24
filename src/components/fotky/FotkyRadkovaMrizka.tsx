@@ -11,13 +11,36 @@ import { pomerZRozmeru } from "../../lib/fotky-rozmery";
 const VIDITELNE_RADKY_MOBIL = 4;
 const VIDITELNE_RADKY_DESKTOP = 5;
 
+/** Řady alba: počítač střídá 2 fotky (300 px) a 3 fotky (220 px), tablet má tři, telefon dvě. */
+function radkyAlba(
+  fotky: readonly { id: string }[],
+  sirka: number,
+): Array<{ dlazdice: DlazdiceRadku[] }> {
+  if (sirka <= 0) return [];
+  const pocitac = sirka >= 900;
+  const mezera = pocitac ? 14 : 8;
+  const vzor = pocitac ? [{ pocet: 2, vyska: 300 }, { pocet: 3, vyska: 220 }] : sirka >= 600
+      ? [{ pocet: 3, vyska: 180 }]
+      : [{ pocet: 2, vyska: 152 }];
+  const vysledek: Array<{ dlazdice: DlazdiceRadku[] }> = [];
+  for (let od = 0, rada = 0; od < fotky.length; rada += 1) {
+    const { pocet, vyska } = vzor[rada % vzor.length] ?? { pocet: 2, vyska: 152 };
+    const kus = fotky.slice(od, od + pocet);
+    const sloupcu = pocitac ? kus.length : pocet;
+    const sirkaDlazdice = Math.floor((sirka - mezera * (sloupcu - 1)) / sloupcu);
+    vysledek.push({ dlazdice: kus.map((fotka) => ({ id: fotka.id, sirka: sirkaDlazdice, vyska })) });
+    od += pocet;
+  }
+  return vysledek;
+}
+
 interface FotkyRadkovaMrizkaProps<
   T extends { id: string; sirka?: number | null; vyska?: number | null },
 > {
   fotky: readonly T[];
   className?: string;
   /**
-   * Vzhled podle ExApp.pen (album): mezery 8 / 14 px, rohy 14 px, vyšší řádky.
+   * Vzhled podle ExApp.pen (album): mezery 8 / 14 px, rohy 14 px, řady po dvou a třech.
    * Bez něj zůstanou dlaždice od kraje ke kraji s 2px mezerou.
    */
   karty?: boolean;
@@ -79,11 +102,12 @@ export default function FotkyRadkovaMrizka<
           pomer: pomery[fotka.id] ?? pomerZRozmeru(fotka.sirka, fotka.vyska),
         })),
         sirka,
-        karty ? (sirka >= 900 ? 240 : 150) : cilovaVyskaRadku(sirka),
-        karty ? (sirka >= 900 ? 14 : 8) : undefined,
+        cilovaVyskaRadku(sirka),
       ),
-    [fotky, pomery, sirka, karty],
+    [fotky, pomery, sirka],
   );
+  // Album podle ExApp.pen: pevné řady bez ohledu na poměr stran.
+  const radkyKaret = useMemo(() => (karty ? radkyAlba(fotky, sirka) : []), [fotky, karty, sirka]);
 
   const podleId = useMemo(() => {
     const mapa = new Map<string, T>();
@@ -96,7 +120,7 @@ export default function FotkyRadkovaMrizka<
   return (
     <div ref={obalRef} className={`min-w-0 ${className.length > 0 ? className : "w-full"}`}>
       <ul className={`m-0 flex list-none flex-wrap p-0 ${karty ? (sirka >= 900 ? "gap-[14px]" : "gap-2") : "gap-[2px]"}`}>
-        {radky.map((radek, indexRadku) =>
+        {(karty ? radkyKaret : radky).map((radek, indexRadku) =>
           radek.dlazdice.map((dlazdice) => {
             const fotka = podleId.get(dlazdice.id);
             if (fotka === undefined) return null;

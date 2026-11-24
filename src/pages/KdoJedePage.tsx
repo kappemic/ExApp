@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useState, type JSX } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import HlavickaZpet from "../components/HlavickaZpet";
+import HlavickaZpet, { ZpetPocitac } from "../components/HlavickaZpet";
 import AvatarKruh from "../components/AvatarKruh";
 import Ikona from "../components/Ikona";
 import PrihlaseniVypravaSheet from "../components/vypravy/PrihlaseniVypravaSheet";
 import StrankaKostra from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
 import {
-  formatCelyDatum,
   jeBezOmezeni,
   volnaMista,
 } from "../lib/expedition-utils";
@@ -149,7 +148,7 @@ export default function KdoJedePage(): JSX.Element {
         Hledat v přihlášených
       </label>
       <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
-        <Ikona nazev="search" className="size-4" />
+        <Ikona nazev="search" className="size-4 min-[90rem]:size-[17px]" />
       </span>
       <input
         id={hledaniId}
@@ -158,26 +157,27 @@ export default function KdoJedePage(): JSX.Element {
         onChange={(e) => setDotaz(e.target.value)}
         placeholder="Hledat v přihlášených"
         autoComplete="off"
-        className={`block w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-[#9aa189] focus:border-pole min-[90rem]:text-sm ${vyska}`}
+        className={`block w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-ink-4 focus:border-pole min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3 ${vyska}`}
       />
     </div>
   );
 
   return (
-    <main className="mx-auto w-full max-w-lg px-5 pb-28 pt-4 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+    <main className="mx-auto w-full max-w-lg px-5 pb-6 pt-4 sm:max-w-[46rem] sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <HlavickaZpet
         zpet={detailPath}
         zpetPopisek="Zpět na výpravu"
         titulek="Kdo jede"
         className="mb-4 min-[90rem]:hidden"
       />
+      <ZpetPocitac zpet={detailPath} popisek="Zpět na výpravu" />
 
-      <div className="flex flex-col gap-1.5 min-[90rem]:flex-row min-[90rem]:items-end min-[90rem]:justify-between">
-        <div className="flex min-w-0 flex-col gap-1 min-[90rem]:gap-2.5">
-          <p className="font-display text-[22px] font-bold leading-tight text-inkoust min-[90rem]:order-first min-[90rem]:font-sans min-[90rem]:text-[13.5px] min-[90rem]:font-medium min-[90rem]:text-mech">
+      <div className="flex flex-col min-[90rem]:flex-row min-[90rem]:items-end min-[90rem]:justify-between">
+        <div className="flex min-w-0 flex-col gap-4 min-[90rem]:gap-2.5">
+          <p className="font-display text-[22px] font-bold leading-[25px] tracking-[-0.4px] text-inkoust min-[90rem]:tracking-normal min-[90rem]:order-first min-[90rem]:font-sans min-[90rem]:text-[13.5px] min-[90rem]:font-medium min-[90rem]:text-mech">
             {expedice?.nazev ?? ""}
           </p>
-          <h1 className="sr-only font-display font-bold tracking-[-1.4px] text-inkoust min-[90rem]:not-sr-only min-[90rem]:text-[46px] min-[90rem]:leading-[0.98]">
+          <h1 className="sr-only font-display font-bold tracking-[-1.4px] text-inkoust min-[90rem]:not-sr-only min-[90rem]:text-[46px] min-[90rem]:leading-[45px]">
             Kdo jede
           </h1>
           {expedice !== null ? <p className="text-[13.5px] text-mech min-[90rem]:hidden">{souhrn}</p> : null}
@@ -231,10 +231,10 @@ export default function KdoJedePage(): JSX.Element {
           {chyba}
         </p>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-linka bg-povrch shadow-jemny min-[90rem]:mt-7">
+        <div className="mt-4 overflow-hidden rounded-2xl border border-linka bg-povrch shadow-karta min-[90rem]:mt-8">
           <div
             aria-hidden="true"
-            className="hidden h-11 items-center gap-4 border-b border-linka bg-[#fbf8ef] px-5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-ink-3 min-[90rem]:flex"
+            className="hidden h-11 items-center gap-4 border-b border-linka bg-zahlavi px-5 text-[10.5px] font-bold uppercase tracking-[1.1px] text-ink-3 min-[90rem]:flex"
           >
             <span className="flex-1">Člen</span>
             <span className="w-[140px]">Stav</span>
@@ -260,22 +260,22 @@ export default function KdoJedePage(): JSX.Element {
                             {clovek.jmeno}
                           </span>
                           <span className="text-xs text-ink-3 min-[90rem]:hidden">
-                            přihlášen(a) {formatCelyDatum(datum)}
+                            přihlášen {Number(datum.slice(8, 10))}. {Number(datum.slice(5, 7))}.
                           </span>
                         </span>
                       </span>
-                      <span className="shrink-0 min-[90rem]:w-[140px]">
+                      <span className="flex shrink-0 min-[90rem]:w-[140px]">
                         {org ? (
                           <span className="rounded-full bg-mlha px-2 py-1 text-[11px] font-semibold text-smrk min-[90rem]:py-[3px] min-[90rem]:text-[10.5px]">
                             Organizuje
                           </span>
                         ) : (
-                          <span className="hidden rounded-full bg-povrch-2 px-2 py-[3px] text-[10.5px] font-semibold text-mech min-[90rem]:inline">
+                          <span className="hidden rounded-full bg-povrch-2 px-2 py-[3px] text-[10.5px] font-semibold text-mech min-[90rem]:inline-flex">
                             Jede
                           </span>
                         )}
                       </span>
-                      <span className="hidden w-40 text-[13px] tabular-nums text-mech min-[90rem]:block">
+                      <span className="hidden w-40 text-[13px] text-mech min-[90rem]:block">
                         {datum.split("-").reverse().map((c) => String(Number(c))).join(". ")}
                       </span>
                       <span className="hidden w-7 justify-end min-[90rem]:flex">
@@ -287,11 +287,19 @@ export default function KdoJedePage(): JSX.Element {
               : null}
             {ukazVolna
               ? Array.from({ length: filtrRole === "volna" ? Math.min(volna, 20) : Math.min(volna, 3) }, (_, i) => (
-                  <li key={`volne-${i}`} className="flex items-center gap-3 px-3.5 py-3 text-[13px] text-ink-3 min-[90rem]:h-16 min-[90rem]:px-5 min-[90rem]:py-0">
-                    <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full border border-dashed border-pole min-[90rem]:size-[34px]">
-                      <Ikona nazev="plus" className="size-3.5" />
+                  <li key={`volne-${i}`} className="flex items-center gap-3 px-3.5 py-3 text-ink-3 min-[90rem]:h-16 min-[90rem]:gap-4 min-[90rem]:px-5 min-[90rem]:py-0">
+                    <span className="flex min-w-0 flex-1 items-center gap-3 min-[90rem]:gap-[11px]">
+                      <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-povrch-2 min-[90rem]:size-[34px]">
+                        <Ikona nazev="plus" className="size-4 min-[90rem]:size-3.5" />
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="text-[14.5px] font-semibold text-mech min-[90rem]:text-sm">Volné místo</span>
+                        {muzePrihlasit ? <span className="text-xs min-[90rem]:hidden">ještě se můžeš přihlásit</span> : null}
+                      </span>
                     </span>
-                    Volné místo
+                    <span className="hidden w-[140px] text-[13px] min-[90rem]:block">volné</span>
+                    <span className="hidden w-40 text-[13px] min-[90rem]:block">—</span>
+                    <span className="hidden w-7 min-[90rem]:block" />
                   </li>
                 ))
               : null}
@@ -300,11 +308,11 @@ export default function KdoJedePage(): JSX.Element {
       )}
 
       {muzePrihlasit ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-linka bg-povrch px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 min-[90rem]:hidden">
+        <div className="mt-4 min-[90rem]:hidden">
           <button
             type="button"
             onClick={() => setSheet(true)}
-            className="nahled-press inline-flex h-12 w-full items-center justify-center rounded-xl bg-smrk text-sm font-semibold text-papir"
+            className="nahled-press inline-flex h-12 w-full items-center justify-center rounded-xl bg-smrk text-sm font-semibold text-povrch"
           >
             Přihlásit se
           </button>

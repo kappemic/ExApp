@@ -349,12 +349,11 @@ describe("ZebrickyPage (seznam + filtr období + zvýraznění sebe + CTA)", () 
     return readFileSync(soubor, "utf8");
   }
 
-  it("heatmapa bere všechny uskutečněné výpravy, ne jen docházku", () => {
+  it("trasy v postranním sloupci berou všechny uskutečněné výpravy, ne jen docházku", () => {
     const stranka = cti("src/pages/ZebrickyPage.tsx");
-    expect(stranka).toContain("ZebrickyHeatmapa");
-    const mapa = cti("src/components/zebricky/ZebrickyHeatmapa.tsx");
+    expect(stranka).toContain("ZebrickyPostranni");
+    const mapa = cti("src/components/zebricky/ZebrickyPostranni.tsx");
     expect(mapa).toContain("getTrasyZebricku");
-    expect(mapa).toContain("Ušlé výpravy");
     const server = cti("server/src/statistiky-routes.ts");
     expect(server).toContain('app.get("/api/zebricky/trasy"');
     const trasy = server.slice(server.indexOf('app.get("/api/zebricky/trasy"'));

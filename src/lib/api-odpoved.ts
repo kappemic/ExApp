@@ -16,6 +16,17 @@ export async function ctiJsonTelo(odpoved: Response): Promise<unknown> {
   }
 }
 
+/** First message per field from a 422 body. */
+export function chybyPoliZTela(telo: unknown): Record<string, string> | undefined {
+  if (!jeApiChyba(telo)) return undefined;
+  const vysledek: Record<string, string> = {};
+  for (const [pole, seznam] of Object.entries(telo.error.details ?? {})) {
+    const prvni: string | undefined = seznam[0];
+    if (typeof prvni === "string" && prvni.length > 0) vysledek[pole] = prvni;
+  }
+  return Object.keys(vysledek).length > 0 ? vysledek : undefined;
+}
+
 export type ChybaZApiTela = {
   ok: false;
   chyba: string;

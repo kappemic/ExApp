@@ -174,7 +174,10 @@ async function stahniPresOdkaz(blob: Blob, nazev: string): Promise<void> {
     odkaz.click();
     odkaz.remove();
   } finally {
-    URL.revokeObjectURL(url);
+    // Safari reads the blob only after the click; an immediate revoke breaks the download.
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 60_000);
   }
 }
 

@@ -19,13 +19,11 @@ const FOKUS =
 export default function VypravaHero({
   expedice,
   dnes,
-  probiha,
   neprecteno,
   onDetail,
 }: {
   expedice: Expedition;
   dnes: string;
-  probiha: boolean;
   neprecteno: boolean;
   onDetail: (expedice: Expedition) => void;
 }): JSX.Element {
@@ -37,14 +35,14 @@ export default function VypravaHero({
   const popis = expedice.popis.trim();
   const surovyDen = denVTydnu.format(new Date(`${expedice.datum}T12:00:00`));
   const den = `${surovyDen.charAt(0).toUpperCase()}${surovyDen.slice(1)} ${formatCelyDatum(expedice.datum)}`;
-  const odpocet = textOdpoctu(expedice.datum, dnes, probiha);
+  const odpocet = textOdpoctu(expedice.datum, dnes, false);
 
   return (
     <section
       aria-labelledby={nadpisId}
-      className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-linka bg-povrch shadow-denik min-[90rem]:grid min-[90rem]:h-[340px] min-[90rem]:grid-cols-[432px_minmax(0,1fr)] min-[90rem]:border-transparent"
+      className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-linka bg-povrch shadow-denik sm:grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] min-[90rem]:h-[340px] min-[90rem]:grid-cols-[432px_minmax(0,1fr)] min-[90rem]:border-transparent"
     >
-      <div className="relative h-[148px] w-full shrink-0 overflow-hidden min-[90rem]:h-full">
+      <div className="relative h-[148px] w-full shrink-0 overflow-hidden sm:h-full sm:min-h-[250px]">
         <ZastupnySnimek id={expedice.id} datum={expedice.datum} povolit />
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 border border-black/10 min-[90rem]:border-y-0 min-[90rem]:border-l-0" />
         <p className="absolute left-3 top-3 flex h-6 items-center rounded-lg bg-akcent-100 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.4px] text-akcent min-[90rem]:hidden">
@@ -52,19 +50,19 @@ export default function VypravaHero({
         </p>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3 p-4 min-[90rem]:justify-between min-[90rem]:gap-0 min-[90rem]:px-[30px] min-[90rem]:py-7">
+      <div className="flex min-w-0 flex-col gap-3 p-4 sm:justify-between sm:p-5 min-[90rem]:justify-between min-[90rem]:gap-0 min-[90rem]:px-[30px] min-[90rem]:py-7">
         <div className="flex min-w-0 flex-col gap-3 min-[90rem]:gap-3.5">
           <div className="flex items-center gap-2.5">
-            <span className="hidden rounded-full bg-akcent-100 px-2.5 py-[5px] text-[10.5px] font-bold uppercase leading-none tracking-[1px] text-akcent min-[90rem]:inline-flex">
+            <span className="hidden rounded-full bg-akcent-100 px-2.5 py-[5px] text-[10.5px] font-bold uppercase tracking-[1px] text-akcent min-[90rem]:inline-flex">
               {odpocet}
             </span>
             <p className="text-xs text-ink-3 min-[90rem]:font-medium">
-              {probiha ? "Právě probíhá" : "Nejbližší výprava"}
+              Nejbližší výprava
             </p>
           </div>
           <h2
             id={nadpisId}
-            className="font-display text-[22px] font-bold leading-[1.15] tracking-[-0.4px] text-inkoust [overflow-wrap:anywhere] min-[90rem]:text-[36px] min-[90rem]:leading-[1.02] min-[90rem]:tracking-[-1px]"
+            className="font-display text-[22px] font-bold leading-[25px] tracking-[-0.4px] text-inkoust [overflow-wrap:anywhere] min-[90rem]:text-[36px] min-[90rem]:leading-[37px] min-[90rem]:tracking-[-1px]"
           >
             {expedice.nazev}
           </h2>
@@ -79,7 +77,7 @@ export default function VypravaHero({
             </p>
           </div>
           {popis.length > 0 ? (
-            <p className="text-[13px] leading-[1.4] text-ink-3 min-[90rem]:line-clamp-2 min-[90rem]:text-[13.5px] min-[90rem]:leading-normal">
+            <p className="text-[13px] leading-[18px] text-ink-3 min-[90rem]:line-clamp-2 min-[90rem]:text-[13.5px] min-[90rem]:leading-5">
               {popis}
             </p>
           ) : null}

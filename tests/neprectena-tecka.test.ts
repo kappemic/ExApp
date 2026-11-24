@@ -50,7 +50,7 @@ describe("Dot komponenta — velikost, kontrast, čtečka", () => {
   it("je červená s dostatečným kontrastem a bílým kroužkem (ne jen barvou)", () => {
     // M1 token-kontrakt: bílý kroužek VŽDY ring-2 ring-papir, nikdy
     // shadow-arbitrary. Mrtvý title (pointer-events-none) je odstraněn.
-    expect(zdroj).toContain("bg-red-800");
+    expect(zdroj).toContain("bg-akcent");
     expect(zdroj).toContain("ring-2");
     expect(zdroj).toContain("ring-papir");
     expect(zdroj).toContain("border");
@@ -104,7 +104,7 @@ describe("3 místa synchronně — jedna mapa, jeden event", () => {
     expect(zdroj).toContain("neprecteneVypravy");
     const pocetPredani: number =
       zdroj.split("neprectene={neprecteneMapa}").length - 1;
-    expect(pocetPredani).toBe(4);
+    expect(pocetPredani).toBe(5);
     bezAny(zdroj);
   });
 
@@ -127,9 +127,9 @@ describe("3 místa synchronně — jedna mapa, jeden event", () => {
 
   it("Nástěnka svítí badge z unreadCount konverzace (Step 3, 360px safe)", () => {
     /* Badge jde z GET /api/diskuze/konverzace (žádný per-výprava polling) —
-       tečku kreslí řádek seznamu, stránka badge po read zhasíná. */
+       počet kreslí řádek seznamu, stránka badge po read zhasíná. */
     const seznam: string = ctiZdroj("src/components/chat/ConversationList.tsx");
-    expect(seznam).toContain("NeprectenaTecka");
+    expect(seznam).toContain("popisekNeprectenychKonverzace");
     expect(seznam).toContain("unreadCount");
     expect(seznam).toContain("min-w-0");
     expect(seznam).toContain("truncate");

@@ -92,9 +92,45 @@ Zbývá projít do detailu: Přihlášení a Registrace (vyžaduje odhlášení)
 
 ## Ukázková data (19. 11. 2026)
 
-`npm run dev:demo` spustí klienta na portu 5175 s vymyšlenými daty bez databáze. API pod `/__demo` obsluhuje Vite plugin `demo/plugin.ts` (jen `vite serve`, do buildu se nedostane), data jsou v `demo/data.ts`: 18 členů, 19 výprav (nadcházející, probíhající, uzavřené s km a vymyšlenými trasami), schůzky, alba s generovanými fotkami krajiny, 24 písní a 3 návrhy, zprávy ve všech typech konverzací, žebříček a pozvánkové kódy. Zprávy a přihlášení na výpravu se drží jen v paměti procesu, ostatní zápisy vrací 503 s kódem `DEMO`. Přihlášený uživatel je superadmin, takže jsou vidět i správcovské obrazovky.
+`npm run dev:demo` spustí klienta na portu 5175 s vymyšlenými daty bez databáze. API pod `/__demo` obsluhuje Vite plugin `demo/plugin.ts` (jen `vite serve`, do buildu se nedostane), data jsou v `demo/data.ts`: 18 členů, 19 výprav (nadcházející, probíhající, uzavřené s km a vymyšlenými trasami), schůzky, alba s generovanými fotkami krajiny, 24 písní a 3 návrhy, zprávy ve všech typech konverzací, žebříček a pozvánkové kódy. Zprávy a přihlášení na výpravu a úpravy i mazání členů se drží jen v paměti procesu, ostatní zápisy vrací 503 s kódem `DEMO`. Přihlášený uživatel je superadmin, takže jsou vidět i správcovské obrazovky.
 
 S daty ověřeno na počítači: Výpravy (seznam i kalendář), Fotky a album, Zpěvník, detail písně, Návrhy písní, Chat, Žebříčky s mapou tras, Členové. Detail písně a Návrhy písní jsou nově podle návrhu (dvousloupcový text, panel akordů s transpozicí, řádkový seznam návrhů).
+
+## Úplný průchod (24. 11. 2026)
+
+Všech 84 rámců vyexportováno z `ExApp.pen` a porovnáno se snímky aplikace (`npm run dev:demo`) na 390 px a 1440 px. Co v návrhu není, je pryč; co v něm je a backend to umí, je doplněné.
+
+**Nové tokeny:** `ink-4` #9aa189, `ink-5` #b3b8a4, `pole-podklad` #f6f2e6, `zahlavi` #fbf8ef, utilita `shadow-karta`. Řádkování textových tříd je `normal` jako v návrhu.
+
+**Přestavěné obrazovky:** Výpravy (hero je nejbližší nadcházející, Probíhající zvlášť, Proběhlo jako vodorovný pás), Kalendář (pruhy výprav, pravý sloupec, menu „…“), Detail výpravy, Kdo jede, Nová výprava, Fotky a Album, Žebříčky s pravým sloupcem, Zpěvník (poměrový text, skutečné posouvání), Návrhy písní, Chat (pohledy Konverzace / Správy / Aktivita, hledání ve vlákně), Více, Nastavení, Pozvánkové kódy, Členové, Člen, Profil, Statistiky, Přihlášení a Registrace (krok 1 a 2), menu Více a Profil.
+
+**Modály:** `SpodniSheet` má podtitul a šířku okna, na telefonu zavírá úchyt místo ×, patička na počítači sahá k hraně. Přepsané: Nová schůzka, Detail schůzky, Docházka (přidání účastníka se teď posílá na server, proti živému API neověřeno), Nahrát fotky, Přidat album, Návrh písně, Spárovat aktivitu, Ruční zápis, Smazat výpravu, Správa člena, Přidat na plochu, Přihlášení na výpravu a potvrzovací dialog. Čas se v polích píše `16:20`.
+
+**Odebráno, protože to v návrhu není:** týdenní kalendář, mapy v Žebříčcích a v detailu výpravy, „Vysunout další“, „Stáhnout do telefonu“ (zpěvník se ukládá sám), hromadné akce a nahrávání v Návrzích písní, barevné tečky a „Označit“ v chatu, sponka v diskuzi výpravy (vložení obrázku funguje), Koš a „+“ u alb na telefonu, popis při zakládání schůzky, telefon / Discord / škola / třída v registraci (na serveru jsou nepovinné, doplňují se v profilu).
+
+**Vědomé odchylky:** posuvník bez dráhy a se světlým jezdcem (návrh má ink-3 na lince), na telefonu v poli zprávy krátké „Napsat zprávu…“ (delší se v 16 px lámalo), okraj polí `border-pole` (viz `CLAUDE.md`), text polí 16 px na telefonu, místo fotky z Unsplash na přihlášení klubová krajina, pozvánkový kód bez předpony `EXAPP-` (kódy mají 8 znaků), „O výpravě“ a popis na telefonu, push karta v Profilu, sponka v Chatu, „Smazat“ u písně na počítači, stavy načítání a chyb.
+
+**Chybí backend, proto neimplementováno:** Veřejný profil, Zobrazit v žebříčku, druhy oznámení, Schůzky sezóny, Naposledy v aplikaci, Přezdívka, Přesunout fotky, kdo album nahrál, mazání a historie pozvánkových kódů, stav „připojeno“ u Discordu, počet online, záložka Fotky u člena, úpravy oprávnění, opakování po dvou týdnech a po měsíci, konec řady schůzek, odeslání vzkazu vedoucímu při přihlášení.
+
+## Pohyb a funkce (24. 11. 2026, druhé kolo)
+
+**Pohyb** (`src/lib/pohyb.ts`, `zamek-posuvu.ts`), všude respektuje `prefers-reduced-motion`:
+
+- Spodní panel na telefonu vyjede zespodu a jde stáhnout prstem za úchyt, na počítači okno naběhne na místě. Zavření se animuje u panelů, dialogů, nabídek i prohlížení fotek: React uzel odebere hned a odebraný uzel jen dohraje odchod (`useOdchod`).
+- Výběry a menu vyjíždějí od prvku, který je otevřel, měří skutečnou výšku a když dole není místo, otevřou se nahoru. Jdou ovládat šipkami a fokus se vrací na spouštěč.
+- Měsíc a vybraný den kalendáře najíždějí podle směru, záložky, filtry a stránky se krátce prolnou (`useNabeh`). Nová stránka začíná nahoře. Pod dialogem už stránka neposkakuje o šířku posuvníku.
+
+**Statistiky:** rozdělené na Osobní a Klubové (`?tab=statistiky&pohled=klub`). Teplotní mapa je v klubových a ukazuje všechny uskutečněné výpravy: přiblížení, návrat na všechny trasy, výběr klepnutím na čáru nebo na výpravu v seznamu. Na telefonu jeden prst posouvá stránku, mapa se hýbe až po přiblížení. Stará adresa `?tab=heatmapa` vede na klubové.
+
+**Vráceno nebo opraveno:** na telefonu Koš u fotek, „+ Nové album“ ve výběru alba a sponka v diskuzi výpravy; správa účtu člena z telefonu („Upravit údaje nebo smazat účet“ ve Správě člena); profilová fotka jde nahrát a ukazuje se v Profilu i u člena (nahrání proti živému API neověřeno); počet fotek v Profilu už není natvrdo 0.
+
+**Správa člena** (`SpravaClena.tsx`) je jeden panel pro seznam i profil, nahradil starý `ClenDetailModal`. Záložka „Role a práva“ drží návrh, „Údaje a účet“ návrh nemá: jméno, příjmení, telefon, Discord, datum narození, škola, třída a odstranění účtu. E-mail a heslo cizímu účtu změnit nejde. Karta člena z chatu a žebříčků (`ClenProfil.tsx`) je taky `SpodniSheet` a vede na celý profil a soukromou zprávu.
+
+**Návrat na počítači** (`ZpetPocitac` v `HlavickaZpet.tsx`, návrh ho nemá): detail výpravy, Kdo jede, Nová výprava, album, píseň, Návrhy písní, člen, Nastavení, Pozvánkové kódy. Sedí v horním odsazení, nadpisy zůstaly na místě. Vrací na předchozí stránku aplikace i na místo, kam byla odrolovaná, po otevření z odkazu na nadřazenou.
+
+**Tablet** (768–1439 px, návrh ho nemá): obsah má jednotnou šířku 46rem, od 1024 px mají Výpravy, Kalendář, Žebříčky a Statistiky pravý sloupec. Spodní lišta je pilulka uprostřed, modály jsou okna uprostřed, hero výpravy je vodorovně, alba a fotky po třech. Panel „Složky“ ve Fotkách (byl jen na tabletu) je pryč.
+
+**Rozhodnuto uživatelem:** registrace zůstává krátká, přepínače Discord a „Vzkaz pro vedoucího“ zůstávají vidět, i když se neukládají, týdenní kalendář a mapy v Žebříčcích a v detailu výpravy se nevracejí, okraj polí zůstává `border-pole`.
 
 ## E. Doporučené pořadí
 
@@ -109,4 +145,4 @@ S daty ověřeno na počítači: Výpravy (seznam i kalendář), Fotky a album, 
 ## Otevřené otázky
 
 - Terakota pro hero CTA na počítači vs. olivová na telefonu: v návrhu se to liší, je to záměr?
-- Zůstanou prvky, které v návrhu nejsou: mapa v Žebříčcích, Push oznámení, album Koš, „Stáhnout do telefonu“, hromadné akce u návrhů písní?
+- Má přihlášení dostat skutečnou fotku? Návrh má zástupnou z Unsplash.

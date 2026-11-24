@@ -27,7 +27,7 @@ interface FotkyNahravaciPanelProps {
 
 /** Sheets for upload and new album; triggers live in FotkyPage header. */
 export default function FotkyNahravaciPanel({
-  isAdmin: _isAdmin,
+  isAdmin,
   alba,
   vybraneId,
   onVyber,
@@ -78,11 +78,15 @@ export default function FotkyNahravaciPanel({
       <SpodniSheet
         otevreno={albumFormOtevreno}
         titulek="Přidat album"
+        sirka={440}
         onZavrit={() => {
           setAlbumFormOtevreno(false);
         }}
       >
         <NoveAlbumForm
+          onZrusit={() => {
+            setAlbumFormOtevreno(false);
+          }}
           onVytvoreno={(album, nazev) => {
             setAlbumFormOtevreno(false);
             onVytvoreno(album, nazev);
@@ -93,11 +97,21 @@ export default function FotkyNahravaciPanel({
       <SpodniSheet
         otevreno={nahravaniOtevreno}
         titulek="Nahrát fotky"
+        podtitul={alba.find((polozka) => polozka.id === vybraneId)?.nazev ?? "Vyber album níže."}
         onZavrit={() => {
           setNahravaniOtevreno(false);
         }}
       >
         <NahratFotky
+          isAdmin={isAdmin}
+          onNoveAlbum={
+            isAdmin
+              ? () => {
+                  setNahravaniOtevreno(false);
+                  setAlbumFormOtevreno(true);
+                }
+              : undefined
+          }
           alba={alba}
           vybraneId={vybraneId}
           onVyber={onVyber}

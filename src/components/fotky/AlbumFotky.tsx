@@ -39,17 +39,21 @@ import FotkyStavPanel from "./FotkyStavPanel";
 import FotkyRadkovaMrizka from "./FotkyRadkovaMrizka";
 import PostupnaFotka from "./PostupnaFotka";
 import {
-  fotkyAlbumToolbarKompaktni,
   fotkyAlbumToolbarZaklad,
   fotkyMrizkaDlazdice,
-  fotkyTlacitkoZaklad,
 } from "./fotky-ui";
 import {
   nazevSouboruAlba,
   nazevSouboruVypravy,
   nazevZipAlba,
 } from "../../lib/stahni-fotku";
+import { jeVybranoVse } from "../../lib/fotky-stahovani";
 import { popisekStahovaneFotky, useFotkyStahovani } from "../../hooks/useFotkyStahovani";
+
+export interface AkceStahovaniAlba {
+  stahniVse: () => void;
+  vyberFotky: () => void;
+}
 
 interface AlbumFotkyProps {
   album: ApiAlbum;
@@ -63,7 +67,10 @@ interface AlbumFotkyProps {
   /** Pen layout: toolbar icons hidden; actions live in the page header. */
   skrytVychoziAkce?: boolean;
   onNahrati?: () => void;
-  onPripravStahniVse?: (stahniVse: () => void) => void;
+  /** Hands the download actions to the page header. */
+  onPripravStahovani?: (akce: AkceStahovaniAlba) => void;
+  /** Selection mode on or off, so the page header can step aside. */
+  onVyberovyRezim?: (aktivni: boolean) => void;
 }
 
 type Stav = "nacitani" | "hotovo" | "chyba";
@@ -85,7 +92,8 @@ export default function AlbumFotky({
   denik = false,
   skrytVychoziAkce = false,
   onNahrati,
-  onPripravStahniVse,
+  onPripravStahovani,
+  onVyberovyRezim,
 }: AlbumFotkyProps): JSX.Element {
   const jeKos = album.druh === "kos";
   const [fotky, setFotky] = useState<ApiFotkaAlba[]>([]);
@@ -186,15 +194,9 @@ export default function AlbumFotky({
   );
 
   const stahovani = useFotkyStahovani(fotky, pripravStahovani);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const stahniVseRef = useRef(stahovani.provedStahovani);
   stahniVseRef.current = stahovani.provedStahovani;
-
-  useEffect(() => {
-    if (onPripravStahniVse === undefined) return;
-    onPripravStahniVse(() => {
-      void stahniVseRef.current("vse");
-    });
-  }, [onPripravStahniVse, stav, fotky.length]);
 
   const vyberovyRezim = mazani.mazaciRezim || (!jeKos && stahovani.stahovaciRezim);
 
@@ -271,6 +273,32 @@ export default function AlbumFotky({
     stahovani.zacniStahovani();
   }, [mazani, resetKosPotvrzeni, stahovani]);
 
+  const zacniStahovaniRef = useRef(zacniStahovani);
+  zacniStahovaniRef.current = zacniStahovani;
+
+  useEffect(() => {
+    if (onPripravStahovani === undefined) return;
+    const maFotky = stav === "hotovo" && fotky.length > 0;
+    onPripravStahovani({
+      stahniVse: () => {
+        void stahniVseRef.current("vse");
+      },
+      vyberFotky: () => {
+        if (maFotky) zacniStahovaniRef.current();
+      },
+    });
+  }, [onPripravStahovani, stav, fotky.length]);
+
+  useEffect(() => {
+    if (!vyberovyRezim) return;
+    onVyberovyRezim?.(true);
+    // The button that started the mode leaves the page with the header actions.
+    toolbarRef.current?.focus({ preventScroll: true });
+    return () => {
+      onVyberovyRezim?.(false);
+    };
+  }, [onVyberovyRezim, vyberovyRezim]);
+
   useEffect(() => {
     setIndex(null);
     resetKosPotvrzeni();
@@ -316,11 +344,11 @@ export default function AlbumFotky({
 
   const toolbarRezimTrida =
     mazani.mazaciRezim && jeKos
-      ? "border-smrk/50 bg-smrk/5"
+      ? "border-smrk/50"
       : mazani.mazaciRezim
-        ? "border-jantar/60 bg-jantar/5"
+        ? "border-akcent/40"
         : stahovani.stahovaciRezim
-          ? "border-smrk/60 bg-smrk/5"
+          ? "border-smrk/50"
           : "border-linka";
 
   const akceRowTrida =
@@ -412,6 +440,12 @@ export default function AlbumFotky({
       maFotky={fotky.length > 0}
       stahovaciRezim={stahovani.stahovaciRezim}
       vybranyPocet={stahovani.vybrane.size}
+      vybranoVse={jeVybranoVse(fotky, stahovani.vybrane)}
+      galeriePripravena={stahovani.galeriePripravena}
+      onPrepnoutVse={stahovani.prepniVyberVse}
+      onUlozitDoGalerie={() => {
+        void stahovani.ulozDoGalerie();
+      }}
       stahujeSe={stahovani.stahujeSe}
       onZacniStahovani={zacniStahovani}
       onZrusStahovani={stahovani.zrusStahovani}
@@ -429,26 +463,40 @@ export default function AlbumFotky({
       {index === null && (!skrytVychoziAkce || vyberovyRezim) ? (
         <>
           <div
-            className={`${fotkyAlbumToolbarZaklad} px-3 py-2.5 ${toolbarRezimTrida} ${
-              vyberovyRezim && !mazani.mazaciRezim && !stahovani.stahovaciRezim
-                ? fotkyAlbumToolbarKompaktni
-                : ""
-            } ${vyberovyRezim ? "" : "max-sm:flex-row max-sm:items-center max-sm:justify-between"}`}
+            className={`${fotkyAlbumToolbarZaklad} p-3 outline-none! ${toolbarRezimTrida} ${vyberovyRezim ? "" : "max-sm:flex-row max-sm:items-center max-sm:justify-between"}`}
+            ref={toolbarRef}
+            tabIndex={-1}
+            role="group"
+            aria-label="Akce s fotkami"
             data-fotky-album-toolbar
             {...(jeKos && mazani.mazaciRezim ? { "data-kos-sprava": "" } : {})}
           >
             <p
               data-fotky-album-toolbar-nadpis
-              className="min-w-0 flex-1 text-sm font-semibold leading-snug text-inkoust"
+              aria-live="polite"
+              className={`min-w-0 flex-1 px-1 text-sm leading-snug ${
+                jeKos && !vyberovyRezim ? "text-mech" : "font-semibold text-inkoust"
+              }`}
             >
-              {mazani.mazaciRezim
-                ? jeKos
+              {mazani.mazaciRezim ? (
+                jeKos
                   ? popisekVyberu(mazani.vybrane.size, "Vyber fotky v koši.")
                   : popisekVyberu(mazani.vybrane.size, "Vyber fotky ke smazání.")
-                : stahovani.stahovaciRezim
-                  ? popisekVyberu(stahovani.vybrane.size, "Vyber fotky ke stažení.")
-                  : popisekPoctuFotek(fotky.length)}
+              ) : stahovani.galeriePripravena ? (
+                "Fotky jsou připravené. Ulož je do galerie telefonu."
+              ) : stahovani.stahovaciRezim ? (
+                popisekVyberu(stahovani.vybrane.size, "Vyber fotky ke stažení.")
+              ) : jeKos ? (
+                <>Fotky v koši se po {KOS_RETENTION_DAYS} dnech smažou natrvalo.</>
+              ) : (
+                popisekPoctuFotek(fotky.length)
+              )}
             </p>
+            {stahovani.stahovaciRezim && stahovani.stahovatChyba !== null ? (
+              <p role="alert" className="w-full px-1 text-sm font-semibold text-akcent sm:order-last">
+                {stahovani.stahovatChyba}
+              </p>
+            ) : null}
             <div
               data-fotky-album-akce-row
               className={`${akceRowTrida}${vyberovyRezim ? "" : " max-sm:w-auto max-sm:shrink-0 max-sm:flex-nowrap max-sm:gap-1.5"}`}
@@ -476,15 +524,10 @@ export default function AlbumFotky({
               )}
             </div>
           </div>
-          {jeKos && !mazani.mazaciRezim && fotky.length > 0 ? (
-            <p className="px-1 pb-1 text-center text-xs leading-relaxed text-inkoust/65">
-              Fotky v koši se po {KOS_RETENTION_DAYS} dnech smažou natrvalo.
-            </p>
-          ) : null}
         </>
       ) : null}
 
-      {stahovani.stahovatChyba !== null ? (
+      {stahovani.stahovatChyba !== null && !stahovani.stahovaciRezim ? (
         <p role="alert" className="mb-3 text-sm font-semibold text-inkoust">
           {stahovani.stahovatChyba}
         </p>
@@ -514,7 +557,11 @@ export default function AlbumFotky({
                 className={`group ${fotkyMrizkaDlazdice}`}
               >
                 <Miniatura src={src} onRozmer={nahlasRozmer} />
-                <MazaniVyberVrstva vybrana={vybrana} />
+                {jeKos ? (
+                  <StahovaniVyberVrstva vybrana={vybrana} />
+                ) : (
+                  <MazaniVyberVrstva vybrana={vybrana} />
+                )}
               </button>
             );
           }
@@ -549,26 +596,22 @@ export default function AlbumFotky({
         }}
       />
 
+      {isAdmin && !jeKos && !vyberovyRezim && index === null && fotky.length > 0 ? (
+        <div className="mt-8 hidden justify-end min-[90rem]:flex">
+          <button
+            type="button"
+            onClick={mazani.zacniMazani}
+            className="nahled-press inline-flex h-[46px] items-center rounded-xl px-2.5 text-sm font-semibold text-mech hover:text-akcent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          >
+            Odstranit
+          </button>
+        </div>
+      ) : null}
+
       {mazani.mazatChyba !== null ? (
         <p role="alert" className="mt-3 text-sm font-semibold text-inkoust">
           {mazani.mazatChyba}
         </p>
-      ) : null}
-
-      {stahovani.galeriePripravena ? (
-        <div className="mt-3 flex flex-col items-start gap-2">
-          <p className="text-sm leading-snug text-inkoust">Fotky jsou připravené. Ulož je do galerie telefonu.</p>
-          <button
-            type="button"
-            onClick={() => {
-              void stahovani.ulozDoGalerie();
-            }}
-            disabled={stahovani.stahujeSe}
-            className={`${fotkyTlacitkoZaklad} rounded-md bg-smrk px-4 text-sm font-bold text-papir disabled:opacity-60`}
-          >
-            Uložit do galerie
-          </button>
-        </div>
       ) : null}
 
       {index !== null ? (

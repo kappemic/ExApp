@@ -36,9 +36,9 @@ export default function VypravaKarta({
         ) : (
           <KrajinaVypravy id={expedice.id} datum={expedice.datum} />
         )}
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 border-b border-black/10 min-[90rem]:rounded-[14px] min-[90rem]:border" />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 border border-black/[0.07] max-[90rem]:border-x-0 max-[90rem]:border-t-0 min-[90rem]:rounded-[14px] min-[90rem]:border-black/10" />
       </span>
-      <span className="flex min-w-0 flex-col gap-1 p-3 min-[90rem]:gap-1 min-[90rem]:p-0">
+      <span className="flex min-w-0 flex-col gap-1 p-3 min-[90rem]:gap-3 min-[90rem]:p-0">
         <span className="flex min-w-0 items-start gap-2">
           <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold min-[90rem]:whitespace-normal min-[90rem]:text-[14.5px] min-[90rem]:leading-[1.3]">
             {expedice.nazev}

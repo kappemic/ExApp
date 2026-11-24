@@ -86,7 +86,16 @@ export default function TelefonPole({
   const kod = vybrana?.kod ?? VYCHOZI_KOD_ZEME;
 
   return (
-    <div ref={obal} className="relative">
+    <div
+      ref={obal}
+      className="relative"
+      onKeyDown={(udalost) => {
+        if (!otevreno || udalost.key !== "Escape") return;
+        // Zavře jen předvolby, ne panel, ve kterém pole je.
+        udalost.stopPropagation();
+        setOtevreno(false);
+      }}
+    >
       <div className="flex gap-2">
         <button
           type="button"
@@ -96,7 +105,7 @@ export default function TelefonPole({
           aria-controls={seznamId}
           aria-label={`Předvolba, ${nazev} ${predvolba}`}
           onClick={() => setOtevreno((stav) => !stav)}
-          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md border border-pole bg-white px-3 text-base font-bold text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-50 [touch-action:manipulation]"
+          className="inline-flex h-[46px] shrink-0 items-center gap-1.5 rounded-[11px] border border-pole bg-papir px-3 text-base text-inkoust min-[90rem]:h-[42px] min-[90rem]:rounded-[10px] min-[90rem]:bg-pole-podklad min-[90rem]:text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-50 [touch-action:manipulation]"
         >
           <span aria-hidden="true">{vlajka(kod)}</span>
           <span>{predvolba}</span>
@@ -118,8 +127,8 @@ export default function TelefonPole({
         />
       </div>
       {otevreno && (
-        <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-linka bg-white shadow-denik">
-          <div className="border-b border-inkoust/15 p-2">
+        <div className="registrace-nabidka absolute left-0 right-0 z-30 mt-1.5 origin-top-left overflow-hidden rounded-xl border border-linka bg-povrch shadow-denik">
+          <div className="border-b border-linka p-2">
             <input
               ref={hledaniRef}
               type="search"
@@ -147,7 +156,7 @@ export default function TelefonPole({
                       {vlajka(polozka.kod)}
                     </span>
                     <span className="min-w-0 flex-1 truncate">{polozka.nazev}</span>
-                    <span className="shrink-0 font-bold tabular-nums">{polozka.predvolba}</span>
+                    <span className="shrink-0 font-bold">{polozka.predvolba}</span>
                   </button>
                 </li>
               ))

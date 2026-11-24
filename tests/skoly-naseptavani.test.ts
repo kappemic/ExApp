@@ -12,14 +12,13 @@ function cti(soubor: string): string {
 describe("našeptávání školy a třídy", () => {
   const registrace = cti("src/pages/RegisterPage.tsx");
   const profil = cti("src/components/profil/ProfileForm.tsx");
-  const admin = cti("src/components/Admin/ClenDetailModal.tsx");
+  const admin = cti("src/components/Admin/SpravaClena.tsx");
   const server = cti("server/src/schuzky-routes.ts");
 
-  it("registrace používá combobox pro školu i třídu a veřejný číselník", () => {
-    expect(registrace).toContain("nactiSkolyTridy");
-    expect(registrace).not.toContain("datalist");
-    const pouziti = registrace.split("<VstupSNabidkou").length - 1;
-    expect(pouziti).toBe(2);
+  it("registrace se podle návrhu na školu ani třídu neptá, doplní se v profilu", () => {
+    expect(registrace).not.toContain("<VstupSNabidkou");
+    expect(registrace).not.toContain('id="registrace-skola"');
+    expect(registrace).not.toContain('id="registrace-trida"');
   });
 
   it("úprava profilu nabízí školu i třídu ze stejného číselníku", () => {
@@ -32,8 +31,9 @@ describe("našeptávání školy a třídy", () => {
 
   it("admin úprava člena nabízí školu i třídu", () => {
     expect(admin).toContain("nactiSkolyTridy");
-    const pouziti = admin.split("<VstupSNabidkou").length - 1;
-    expect(pouziti).toBe(2);
+    expect(admin).toContain("<VstupSNabidkou");
+    expect(admin).toContain('poleSNabidkou("skola"');
+    expect(admin).toContain('poleSNabidkou("trida"');
   });
 
   it("číselník zůstává veřejný GET /api/meta/skoly-tridy", () => {

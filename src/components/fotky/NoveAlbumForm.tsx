@@ -1,13 +1,15 @@
 import { useState, type FormEvent, type JSX } from "react";
 import { vytvorAlbum, type ApiAlbum } from "../../lib/alba-api";
-import { fotkyHoverBgSmrk, fotkyTlacitkoPrimarni } from "./fotky-ui";
+import { POLE_FORMULARE, POPISEK_POLE } from "../formular-tridy";
+import { PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
 
 interface NoveAlbumFormProps {
   onVytvoreno: (album: ApiAlbum | null, nazev: string) => void;
+  onZrusit: () => void;
 }
 
 /** ADMIN control. Hidden by the parent for everyone else. */
-export default function NoveAlbumForm({ onVytvoreno }: NoveAlbumFormProps): JSX.Element {
+export default function NoveAlbumForm({ onVytvoreno, onZrusit }: NoveAlbumFormProps): JSX.Element {
   const [nazev, setNazev] = useState<string>("");
   const [odesila, setOdesila] = useState<boolean>(false);
   const [chyba, setChyba] = useState<string | null>(null);
@@ -32,9 +34,9 @@ export default function NoveAlbumForm({ onVytvoreno }: NoveAlbumFormProps): JSX.
   }
 
   return (
-    <form onSubmit={(udalost) => void odeslat(udalost)} className="flex flex-col gap-1.5">
+    <form onSubmit={(udalost) => void odeslat(udalost)} className="flex flex-col">
       <div>
-        <label htmlFor="nove-album-nazev" className="text-sm font-bold tracking-tight">
+        <label htmlFor="nove-album-nazev" className={`block ${POPISEK_POLE}`}>
           Název alba
         </label>
         <input
@@ -49,21 +51,22 @@ export default function NoveAlbumForm({ onVytvoreno }: NoveAlbumFormProps): JSX.
           onChange={(udalost) => {
             setNazev(udalost.target.value);
           }}
-          className="mt-1 block min-h-[44px] w-full rounded-md border border-pole bg-white/80 px-3 text-base text-inkoust"
+          className={`mt-1.5 min-[90rem]:mt-[5px] ${POLE_FORMULARE}`}
         />
       </div>
-      <button
-        type="submit"
-        disabled={odesila}
-        className={`${fotkyTlacitkoPrimarni} ${fotkyHoverBgSmrk} w-full disabled:opacity-60 sm:w-auto sm:self-start`}
-      >
-        {odesila ? "Zakládám…" : "Založit album"}
-      </button>
       {chyba !== null ? (
-        <p role="alert" className="text-sm font-semibold text-red-800">
+        <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
           {chyba}
         </p>
       ) : null}
+      <div className={PATICKA_SHEETU}>
+        <button type="button" disabled={odesila} onClick={onZrusit} className={TLACITKO_PATICKY_ZRUSIT}>
+          Zrušit
+        </button>
+        <button type="submit" disabled={odesila} className={TLACITKO_PATICKY_HLAVNI}>
+          {odesila ? "Zakládám…" : "Založit album"}
+        </button>
+      </div>
     </form>
   );
 }

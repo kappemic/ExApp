@@ -20,6 +20,8 @@ import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "./LightboxPr
 import PostupnaFotka from "./PostupnaFotka";
 import StahniFotkuTlacitko from "./StahniFotkuTlacitko";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "./fotky-ui";
+import { zamkniPosuv } from "../../lib/zamek-posuvu";
+import { useOdchod, zmizeniDialogu } from "../../lib/pohyb";
 
 const FOCUSOVATELNE =
   'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -78,31 +80,9 @@ export default function FotkaDialog({
   indexRef.current = index;
   delkaRef.current = fotky.length;
   drzOtevreneRef.current = drzOtevrene;
-  /*
-   * Deník: zavření ukazatelem přehraje vstup pozpátku 220 ms (`nahled-zavira`)
-   * a teprve potom odmountuje. Escape zavře hned. Bez `deníku` se zavře hned.
-   */
-  const ZAVRENI_MS = 220;
-  const zaviraRef = useRef<boolean>(false);
-  const zavriCasovacRef = useRef<number | null>(null);
-  const [zavira, setZavira] = useState<boolean>(false);
-  const zavriRef = useRef<(hned?: boolean) => void>(() => {});
-  zavriRef.current = (hned = false): void => {
-    if (zaviraRef.current) return;
-    const snizitPohyb =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!denik || hned || snizitPohyb) {
-      onZavritRef.current();
-      return;
-    }
-    zaviraRef.current = true;
-    setZavira(true);
-    zavriCasovacRef.current = window.setTimeout(() => {
-      zavriCasovacRef.current = null;
-      onZavritRef.current();
-    }, ZAVRENI_MS);
-  };
+  const zavriRef = useRef<() => void>(() => {});
+  zavriRef.current = () => onZavritRef.current();
+  useOdchod(dialogRef, fotka !== undefined, zmizeniDialogu);
 
   useEffect(() => {
     setRozbita(false);
@@ -114,8 +94,7 @@ export default function FotkaDialog({
 
   useLayoutEffect(() => {
     const predchozi = document.activeElement;
-    const puvodni = document.body.style.overflow;
-    if (puvodni !== "hidden") document.body.style.overflow = "hidden";
+    const odemkniPosuv = zamkniPosuv();
     zavritRef.current?.focus();
 
     function naKlavesu(udalost: KeyboardEvent): void {
@@ -123,7 +102,7 @@ export default function FotkaDialog({
         if (drzOtevreneRef.current) return;
         udalost.preventDefault();
         udalost.stopPropagation();
-        zavriRef.current(true);
+        zavriRef.current();
         return;
       }
       if (udalost.key === "ArrowLeft" && indexRef.current > 0) {
@@ -160,7 +139,7 @@ export default function FotkaDialog({
     window.addEventListener("keydown", naKlavesu, true);
     return () => {
       window.removeEventListener("keydown", naKlavesu, true);
-      if (puvodni !== "hidden") document.body.style.overflow = puvodni;
+      odemkniPosuv();
       if (predchozi instanceof HTMLElement) predchozi.focus();
     };
   }, []);
@@ -193,8 +172,8 @@ export default function FotkaDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Fotka z alba ${album.nazev}`}
-      className={`nocturne lightbox-pozadi fixed inset-0 z-[100] flex flex-col overscroll-contain${
-        denik ? ` nahled-modal nahled-ovladani${zavira ? " nahled-zavira" : ""}` : ""
+      className={`nocturne lightbox-pozadi lightbox-nabeh fixed inset-0 z-[100] flex flex-col overscroll-contain${
+        denik ? ` nahled-modal nahled-ovladani` : ""
       }`}
       onMouseDown={naPozadi}
     >

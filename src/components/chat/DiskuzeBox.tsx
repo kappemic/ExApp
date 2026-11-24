@@ -28,6 +28,7 @@ import {
   type VysledekSlouceni,
 } from "../../lib/zive-vlakno";
 import { optimistickePrilohy, pridejPrilohy } from "../../lib/prilohy-zpravy";
+import { prizpusobVyskuPole } from "../../lib/vyska-pole";
 import { nactiFotkyVlakna, seskupRadkyVlakna } from "../../lib/chat-fotky";
 import { VALIDACE } from "../../shared/api-types";
 import { smiSmazatZpravu } from "../../shared/mazani-zprav";
@@ -40,7 +41,8 @@ function stejnyDen(aIso: string, bIso: string): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 import ChatLightroom, { useChatLightroom } from "./ChatLightroom";
-import { ChipyPriloh, TlacitkoPrilohy } from "./VyberPriloh";
+import Ikona from "../Ikona";
+import { TacekPriloh, TlacitkoPrilohy } from "./VyberPriloh";
 
 export interface DiskuzeBoxProps {
   idVypravy: string;
@@ -48,8 +50,6 @@ export interface DiskuzeBoxProps {
   nazevVypravy?: string;
   /** User id of the person who created this expedition. */
   organizatorId?: string | null;
-  /** Finished trip: the thread is a record, not the main column. */
-  klidna?: boolean;
 }
 
 type StavVlakna = "nacitani" | "hotovo" | "chyba";
@@ -149,17 +149,6 @@ export function seradZpravy(zpravy: ApiZprava[]): ApiZprava[] {
  * `authorName`, smazaný účet bez jména → „Bývalý člen". Starý fallback
  * `Člen · xxxx` zůstává jen pro porušená data s prázdným `authorName`.
  */
-const VYSKA_RADKU = 44;
-const STROP_POLE = 160;
-
-/** Grow the composer once the text no longer fits on one line. */
-function prizpusobVysku(pole: HTMLTextAreaElement): void {
-  pole.style.height = `${VYSKA_RADKU}px`;
-  const potreba = pole.scrollHeight;
-  pole.style.height = `${Math.min(potreba, STROP_POLE)}px`;
-  pole.style.overflowY = potreba > STROP_POLE ? "auto" : "hidden";
-}
-
 export function vyberAutorPopisek(
   zprava: ApiZprava,
   mojeId: string | null,
@@ -187,7 +176,6 @@ export default function DiskuzeBox({
   idVypravy,
   nazevVypravy,
   organizatorId = null,
-  klidna = false,
 }: DiskuzeBoxProps): JSX.Element {
   const { user, isAdmin } = useAuth();
   const nadpisId: string = useId();
@@ -240,7 +228,10 @@ export default function DiskuzeBox({
 
   useEffect(() => {
     const pole = poleRef.current;
-    if (pole !== null) prizpusobVysku(pole);
+    if (pole === null) return;
+    prizpusobVyskuPole(pole);
+    // Pole roste dolů, na telefonu by zajelo pod spodní lištu.
+    if (text.length > 0 && document.activeElement === pole) pole.scrollIntoView({ block: "nearest" });
   }, [text]);
 
   const mojeId: string | null = user?.id ?? null;
@@ -485,6 +476,10 @@ export default function DiskuzeBox({
     setOznamenie("Zpráva smazána.");
   }
 
+  const sirokaObrazovka =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(min-width: 90rem)").matches;
   const zbyva: number = spocitejZbyvajiciZnaky(text);
   const muzePsat: boolean = prihlasen;
   const popisVlakna: string =
@@ -493,46 +488,32 @@ export default function DiskuzeBox({
       : "Diskuze k výpravě";
 
   return (
-    <div ref={obalRef} className={`min-w-0 rounded-2xl border border-linka bg-povrch shadow-jemny ${klidna ? "p-3" : "p-4 min-[90rem]:p-5"}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            id={nadpisId}
-            className={klidna ? "text-base font-semibold text-inkoust" : "font-display text-lg font-bold tracking-[-0.3px] text-inkoust min-[90rem]:text-[17px]"}
-          >
-            Diskuze
-          </h3>
-        </div>
-        <button
-          type="button"
-          onClick={() => void lightroom.otevri(null)}
-          aria-label="Fotky z diskuze"
-          title="Fotky z diskuze"
-          className="inline-flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 items-center justify-center rounded-lg text-inkoust hover:bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="10" r="1.5" />
-            <path d="m21 16-5-5-9 8" />
-          </svg>
-        </button>
+    <div
+      ref={obalRef}
+      className="flex min-w-0 flex-col gap-3 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:shadow-karta"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:px-5 min-[90rem]:py-4">
+        <h3 id={nadpisId} className="font-display text-lg font-bold text-inkoust min-[90rem]:text-[17px] min-[90rem]:tracking-[-0.3px]">
+          Diskuze
+        </h3>
+        <Ikona nazev="message-circle" className="hidden size-[15px] text-ink-3 min-[90rem]:block" />
       </div>
 
       {stav === "nacitani" && (
-        <div className="mt-2">
+        <div className="min-[90rem]:px-5 min-[90rem]:pb-5">
           <KostraZpravy popisek="Načítám diskuzi" />
         </div>
       )}
 
       {stav === "chyba" && (
-        <div className="mt-3 rounded-lg bg-mlha/60 p-4 text-center">
+        <div className="rounded-2xl bg-mlha/60 p-4 text-center min-[90rem]:mx-5 min-[90rem]:mb-5">
           <p role="alert" className="text-sm font-semibold">
             {chybaNacteni ?? "Diskuzi se nepodařilo načíst."}
           </p>
           <button
             type="button"
             onClick={() => void nacti()}
-            className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-okr px-5 text-sm font-semibold text-inkoust hover:bg-okr-tmavy [touch-action:manipulation]"
+            className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-smrk px-5 text-sm font-semibold text-povrch [touch-action:manipulation]"
           >
             Zkusit znovu
           </button>
@@ -544,7 +525,7 @@ export default function DiskuzeBox({
           {oznameni !== null && (
             <p
               role="status"
-              className="mt-2 rounded-xl border border-smrk/30 bg-smrk/10 px-3 py-2 text-sm font-semibold"
+              className="rounded-xl bg-mlha px-3 py-2 text-[13px] font-semibold text-smrk min-[90rem]:mx-5"
             >
               {oznameni}
             </p>
@@ -553,14 +534,14 @@ export default function DiskuzeBox({
               so typing does not move the messages. Height follows the
               text and only stops at the cap. */}
           {zpravy.length === 0 ? (
-            <p role="status" className="mt-2 text-sm text-mech">
+            <p role="status" className="text-[13.5px] text-ink-3 min-[90rem]:px-5 min-[90rem]:py-2">
               Zatím tu není žádná zpráva — začni domluvu první vzkazem níže.
             </p>
           ) : (
           <div
             ref={vlaknoRef}
             data-vlakno-scroll="diskuze"
-            className="mt-2 min-w-0 overflow-y-auto overscroll-contain max-h-80"
+            className="posuvnik min-w-0 overflow-y-auto overscroll-contain max-h-[26rem] min-[90rem]:max-h-80 min-[90rem]:px-5 min-[90rem]:py-1"
           >
               {/* M2: jediná pravda pro název vlákna je popisek s názvem
                 výpravy. Odkaz na generický nadpis „Diskuze" se nesmí
@@ -572,7 +553,7 @@ export default function DiskuzeBox({
                 aria-live="polite"
                 aria-relevant="additions"
                 aria-label={popisVlakna}
-                className="flex min-w-0 flex-col"
+                className="m-0 flex min-w-0 list-none flex-col gap-3 p-0 min-[90rem]:gap-3.5"
               >
               {seskupRadkyVlakna(zpravy).map((radek, index, radky) => {
                 const zprava = radek.druh === "zprava" ? radek.zprava : radek.zpravy[0];
@@ -644,24 +625,30 @@ export default function DiskuzeBox({
               onSubmit={(e) => void naOdeslat(e)}
               /* One writing line under the thread. Safe-area keeps it above the keyboard.
                  Not sticky inside the message scroller, so focus does not jump. */
-              className="mt-3 border-t border-linka pt-3"
-              style={{
-                paddingBottom: "calc(0.25rem + env(safe-area-inset-bottom, 0px))",
-              }}
+              className="min-w-0 pb-[env(safe-area-inset-bottom,0px)] min-[90rem]:border-t min-[90rem]:border-linka min-[90rem]:px-5 min-[90rem]:pb-4 min-[90rem]:pt-3"
             >
               <label htmlFor={composerId} className="sr-only">
                 Napsat vzkaz
               </label>
-              <div className="flex min-w-0 items-end gap-2">
-              <div className="flex min-w-0 flex-1 items-end rounded-[10px] border border-transparent bg-povrch-2 px-1 focus-within:border-pole">
+              <TacekPriloh soubory={soubory} disabled={odesilaSe} onOdebrat={naOdebratSoubor} />
+              <div className="flex min-w-0 items-end gap-2 max-[90rem]:rounded-xl max-[90rem]:border max-[90rem]:border-linka max-[90rem]:bg-povrch transition-colors motion-reduce:transition-none max-[90rem]:has-[textarea:focus]:border-pole">
+              {/* Telefon: obrázek nejde vložit ze schránky, proto sponka navíc proti návrhu. */}
+              <span className="min-[90rem]:hidden">
                 <TlacitkoPrilohy vzhled="tichy" disabled={odesilaSe} onVyber={naVyberSouboru} />
+              </span>
+              <div className="flex min-w-0 flex-1 items-end max-[90rem]:pr-1 min-[90rem]:px-3 min-[90rem]:rounded-[10px] min-[90rem]:border min-[90rem]:border-transparent min-[90rem]:bg-povrch-2 transition-colors motion-reduce:transition-none min-[90rem]:has-[textarea:focus]:border-pole">
                 <textarea
                   ref={poleRef}
                   id={composerId}
                   value={text}
                   onChange={(e) => {
                     setText(e.target.value);
-                    prizpusobVysku(e.target);
+                  }}
+                  onPaste={(e) => {
+                    const obrazky = [...e.clipboardData.files];
+                    if (obrazky.length === 0) return;
+                    e.preventDefault();
+                    naVyberSouboru(obrazky);
                   }}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
@@ -672,10 +659,10 @@ export default function DiskuzeBox({
                   rows={1}
                   enterKeyHint="send"
                   maxLength={MAX_DELKA + 50}
-                  placeholder="Napsat vzkaz ke výpravě…"
+                  placeholder={sirokaObrazovka ? "Napsat vzkaz ke výpravě…" : "Napsat zprávu"}
                   autoComplete="off"
                   aria-describedby={zbyva <= 80 ? pocitadloId : undefined}
-                  className="block max-h-32 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2.5 text-base leading-5 text-inkoust caret-smrk outline-none selection:bg-okr/40 placeholder:text-ink-3 min-[90rem]:text-[13px]"
+                  className="posuvnik block min-h-[44px] min-w-0 max-[90rem]:scroll-mb-28 flex-1 resize-none overflow-y-hidden border-0 bg-transparent py-3 text-base min-[90rem]:min-h-10 min-[90rem]:py-2.5 leading-5 text-inkoust caret-smrk outline-none selection:bg-okr/40 placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-ink-3 min-[90rem]:text-[13px]"
                 />
               </div>
                 <button
@@ -687,12 +674,11 @@ export default function DiskuzeBox({
                   title={
                     odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu do diskuze"
                   }
-                  className="nahled-poslat inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center rounded-[10px] bg-smrk px-3.5 text-[13px] font-semibold text-papir [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-50"
+                  className="nahled-poslat inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center rounded-[10px] px-3 text-sm font-semibold text-smrk min-[90rem]:h-10 min-[90rem]:min-h-10 min-[90rem]:bg-smrk min-[90rem]:px-3.5 min-[90rem]:text-[12.5px] min-[90rem]:text-povrch [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {odesilaSe ? "…" : "Poslat"}
                 </button>
               </div>
-              <ChipyPriloh vzhled="tichy" soubory={soubory} disabled={odesilaSe} onOdebrat={naOdebratSoubor} />
               {chybaSouboru !== null && (
                 <p role="alert" className="mt-1 min-w-0 break-words px-1 text-sm font-semibold text-red-800">
                   {chybaSouboru}
@@ -702,7 +688,7 @@ export default function DiskuzeBox({
                 <span
                   id={pocitadloId}
                   role="status"
-                  className={`mt-1 block px-1 text-[12px] font-semibold tabular-nums ${
+                  className={`mt-1 block px-1 text-[12px] font-semibold ${
                     zbyva < 0 ? "text-red-800" : "text-inkoust/60"
                   }`}
                 >
@@ -723,7 +709,7 @@ export default function DiskuzeBox({
           ) : (
             <p
               role="status"
-              className="mt-3 min-w-0 break-words rounded-2xl bg-mech/10 p-3 text-center text-sm text-inkoust/70"
+              className="min-w-0 break-words rounded-xl bg-povrch-2 p-3 text-center text-[13px] text-mech min-[90rem]:mx-5 min-[90rem]:mb-5"
             >
               Diskuzi čte každý, psát můžou přihlášení — přihlas se a přidej
               vzkaz.

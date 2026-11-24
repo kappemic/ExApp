@@ -14,6 +14,8 @@ import PostupnaFotka from "../fotky/PostupnaFotka";
 import FotkyLightboxNav from "../fotky/FotkyLightboxNav";
 import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "../fotky/LightboxProhlizeni";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "../fotky/fotky-ui";
+import { zamkniPosuv } from "../../lib/zamek-posuvu";
+import { useOdchod, zmizeniDialogu } from "../../lib/pohyb";
 
 const FOCUSOVATELNE =
   'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -129,8 +131,7 @@ export default function FotkyLightbox({
   useLayoutEffect(() => {
     otevreneLightboxy += 1;
     const predchoziFocus: Element | null = document.activeElement;
-    const puvodniOverflow: string = document.body.style.overflow;
-    if (puvodniOverflow !== "hidden") document.body.style.overflow = "hidden";
+    const odemkniPosuv = zamkniPosuv();
     if (mazaciRezimRef.current) {
       const koren: HTMLDivElement | null = dialogRef.current;
       const prvni: HTMLElement | null =
@@ -188,7 +189,7 @@ export default function FotkyLightbox({
     return () => {
       otevreneLightboxy = Math.max(0, otevreneLightboxy - 1);
       window.removeEventListener("keydown", naStiskKlavesy, true);
-      if (puvodniOverflow !== "hidden") document.body.style.overflow = puvodniOverflow;
+      odemkniPosuv();
       if (predchoziFocus instanceof HTMLElement) predchoziFocus.focus();
     };
   }, [zavrit]);
@@ -213,6 +214,8 @@ export default function FotkyLightbox({
     aktualniPred === undefined ? "" : urlSouboruFotky(expeditionId, aktualniPred.id);
   const prohlizeni = useFotkaProhlizeni(srcProhlizeni, aktualniPred?.createdAt ?? null);
 
+  useOdchod(dialogRef, aktualniPred !== undefined, zmizeniDialogu);
+
   if (typeof document === "undefined") return null;
 
   const aktualni: ApiFotka | undefined = aktualniPred;
@@ -231,7 +234,7 @@ export default function FotkyLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="Fotka z výpravy"
-      className={`nocturne lightbox-pozadi fixed inset-0 z-[100] flex flex-col overscroll-contain${
+      className={`nocturne lightbox-pozadi lightbox-nabeh fixed inset-0 z-[100] flex flex-col overscroll-contain${
         trida !== undefined && trida.length > 0 ? ` ${trida}` : ""
       }`}
       onMouseDown={zavrit}

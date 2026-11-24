@@ -230,7 +230,7 @@ describe("ConfirmDialog — zdroj-kontrakt (a11y + focus-trap + destruktivnost)"
     expect(zdroj).toContain('"Escape"');
     expect(zdroj).toContain("querySelectorAll");
     expect(zdroj).toContain("zrusitRef.current?.focus()");
-    expect(zdroj).toContain('document.body.style.overflow = "hidden"');
+    expect(zdroj).toContain("zamkniPosuv()");
     expect(zdroj).toContain("navrat");
   });
 

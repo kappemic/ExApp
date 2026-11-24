@@ -108,7 +108,12 @@ export default function PostupnaFotka({
   }
 
   useLayoutEffect(() => {
-    if (src.length === 0 || stejnySoubor || uzKDispozici(src) || uzKDispozici(nahled) || chcePlnou) return;
+    if (src.length === 0 || stejnySoubor || chcePlnou) return;
+    // The photo may have arrived between the render and this effect, e.g. for another copy of the list.
+    if (uzKDispozici(src) || uzKDispozici(nahled)) {
+      setNahledPovolen(true);
+      return;
+    }
     let zive = true;
     const cekani = new Promise<void>((resolve) => {
       uvolniRef.current = resolve;

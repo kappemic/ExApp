@@ -1,4 +1,7 @@
 import { useEffect, useState, type JSX } from "react";
+import Ikona from "../Ikona";
+import { POLE_FORMULARE, POPISEK_POLE } from "../formular-tridy";
+import { formatCelyDatum } from "../../lib/expedition-utils";
 import SpodniSheet, { PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
 import {
   ulozAktivituRucne,
@@ -77,21 +80,21 @@ export default function RucniZapisSheet({
     zavrit();
   }
 
-  const titulek = krok === "vyber" ? "Ruční zápis" : "Kilometry k výpravě";
+  const podtitul =
+    krok === "vyber" || vybrana === null
+      ? "Vyber proběhlou výpravu, ke které zapíšeš kilometry."
+      : nazevAktivity(vybrana);
 
   return (
-    <SpodniSheet otevreno={otevreno} titulek={titulek} onZavrit={zavrit}>
+    <SpodniSheet otevreno={otevreno} titulek="Ruční zápis" podtitul={podtitul} sirka={480} onZavrit={zavrit}>
       {krok === "vyber" && (
         <>
-          <p className="text-sm leading-relaxed text-mech">
-            Vyber proběhlou výpravu, ke které chceš zapsat kilometry ručně.
-          </p>
           {aktivity.length === 0 ? (
-            <p role="status" className="mt-3 text-sm text-mech">
+            <p role="status" className="text-[13.5px] text-mech">
               Zatím nemáš žádnou absolvovanou výpravu v datech.
             </p>
           ) : (
-            <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+            <ul className="posuvnik flex max-h-72 flex-col gap-2 overflow-y-auto">
               {aktivity.map((aktivita) => (
                 <li key={aktivita.id}>
                   <button
@@ -100,11 +103,11 @@ export default function RucniZapisSheet({
                       setVybrana(aktivita);
                       setKrok("formular");
                     }}
-                    className="nahled-press flex min-h-11 w-full flex-col items-start rounded-[14px] border border-linka bg-povrch px-3.5 py-2.5 text-left"
+                    className="bez-prejeti flex min-h-11 w-full flex-col items-start gap-1 rounded-[14px] border border-linka bg-papir p-3.5 text-left hover:bg-povrch-2 min-[90rem]:gap-px min-[90rem]:rounded-[10px] min-[90rem]:border-transparent min-[90rem]:bg-povrch-2 min-[90rem]:px-[11px] min-[90rem]:py-2.5"
                   >
-                    <span className="text-sm font-semibold text-inkoust">{nazevAktivity(aktivita)}</span>
+                    <span className="text-sm font-semibold text-inkoust min-[90rem]:text-[12.5px]">{nazevAktivity(aktivita)}</span>
                     {typeof aktivita.datum === "string" && aktivita.datum.length > 0 && (
-                      <span className="mt-0.5 text-xs text-mech">{aktivita.datum}</span>
+                      <span className="text-[12.5px] text-mech min-[90rem]:text-[11px] min-[90rem]:text-ink-3">{formatCelyDatum(aktivita.datum.slice(0, 10))}</span>
                     )}
                   </button>
                 </li>
@@ -116,10 +119,8 @@ export default function RucniZapisSheet({
 
       {krok === "formular" && vybrana !== null && (
         <>
-          <p className="text-sm font-semibold text-inkoust">{nazevAktivity(vybrana)}</p>
-          <p className="mt-1 text-xs text-mech">Doplň kilometry a převýšení z této výpravy.</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm font-semibold text-inkoust">
+          <div className="flex flex-col gap-[18px] min-[90rem]:grid min-[90rem]:grid-cols-2 min-[90rem]:gap-3">
+            <label className={`block ${POPISEK_POLE}`}>
               Kilometry
               <input
                 type="text"
@@ -127,10 +128,10 @@ export default function RucniZapisSheet({
                 value={km}
                 onChange={(e) => setKm(e.target.value)}
                 placeholder="např. 12,5"
-                className="min-h-11 rounded-xl border border-pole bg-papir px-3 text-base font-normal text-inkoust"
+                className={`mt-1.5 font-normal min-[90rem]:mt-[5px] ${POLE_FORMULARE}`}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm font-semibold text-inkoust">
+            <label className={`block ${POPISEK_POLE}`}>
               Převýšení (m)
               <input
                 type="text"
@@ -138,11 +139,20 @@ export default function RucniZapisSheet({
                 value={prevyseni}
                 onChange={(e) => setPrevyseni(e.target.value)}
                 placeholder="např. 350"
-                className="min-h-11 rounded-xl border border-pole bg-papir px-3 text-base font-normal text-inkoust"
+                className={`mt-1.5 font-normal min-[90rem]:mt-[5px] ${POLE_FORMULARE}`}
               />
             </label>
           </div>
-          <div className={`${PATICKA_SHEETU} mt-4`}>
+          <p className="mt-3.5 hidden gap-2 rounded-[10px] bg-povrch-2 p-[11px] text-[11px] leading-[15px] text-mech min-[90rem]:flex">
+            <Ikona nazev="info" className="size-[13px] text-ink-3" />
+            Bez data a odkazu — jen když Strava chybí.
+          </p>
+          {chyba !== null && (
+            <p role="alert" className="mt-3 text-[13px] font-semibold text-akcent">
+              {chyba}
+            </p>
+          )}
+          <div className={PATICKA_SHEETU}>
             <button
               type="button"
               onClick={() => {
@@ -162,11 +172,6 @@ export default function RucniZapisSheet({
               {ukladaSe ? "Ukládám…" : "Uložit"}
             </button>
           </div>
-          {chyba !== null && (
-            <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-              {chyba}
-            </p>
-          )}
         </>
       )}
     </SpodniSheet>

@@ -370,12 +370,9 @@ describe("Strava denied → česká chyba bez pádu", () => {
 // ── 4. Mobil 360px: scroll, taby, sticky Uložit ──────────────────────────────
 
 describe("Mobil 360px — layout bez horizontálního scrollu", () => {
-  it("ProfilPage: fluidní kontejner + sticky taby + 44px cíle", () => {
+  it("ProfilPage: fluidní kontejner + 44px cíle", () => {
     const obsah = cti(PROFIL_PAGE);
-    expect(obsah).toContain("lg:px-8");
-    expect(obsah).toContain("w-full");
-    expect(obsah).toContain("px-4");
-    expect(obsah).toContain("sticky top-0");
+    expect(obsah).toContain("min-w-0");
     expect(obsah).toContain("min-h-[44px]");
     expect(obsah).toContain("min-w-[44px]");
     expect(obsah).toContain("touch-manipulation");

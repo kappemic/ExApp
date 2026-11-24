@@ -1,8 +1,10 @@
-import { useId, useRef, type ChangeEvent, type JSX } from "react";
-import { acceptPriloh } from "../../lib/prilohy-zpravy";
+import { useEffect, useId, useMemo, useRef, type ChangeEvent, type JSX } from "react";
+import { acceptPriloh, formatVelikostiPrilohy, jeFotkaKNahledu } from "../../lib/prilohy-zpravy";
+import Ikona from "../Ikona";
+import ZnackaSouboru from "./ZnackaSouboru";
 
 const TLACITKO =
-  "bez-prejeti inline-flex min-h-[44px] min-w-[44px] shrink-0 select-none items-center justify-center rounded-[10px] bg-povrch-2 text-mech [-webkit-touch-callout:none] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk active:scale-[0.97] motion-safe:transition-transform disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-linka [@media(hover:hover)_and_(pointer:fine)]:hover:text-inkoust";
+  "nahled-press relative inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-mech before:content-[''] hover:text-inkoust disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] min-[90rem]:size-10 min-[90rem]:bg-povrch-2 [&_svg]:size-[18px] min-[90rem]:[&_svg]:size-4";
 
 const TLACITKO_TICHE =
   "bez-prejeti inline-flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 select-none items-center justify-center rounded-lg text-mech [-webkit-touch-callout:none] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk active:scale-[0.97] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:text-inkoust";
@@ -71,50 +73,56 @@ export function TlacitkoPrilohy({
   );
 }
 
-export interface ChipyPrilohProps {
+export interface TacekPrilohProps {
   soubory: readonly File[];
   disabled: boolean;
   onOdebrat: (index: number) => void;
-  /** `tichy` sits on the expedition writing line, not in a chat pill. */
-  vzhled?: "krouzek" | "tichy";
 }
 
-/** Selected files. Each chip can be removed; long names truncate. */
-export function ChipyPriloh({
-  soubory,
-  disabled,
-  onOdebrat,
-  vzhled = "krouzek",
-}: ChipyPrilohProps): JSX.Element | null {
+/** Vybrané přílohy nad polem zprávy: fotky jako náhledy, soubory jako karty. */
+export function TacekPriloh({ soubory, disabled, onOdebrat }: TacekPrilohProps): JSX.Element | null {
+  const nahledy = useMemo(
+    () => soubory.map((soubor) => (jeFotkaKNahledu(soubor) ? URL.createObjectURL(soubor) : null)),
+    [soubory],
+  );
+  useEffect(
+    () => () => {
+      for (const url of nahledy) if (url !== null) URL.revokeObjectURL(url);
+    },
+    [nahledy],
+  );
+
   if (soubory.length === 0) return null;
   return (
-    <ul className="mt-1.5 flex min-w-0 flex-wrap gap-1.5 px-0.5">
+    <ul
+      aria-label="Přílohy k odeslání"
+      className="nabeh-nahoru m-0 mb-2 flex min-w-0 list-none gap-2 overflow-x-auto p-0 pb-1 pr-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {soubory.map((soubor, index) => {
         const nazev: string = soubor.name.trim().length > 0 ? soubor.name : "soubor";
+        const nahled = nahledy[index] ?? null;
         return (
-          <li
-            key={`${nazev}-${soubor.size}-${index}`}
-            className={
-              vzhled === "tichy"
-                ? "flex max-w-full min-w-0 items-center gap-0.5 rounded-lg border border-pole bg-mlha/60 py-0.5 pr-0.5 pl-2.5"
-                : "flex max-w-full min-w-0 items-center gap-0.5 rounded-full border border-inkoust/30 bg-papir py-0.5 pr-0.5 pl-2.5"
-            }
-          >
-            <span
-              title={nazev}
-              className="min-w-0 truncate text-[12px] font-semibold text-inkoust"
-            >
-              {nazev}
-            </span>
+          <li key={`${nazev}-${soubor.size}-${index}`} className="relative shrink-0">
+            {nahled !== null ? (
+              <img src={nahled} alt={nazev} title={nazev} className="block size-16 rounded-xl border border-linka bg-povrch-2 object-cover" />
+            ) : (
+              <span title={nazev} className="flex h-16 w-[200px] items-center gap-2.5 rounded-xl border border-linka bg-povrch p-2 pr-3">
+                <ZnackaSouboru nazev={nazev} />
+                <span className="flex min-w-0 flex-1 flex-col gap-px">
+                  <span className="truncate text-[12.5px] font-semibold text-inkoust">{nazev}</span>
+                  <span className="text-[11px] text-ink-3">{formatVelikostiPrilohy(soubor.size)}</span>
+                </span>
+              </span>
+            )}
             <button
               type="button"
               disabled={disabled}
               aria-label={`Odebrat ${nazev}`}
               title={`Odebrat ${nazev}`}
               onClick={() => onOdebrat(index)}
-              className="bez-prejeti inline-flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-full border-0 bg-transparent text-base leading-none text-inkoust [-webkit-touch-callout:none] [touch-action:manipulation] active:scale-[0.97] disabled:opacity-60"
+              className="bez-prejeti absolute -right-1.5 -top-1.5 flex size-6 select-none items-center justify-center rounded-full border-2 border-povrch bg-inkoust text-povrch before:absolute before:-inset-2.5 before:content-[''] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
             >
-              ×
+              <Ikona nazev="x" className="size-3" tloustka={3} />
             </button>
           </li>
         );

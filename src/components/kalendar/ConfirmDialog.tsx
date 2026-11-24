@@ -6,6 +6,8 @@ import {
   type MouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { zamkniPosuv } from "../../lib/zamek-posuvu";
+import { useOdchod, zmizeniDialogu } from "../../lib/pohyb";
 
 /**
  * Rozsah smazání opakované schůzky — KROK 3 (výjimka pro jeden výskyt).
@@ -92,8 +94,7 @@ export default function ConfirmDialog(
     if (!otevreno) return;
     const predchozi: Element | null = document.activeElement;
     zrusitRef.current?.focus();
-    const puvodniOverflow: string = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const odemkniPosuv = zamkniPosuv();
 
     function naStiskKlavesy(udalost: KeyboardEvent): void {
       if (udalost.key === "Escape") {
@@ -122,7 +123,7 @@ export default function ConfirmDialog(
     document.addEventListener("keydown", naStiskKlavesy, true);
     return () => {
       document.removeEventListener("keydown", naStiskKlavesy, true);
-      document.body.style.overflow = puvodniOverflow;
+      odemkniPosuv();
       const navrat: HTMLElement | null = navratRef.current;
       if (navrat !== null && navrat.isConnected) {
         navrat.focus();
@@ -131,6 +132,9 @@ export default function ConfirmDialog(
       }
     };
   }, [otevreno]);
+
+  const korenRef = useRef<HTMLDivElement>(null);
+  useOdchod(korenRef, otevreno, zmizeniDialogu);
 
   if (!otevreno || typeof document === "undefined") return null;
 
@@ -151,6 +155,7 @@ export default function ConfirmDialog(
 
   return createPortal(
     <div
+      ref={korenRef}
       data-confirm-dialog-portal=""
       className={`nocturne nahled-modal fixed inset-0 ${vrstvaTrida} flex items-end justify-center p-4 sm:items-center${
         props.trida !== undefined && props.trida.length > 0 ? ` ${props.trida}` : ""
@@ -163,44 +168,32 @@ export default function ConfirmDialog(
         aria-modal="true"
         aria-labelledby={nadpisId}
         aria-describedby={popisId}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-papir p-5 shadow-denik sm:p-6"
+        className="max-h-[90vh] w-full max-w-[440px] overflow-y-auto rounded-[20px] border border-linka bg-povrch text-inkoust shadow-modal"
       >
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-jantar text-papir text-lg font-extrabold leading-none text-papir"
-          >
-            !
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mech">
-              Potvrzení
-            </p>
-            <h2
-              id={nadpisId}
-              className="mt-0.5 break-words text-lg font-extrabold tracking-tight"
-            >
-              {nadpis}
-            </h2>
-          </div>
-        </div>
+        <div className="flex flex-col gap-3 px-5 pb-5 pt-5 min-[90rem]:px-[22px]">
+        <h2
+          id={nadpisId}
+          className="break-words font-display text-xl font-bold tracking-[-0.4px] min-[90rem]:text-[19px] min-[90rem]:tracking-[-0.5px]"
+        >
+          {nadpis}
+        </h2>
 
         <p
           id={popisId}
-          className="mt-3 break-words text-sm leading-relaxed text-inkoust/80"
+          className="break-words text-[13.5px] leading-5 text-mech min-[90rem]:text-[12.5px] min-[90rem]:leading-[18px]"
         >
           {popis}
         </p>
 
         {nabidnoutRozsah && props.onZmenaRozsahu !== undefined && (
-          <fieldset className="mt-4">
-            <legend className="text-sm font-bold">Co odebrat?</legend>
-            <div className="mt-2 space-y-2">
+          <fieldset>
+            <legend className="text-[11px] font-bold uppercase tracking-[0.8px] text-ink-3">Co odebrat?</legend>
+            <div className="mt-2 flex flex-col gap-2">
               <label
-                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "vyskyt"
-                    ? "border-smrk bg-povrch"
-                    : "border-linka bg-white/50"
+                    ? "border-smrk bg-mlha"
+                    : "border-transparent bg-papir"
                 }`}
               >
                 <input
@@ -214,15 +207,15 @@ export default function ConfirmDialog(
                   disabled={probiha}
                   className="h-5 w-5 shrink-0 accent-smrk"
                 />
-                <span className="min-w-0 flex-1 break-words text-sm font-bold">
+                <span className="min-w-0 flex-1 break-words text-[13.5px] font-semibold">
                   {vyskytPopisek}
                 </span>
               </label>
               <label
-                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition-colors motion-reduce:transition-none ${
                   zvolenyRozsah === "rada"
-                    ? "border-smrk bg-povrch"
-                    : "border-linka bg-white/50"
+                    ? "border-smrk bg-mlha"
+                    : "border-transparent bg-papir"
                 }`}
               >
                 <input
@@ -236,7 +229,7 @@ export default function ConfirmDialog(
                   disabled={probiha}
                   className="h-5 w-5 shrink-0 accent-smrk"
                 />
-                <span className="min-w-0 flex-1 break-words text-sm font-bold">
+                <span className="min-w-0 flex-1 break-words text-[13.5px] font-semibold">
                   {radaPopisek}
                 </span>
               </label>
@@ -247,20 +240,21 @@ export default function ConfirmDialog(
         {chyba !== null && chyba.trim().length > 0 && (
           <p
             role="alert"
-            className="mt-3 break-words rounded-xl border border-red-800/30 bg-red-50 px-3 py-2 text-sm font-bold text-red-900"
+            className="break-words rounded-[10px] bg-[#fbede7] p-3 text-[13px] leading-[18px] text-[#7a3a1b]"
           >
             {chyba}
           </p>
         )}
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        </div>
+        <div className="flex gap-2.5 px-5 pb-5 min-[90rem]:justify-end min-[90rem]:rounded-b-[20px] min-[90rem]:border-t min-[90rem]:border-linka min-[90rem]:bg-zahlavi min-[90rem]:px-[22px] min-[90rem]:py-3.5">
           <button
             ref={zrusitRef}
             type="button"
             onClick={onZrusit}
             disabled={probiha}
             title={probiha ? "Mazání probíhá…" : zrusitPopisek}
-            className="nahled-press inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl bg-mlha px-6 py-2 text-center text-base font-semibold text-inkoust hover:bg-linka focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:flex-none [touch-action:manipulation]"
+            className="nahled-press inline-flex min-h-12 flex-1 items-center justify-center rounded-xl border border-linka bg-papir px-4 py-2 text-center text-sm font-semibold text-mech hover:bg-povrch-2 min-[90rem]:min-h-10 min-[90rem]:rounded-[10px] min-[90rem]:bg-transparent min-[90rem]:text-[13px] focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 min-[90rem]:flex-none [touch-action:manipulation]"
           >
             {zrusitPopisek}
           </button>
@@ -269,7 +263,7 @@ export default function ConfirmDialog(
             onClick={onPotvrdit}
             disabled={probiha}
             title={probiha ? "Mazání probíhá…" : potvrditPopisek}
-            className="nahled-press inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl bg-red-800 px-6 py-2 text-center text-base font-semibold text-papir hover:bg-red-900 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-wait disabled:opacity-60 sm:flex-none [touch-action:manipulation]"
+            className="nahled-press inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-akcent px-4 py-2 text-center text-sm font-semibold text-papir hover:opacity-90 min-[90rem]:min-h-10 min-[90rem]:rounded-[10px] min-[90rem]:text-[13px] focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-wait disabled:opacity-60 min-[90rem]:flex-none [touch-action:manipulation]"
           >
             {probiha ? probihaPopisek : potvrditPopisek}
           </button>

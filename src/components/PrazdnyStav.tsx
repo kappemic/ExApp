@@ -41,14 +41,14 @@ export default function PrazdnyStav({
 }: PrazdnyStavProps): JSX.Element {
   const trida = `${TLACITKO} ${
     akce?.varianta === "vedlejsi"
-      ? "border border-linka bg-povrch text-ink-2 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60"
+      ? "border border-linka bg-povrch text-mech [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60"
       : "bg-smrk text-papir"
   }`;
   return (
     <div
       role="status"
       className={`flex flex-col items-center gap-2 px-6 py-10 text-center ${
-        vzhled === "karta" ? "rounded-2xl border border-linka bg-povrch shadow-denik" : ""
+        vzhled === "karta" ? "rounded-2xl border border-linka bg-povrch shadow-karta" : ""
       } ${className}`}
     >
       <span

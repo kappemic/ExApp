@@ -5,7 +5,10 @@
  * nic nezapisuje. Změny (zprávy, přihlášení) drží jen v paměti procesu.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import type { Plugin } from "vite";
+import type { PravoSkupiny } from "../src/lib/skupiny-pristup.ts";
+import type { ApiZpravaPriloha } from "../src/shared/api-types.ts";
 import {
   ALBA,
   FOTKY_VYPRAV,
@@ -14,6 +17,7 @@ import {
   NAVRHY,
   PISNE,
   SCHUZKY,
+  SKUPINY,
   UCASTNICI,
   UZIVATELE,
   VYPRAVY,
@@ -41,6 +45,13 @@ async function ctiTelo(req: IncomingMessage): Promise<Record<string, unknown>> {
   const casti: Buffer[] = [];
   for await (const kus of req) casti.push(kus as Buffer);
   if (casti.length === 0) return {};
+  const typ = req.headers["content-type"] ?? "";
+  if (typ.startsWith("multipart/form-data")) {
+    const form = await new Response(new Uint8Array(Buffer.concat(casti)), { headers: { "Content-Type": typ } }).formData();
+    const telo: Record<string, unknown> = { soubory: form.getAll("soubor") };
+    for (const [klic, hodnota] of form.entries()) if (typeof hodnota === "string") telo[klic] = hodnota;
+    return telo;
+  }
   try {
     const data: unknown = JSON.parse(Buffer.concat(casti).toString("utf8"));
     return typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
@@ -93,6 +104,9 @@ function stranka<T>(polozky: T[], url: URL): { data: T[]; pagination?: { page: n
 
 let citac = 1000;
 
+/** Přílohy poslané v ukázce, jen v paměti procesu. */
+const NAHRANE = new Map<string, { typ: string; data: Buffer }>();
+
 async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const cesta = url.pathname.slice(PREFIX.length);
   const metoda = req.method ?? "GET";
@@ -109,7 +123,7 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
   // ---- čtení ----
   if (metoda === "GET") {
     if (cesta === "/api/health") return posli(res, 200, { ok: true });
-    if (cesta === "/api/me") return posli(res, 200, { user: JA });
+    if (cesta === "/api/me") return posli(res, 200, { ...JA, user: JA });
     if (cesta === "/api/users") return posli(res, 200, { users: seznamUzivatelu() });
     if (cesta === "/api/expeditions") {
       const stav = url.searchParams.get("stav");
@@ -140,9 +154,41 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
       return posli(res, 200, { latestMessageAt: seznam[seznam.length - 1]?.createdAt ?? null, lastReadAt: null, unread: false });
     }
     if (cesta === "/api/meetings") return posli(res, 200, { schuzky: SCHUZKY });
-    if (cesta === "/api/alba") return posli(res, 200, { alba: ALBA });
+    if (cesta === "/api/alba") {
+      // Stejné pořadí jako server: výpravy od nejnovější, pak ostatní alba.
+      const datum = (id: string | null): string => VYPRAVY.find((v) => v.id === id)?.datum ?? "";
+      return posli(res, 200, {
+        alba: [...ALBA].sort((a, b) => datum(b.expeditionId).localeCompare(datum(a.expeditionId))),
+      });
+    }
     m = /^\/api\/alba\/([^/]+)\/fotky$/.exec(cesta);
     if (m) return posli(res, 200, { fotky: fotkyAlba(m[1]) });
+    m = /^\/api\/diskuze\/prilohy\/([^/]+)$/.exec(cesta);
+    if (m) {
+      const nahrana = NAHRANE.get(m[1]);
+      if (nahrana !== undefined) {
+        res.setHeader("Content-Type", nahrana.typ);
+        res.end(nahrana.data);
+        return;
+      }
+      if (m[1].startsWith("chat-s")) {
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.end("Ukázkový soubor");
+        return;
+      }
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.end(krajina(m[1]));
+      return;
+    }
+    if (cesta === "/api/nahled-odkazu") {
+      const odkaz = url.searchParams.get("url") ?? "";
+      const strava = odkaz.includes("strava.com");
+      return posli(res, 200, {
+        nahled: strava
+          ? { url: odkaz, druh: "web", web: "strava.com", titulek: "Sněžka z Pece přes Obří důl", popis: "14,2 km, převýšení 860 m", obrazekUrl: `${PREFIX}/api/diskuze/prilohy/strava-trasa`, bod: null }
+          : null,
+      });
+    }
     if (cesta === "/api/diskuze/konverzace") return posli(res, 200, { konverzace: konverzace() });
     if (cesta === "/api/diskuze/zpravy") {
       const kanal = url.searchParams.get("channel") ?? "general";
@@ -152,12 +198,7 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
       return posli(res, 200, { zpravy: ZPRAVY.get(url.searchParams.get("klic") ?? "") ?? [], nextCursor: null });
     }
     if (cesta === "/api/diskuze/skupiny") {
-      return posli(res, 200, {
-        skupiny: [
-          { id: "vedeni", nazev: "Vedení klubu", prava: [] },
-          { id: "digital", nazev: "Digitál", prava: [] },
-        ],
-      });
+      return posli(res, 200, { skupiny: SKUPINY, muzeSpravovat: true });
     }
     m = /^\/api\/diskuze\/skupiny\/([^/]+)\/zpravy$/.exec(cesta);
     if (m) return posli(res, 200, { zpravy: ZPRAVY.get(`skupina:${m[1]}`) ?? [], nextCursor: null });
@@ -181,11 +222,13 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
         vypravy: moje.length,
         kmCelkem: moje.reduce((s, v) => s + (v.km ?? 0), 0),
         prevyseniCelkem: moje.reduce((s, v) => s + (v.prevyseniM ?? 0), 0),
-        aktivity: moje.map((v) => ({ id: `a-${v.id}`, expeditionId: v.id, km: v.km ?? null, prevyseniM: v.prevyseniM ?? null, stravaActivityId: null, trasaPolyline: null, nazev: v.nazev, datum: v.datum, status: "ucastnil_se" })),
+        aktivity: moje.map((v) => ({ id: `a-${v.id}`, expeditionId: v.id, km: v.km ?? null, prevyseniM: v.prevyseniM ?? null, stravaActivityId: null, trasaPolyline: v.trasaPolyline ?? null, nazev: v.nazev, datum: v.datum, status: "ucastnil_se" })),
       });
     }
     if (cesta === "/api/strava/stav") return posli(res, 200, { propojeno: false, stravaId: null, scope: null, expirace: null });
-    if (cesta === "/api/admin/codes") return posli(res, 200, { kody: KODY });
+    if (cesta === "/api/admin/codes") return posli(res, 200, {
+      kody: KODY.map((k, i) => ({ ...k, expiresAt: new Date(Date.now() + (i === 0 ? 6.5 : 2.5) * 60_000).toISOString() })),
+    });
     if (cesta === "/api/zpevnik" || cesta === "/api/zpevnik/") return posli(res, 200, { pisne: PISNE });
     if (cesta === "/api/zpevnik/navrhy") return posli(res, 200, { navrhy: NAVRHY });
     m = /^\/api\/zpevnik\/navrhy\/([^/]+)$/.exec(cesta);
@@ -205,6 +248,14 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
   // ---- zápisy (jen v paměti) ----
   const telo = await ctiTelo(req);
   const text = typeof telo["text"] === "string" ? telo["text"] : "";
+  const prilohy: ApiZpravaPriloha[] = [];
+  for (const soubor of Array.isArray(telo["soubory"]) ? telo["soubory"] : []) {
+    if (!(soubor instanceof File)) continue;
+    citac += 1;
+    const id = `nahrana-${citac}`;
+    NAHRANE.set(id, { typ: soubor.type || "application/octet-stream", data: Buffer.from(await soubor.arrayBuffer()) });
+    prilohy.push({ id, nazev: soubor.name, bajty: soubor.size, contentType: soubor.type, jeObrazek: soubor.type.startsWith("image/") });
+  }
   const novaZprava = (klic: string, channel: string, expeditionId: string | null): unknown => {
     citac += 1;
     const zprava = {
@@ -215,7 +266,7 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
       authorAvatarUrl: null,
       channel,
       text,
-      prilohy: [],
+      prilohy,
       createdAt: new Date().toISOString(),
     };
     const seznam = ZPRAVY.get(klic) ?? [];
@@ -223,9 +274,49 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
     ZPRAVY.set(klic, seznam);
     return { zprava };
   };
+  const ucet = /^\/api\/users\/([^/]+)$/.exec(cesta);
+  if (ucet) {
+    const i = UZIVATELE.findIndex((u) => u.id === ucet[1]);
+    const uzivatel = UZIVATELE[i];
+    if (uzivatel === undefined) return chyba(res, 404, "Uživatel nenalezen.");
+    if (metoda === "DELETE") {
+      if (uzivatel.id === JA.id) return chyba(res, 403, "Vlastní účet z administrace smazat nejde.");
+      UZIVATELE.splice(i, 1);
+      return posli(res, 200, { ok: true });
+    }
+    if (metoda === "PATCH") {
+      Object.assign(uzivatel, telo);
+      return posli(res, 200, { user: seznamUzivatelu()[i] });
+    }
+  }
   if (metoda === "POST" && cesta === "/api/diskuze/zpravy") {
     const kanal = typeof telo["channel"] === "string" ? telo["channel"] : "general";
     return posli(res, 201, novaZprava(kanal, kanal, null));
+  }
+  if (metoda === "POST" && cesta === "/api/diskuze/skupiny") {
+    const skupina = { id: randomUUID(), nazev: String(telo["nazev"] ?? ""), prava: telo["prava"] as PravoSkupiny[] };
+    SKUPINY.push(skupina);
+    return posli(res, 201, { id: skupina.id });
+  }
+  const mazana = /\/zpravy\/([^/]+)$/.exec(cesta);
+  if (metoda === "DELETE" && mazana) {
+    for (const seznam of ZPRAVY.values()) {
+      const i = seznam.findIndex((z) => z.id === mazana[1]);
+      if (i >= 0) seznam.splice(i, 1);
+    }
+    return posli(res, 200, { ok: true });
+  }
+  const upravovana = /^\/api\/diskuze\/skupiny\/([^/]+)$/.exec(cesta);
+  if (upravovana) {
+    const skupina = SKUPINY.find((x) => x.id === upravovana[1]);
+    if (skupina === undefined) return chyba(res, 404, "Skupina nenalezena.");
+    if (metoda === "DELETE") {
+      SKUPINY.splice(SKUPINY.indexOf(skupina), 1);
+      return posli(res, 200, { ok: true });
+    }
+    skupina.nazev = String(telo["nazev"] ?? skupina.nazev);
+    skupina.prava = telo["prava"] as PravoSkupiny[];
+    return posli(res, 200, { id: skupina.id });
   }
   if (metoda === "POST" && cesta === "/api/diskuze/soukrome") {
     const klic = typeof telo["klic"] === "string" ? telo["klic"] : "";

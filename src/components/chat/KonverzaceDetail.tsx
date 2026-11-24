@@ -1,4 +1,6 @@
 import Ikona from "../Ikona";
+import { useNavigate } from "react-router-dom";
+import NavigacniRozbalovak from "../Navbar/NavigacniRozbalovak";
 import { inicialyProAvatar } from "../../lib/storage/avatar";
 import {
   useCallback,
@@ -74,6 +76,8 @@ export interface KonverzaceDetailProps {
   onNahled?: (zprava: ApiZprava | null) => void;
   /** Vlastní skupina: otevře potvrzení smazání (jen správce). */
   onSmazatSkupinu?: (spoustec: HTMLElement) => void;
+  /** Otevře formulář přístupu skupiny (admin). */
+  onUpravitSkupinu?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,6 +121,35 @@ export function popisekDne(iso: string): string {
   } catch {
     return "";
   }
+}
+
+/** Tlačítka v hlavičce vlákna: telefon 44 px s linkou, počítač 32 px v šedé. */
+const TLACITKO_HLAVICKY =
+  "nahled-press size-11 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:size-8 min-[90rem]:rounded-[9px] min-[90rem]:border-0 min-[90rem]:bg-povrch-2 min-[90rem]:text-mech";
+
+function PolozkaMenu({
+  popisek,
+  onClick,
+  nebezpecna = false,
+  className = "",
+}: {
+  popisek: string;
+  onClick: () => void;
+  nebezpecna?: boolean;
+  className?: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`bez-prejeti flex min-h-[44px] w-full items-center rounded-[9px] px-2.5 text-left text-[13px] font-medium hover:bg-povrch-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk min-[90rem]:min-h-9 ${
+        nebezpecna ? "text-akcent" : "text-inkoust"
+      } ${className}`}
+    >
+      {popisek}
+    </button>
+  );
 }
 
 export interface BlokZprav {
@@ -197,6 +230,7 @@ export default function KonverzaceDetail({
   onPoOdeslani,
   onNahled,
   onSmazatSkupinu,
+  onUpravitSkupinu,
 }: KonverzaceDetailProps): JSX.Element {
   const { isAdmin } = useAuth();
   const [stav, setStav] = useState<"nacitani" | "hotovo" | "chyba">("nacitani");
@@ -256,7 +290,7 @@ export default function KonverzaceDetail({
   const jmena: Record<string, string> = {};
   for (const clovek of clenove) jmena[clovek.id.toLowerCase()] = clovek.jmeno;
   const maLightroom: boolean =
-    jeSoukrome || jeSkupina || (konverzace.channel === "expedice" && konverzace.expeditionId !== null);
+    jeSoukrome || jeSkupina || jeGlobal || (konverzace.channel === "expedice" && konverzace.expeditionId !== null);
   const nactiFotkyVlaknaTeto = useCallback(() => {
     return nactiFotkyVlakna((cursor) => {
       const idSkupiny = idZeKliceSkupiny(konverzace.key);
@@ -277,6 +311,13 @@ export default function KonverzaceDetail({
     });
   }, [jeSoukrome, jeSkupina, konverzace.channel, konverzace.expeditionId, konverzace.key]);
   const lightroom = useChatLightroom(nactiFotkyVlaknaTeto);
+  const navigate = useNavigate();
+  const menuKotva = useRef<HTMLButtonElement>(null);
+  const [menuOtevreno, setMenuOtevreno] = useState<boolean>(false);
+  const [hledaVlakno, setHledaVlakno] = useState<boolean>(false);
+  const [dotazVlakna, setDotazVlakna] = useState<string>("");
+  const [pretazene, setPretazene] = useState<{ token: number; soubory: readonly File[] } | null>(null);
+  const [nadVlaknem, setNadVlaknem] = useState<boolean>(false);
 
   /* Hide the author's delete button once the 10 minute window closes. */
   useEffect(() => {
@@ -447,6 +488,29 @@ export default function KonverzaceDetail({
     vlakno.scrollTop = vlakno.scrollHeight;
   }, [zpravy, stav]);
 
+  /* Fotky a náhledy odkazů dorostou až po načtení. Kdo byl dole, dole zůstane. */
+  const prazdneVlakno: boolean = zpravy.length === 0;
+  useEffect(() => {
+    const vlakno: HTMLDivElement | null = vlaknoRef.current;
+    const seznam: HTMLUListElement | null = listRef.current;
+    if (vlakno === null || seznam === null) return;
+    let drzDole: boolean = jsemUDna(vlakno);
+    const naPosun = (): void => {
+      drzDole = jsemUDna(vlakno);
+    };
+    const pozorovani = new ResizeObserver(() => {
+      if (drzDole) vlakno.scrollTop = vlakno.scrollHeight;
+    });
+    vlakno.addEventListener("scroll", naPosun, { passive: true });
+    pozorovani.observe(seznam);
+    // Delší rozepsaná zpráva a klávesnice vlákno zmenší, poslední zpráva má zůstat vidět.
+    pozorovani.observe(vlakno);
+    return () => {
+      vlakno.removeEventListener("scroll", naPosun);
+      pozorovani.disconnect();
+    };
+  }, [stav, prazdneVlakno, dotazVlakna]);
+
   async function naOdeslat(text: string, soubory: readonly File[]): Promise<void> {
     if (odesilaSe) return;
     const vybrane: File[] = [...soubory];
@@ -599,66 +663,216 @@ export default function KonverzaceDetail({
     onPoOdeslani?.();
   }
 
-  const bloky: BlokZprav[] = seskupZpravyDoBloku(zpravy);
+  const sirokaObrazovka: boolean =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(min-width: 64rem)").matches;
+  const hledany: string = hledaVlakno ? dotazVlakna.trim() : "";
+  const nalezene: ApiZprava[] =
+    hledany.length === 0
+      ? zpravy
+      : zpravy.filter((z) => z.text.toLocaleLowerCase("cs").includes(hledany.toLocaleLowerCase("cs")));
+  const bloky: BlokZprav[] = seskupZpravyDoBloku(nalezene);
+  function zavriHledani(): void {
+    setHledaVlakno(false);
+    setDotazVlakna("");
+  }
   let posledniDen: string | null = null;
 
   return (
-    <section aria-label={`Konverzace ${nazev}`} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-w-0 items-center gap-[11px] border-b border-linka px-4 py-3 min-[90rem]:h-[66px] min-[90rem]:px-5 min-[90rem]:py-0">
+    <section
+      aria-label={`Konverzace ${nazev}`}
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      onDragOver={(udalost) => {
+        if (!smiPsat || !udalost.dataTransfer.types.includes("Files")) return;
+        udalost.preventDefault();
+        setNadVlaknem(true);
+      }}
+      onDragLeave={(udalost) => {
+        if (!udalost.currentTarget.contains(udalost.relatedTarget as Node | null)) setNadVlaknem(false);
+      }}
+      onDrop={(udalost) => {
+        setNadVlaknem(false);
+        if (!smiPsat || udalost.dataTransfer.files.length === 0) return;
+        udalost.preventDefault();
+        setPretazene({ token: Date.now(), soubory: [...udalost.dataTransfer.files] });
+      }}
+    >
+      {nadVlaknem ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-smrk bg-mlha/95 text-sm font-semibold text-smrk"
+        >
+          <Ikona nazev="upload" className="size-6" />
+          Pusť soubory sem a přiloží se ke zprávě
+        </div>
+      ) : null}
+      <header className="flex min-w-0 items-center gap-2.5 pb-3 lg:gap-[11px] lg:border-b lg:border-linka lg:px-5 lg:pt-3 min-[90rem]:h-[66px] min-[90rem]:py-0">
         {onZpet !== undefined && (
           <button
             type="button"
             onClick={onZpet}
             aria-label="Zpět na seznam konverzací"
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust [touch-action:manipulation] lg:hidden"
+            className="nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust [touch-action:manipulation] lg:hidden"
           >
             <Ikona nazev="chevron-left" className="size-[18px]" />
           </button>
         )}
-        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-mlha text-[11.5px] font-semibold text-smrk">
-          {inicialyProAvatar(nazev)}
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-smrk text-sm font-semibold text-povrch min-[90rem]:size-9 min-[90rem]:bg-mlha min-[90rem]:text-[11.5px] min-[90rem]:text-smrk"
+        >
+          {jeSoukrome ? inicialyProAvatar(nazev) : Array.from(nazev.trim()).slice(0, 2).join("").toLocaleUpperCase("cs")}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 min-[90rem]:gap-px">
           <h2
             ref={nadpisRef}
             tabIndex={-1}
             title={nazev}
-            className="min-w-0 truncate text-[14.5px] font-semibold text-inkoust"
+            className="min-w-0 truncate font-display text-[17px] font-bold text-inkoust focus:!outline-none focus-visible:!outline-none min-[90rem]:font-sans min-[90rem]:text-[14.5px] min-[90rem]:font-semibold min-[90rem]:tracking-normal"
             style={{ overflowWrap: "anywhere" }}
           >
             {nazev}
           </h2>
-          <p className={`mt-px min-w-0 truncate text-[11.5px] text-ink-3 ${konverzace.channel === "general" ? "sr-only" : ""}`}>
+          <p className="min-w-0 truncate text-xs text-ink-3 min-[90rem]:text-[11.5px]">
             {jeSoukrome
-              ? "Soukromá zpráva · jen vy dva"
+              ? "Soukromá zpráva"
               : jeSkupina
                 ? "Skupina · přístup podle rolí"
-              : jeDulezite
-                ? "Připnuté · důležitá oznámení"
-                : konverzace.channel === "general"
-                  ? "Připnuté · obecná domluva"
-                  : "Vlákno výpravy"}
+                : jeDulezite
+                  ? "Důležitá oznámení"
+                  : konverzace.channel === "general"
+                    ? clenove.length > 0
+                      ? tvarClenu(clenove.length)
+                      : "Obecná domluva"
+                    : "Vlákno výpravy"}
           </p>
-          {konverzace.channel === "general" && (
-            <p className="mt-px min-w-0 truncate text-[11.5px] text-ink-3">
-              {clenove.length > 0
-                ? `${tvarClenu(clenove.length)} · 0 online`
-                : "—"}
-            </p>
-          )}
         </div>
-        {jeSkupina && onSmazatSkupinu !== undefined && (
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            data-smazat-skupinu
-            aria-label={`Smazat skupinu ${nazev}`}
-            onClick={(e) => onSmazatSkupinu(e.currentTarget)}
-            className="inline-flex min-h-[44px] max-w-[11rem] shrink-0 items-center truncate rounded-md px-2 text-left text-xs font-semibold text-inkoust/45 underline decoration-inkoust/25 underline-offset-[3px] transition-[opacity,color,decoration-color] duration-[160ms] ease-out motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)]:hover:text-jantar [@media(hover:hover)_and_(pointer:fine)]:hover:decoration-jantar/50 [touch-action:manipulation]"
+            aria-label="Hledat ve vlákně"
+            aria-expanded={hledaVlakno}
+            onClick={() => {
+              setHledaVlakno((pred) => !pred);
+              setDotazVlakna("");
+            }}
+            className={`${TLACITKO_HLAVICKY} hidden min-[90rem]:inline-flex`}
           >
-            {`Smazat skupinu „${nazev}"…`}
+            <Ikona nazev="search" className="size-[15px]" />
           </button>
-        )}
+          <button
+            type="button"
+            aria-label="Nastavení oznámení"
+            onClick={() => navigate("/profil")}
+            className={`${TLACITKO_HLAVICKY} hidden min-[90rem]:inline-flex`}
+          >
+            <Ikona nazev="bell" className="size-[15px]" />
+          </button>
+          {jeSkupina && onUpravitSkupinu !== undefined ? (
+            <button
+              type="button"
+              aria-label="Upravit oprávnění skupiny"
+              title="Upravit oprávnění"
+              onClick={onUpravitSkupinu}
+              className={`${TLACITKO_HLAVICKY} hidden min-[90rem]:inline-flex`}
+            >
+              <Ikona nazev="lock" className="size-[15px]" />
+            </button>
+          ) : null}
+          <button
+            ref={menuKotva}
+            type="button"
+            aria-label="Další akce konverzace"
+            aria-haspopup="menu"
+            aria-expanded={menuOtevreno}
+            onClick={() => setMenuOtevreno((pred) => !pred)}
+            className={`${TLACITKO_HLAVICKY} inline-flex`}
+          >
+            <Ikona nazev="ellipsis" className="size-[18px] min-[90rem]:size-[15px]" />
+          </button>
+          <NavigacniRozbalovak
+            otevreno={menuOtevreno}
+            onZavrit={() => setMenuOtevreno(false)}
+            kotvaRef={menuKotva}
+            sirka={220}
+            zarovnani="end"
+            popisek="Akce konverzace"
+          >
+            {/* Na počítači je lupa přímo v hlavičce. */}
+            <PolozkaMenu
+              popisek="Hledat ve vlákně"
+              className="min-[90rem]:hidden"
+              onClick={() => {
+                setMenuOtevreno(false);
+                setHledaVlakno(true);
+              }}
+            />
+            {maLightroom ? (
+              <PolozkaMenu
+                popisek="Fotky z konverzace"
+                onClick={() => {
+                  setMenuOtevreno(false);
+                  void lightroom.otevri(null);
+                }}
+              />
+            ) : null}
+            {jeSkupina && onUpravitSkupinu !== undefined ? (
+              <PolozkaMenu
+                popisek="Upravit oprávnění"
+                className="min-[90rem]:hidden"
+                onClick={() => {
+                  setMenuOtevreno(false);
+                  onUpravitSkupinu();
+                }}
+              />
+            ) : null}
+            {jeSkupina && onSmazatSkupinu !== undefined ? (
+              <PolozkaMenu
+                popisek="Smazat skupinu…"
+                nebezpecna
+                onClick={() => {
+                  setMenuOtevreno(false);
+                  if (menuKotva.current !== null) onSmazatSkupinu(menuKotva.current);
+                }}
+              />
+            ) : null}
+          </NavigacniRozbalovak>
+        </div>
       </header>
+
+      {hledaVlakno ? (
+        <div className="nabeh-dolu flex items-center gap-2 pb-3 lg:px-5 lg:pt-3">
+          <div className="relative min-w-0 flex-1">
+            <Ikona nazev="search" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3 min-[90rem]:left-[11px] min-[90rem]:size-[15px]" />
+            <input
+              type="search"
+              value={dotazVlakna}
+              onChange={(udalost) => setDotazVlakna(udalost.target.value)}
+              onKeyDown={(udalost) => {
+                if (udalost.key === "Escape") zavriHledani();
+              }}
+              aria-label="Hledat ve vlákně"
+              placeholder="Hledat ve vlákně"
+              autoFocus
+              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-24 text-base text-inkoust placeholder:text-ink-4 focus:border-pole focus:outline-none min-[90rem]:h-[38px] min-[90rem]:rounded-[10px] min-[90rem]:border-transparent min-[90rem]:bg-povrch-2 min-[90rem]:pl-[34px] min-[90rem]:text-[12.5px]"
+            />
+            {hledany.length > 0 ? (
+              <span role="status" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11.5px] font-medium text-ink-3">
+                {nalezene.length === 1 ? "1 zpráva" : nalezene.length >= 2 && nalezene.length <= 4 ? `${nalezene.length} zprávy` : `${nalezene.length} zpráv`}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={zavriHledani}
+            aria-label="Zavřít hledání"
+            className={`${TLACITKO_HLAVICKY} inline-flex shrink-0`}
+          >
+            <Ikona nazev="x" className="size-[18px] min-[90rem]:size-[15px]" />
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {stav === "nacitani" && (
@@ -683,7 +897,7 @@ export default function KonverzaceDetail({
         {stav === "hotovo" && (
           <>
             {oznameni !== null && (
-              <p role="status" className="rounded-xl border border-smrk/30 bg-smrk/10 px-3 py-2 text-sm font-semibold">
+              <p role="status" className="sr-only">
                 {oznameni}
               </p>
             )}
@@ -692,14 +906,16 @@ export default function KonverzaceDetail({
             <div
               ref={vlaknoRef}
               data-vlakno-scroll="konverzace"
-              className="posuvnik min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-5 min-[90rem]:px-5"
+              className="posuvnik min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pb-3 lg:px-5 lg:pb-6 lg:pt-5"
             >
             {bloky.length === 0 ? (
               <p
                 role="status"
                 className="min-w-0 break-words rounded-2xl bg-povrch-2/60 p-4 text-center text-[13px] text-ink-3"
               >
-                Zatím tu není žádná zpráva — začni domluvu první vzkazem níže.
+                {hledany.length > 0
+                  ? `Nic s textem „${hledany}“ tu není.`
+                  : "Zatím tu není žádná zpráva — začni domluvu prvním vzkazem níže."}
               </p>
             ) : (
               <ul
@@ -708,9 +924,10 @@ export default function KonverzaceDetail({
                 aria-live="polite"
                 aria-relevant="additions"
                 aria-label={`Vlákno ${nazev}`}
-                className="min-w-0 space-y-3"
+                className="m-0 min-w-0 list-none space-y-3 p-0 min-[90rem]:space-y-4"
               >
-                {bloky.map((blok) => {
+                {bloky
+                  .map((blok) => {
                   const den: string = popisekDne(blok.denIso);
                   const ukázatDen: boolean = posledniDen !== den;
                   if (ukázatDen) posledniDen = den;
@@ -719,14 +936,14 @@ export default function KonverzaceDetail({
                       {ukázatDen && den.length > 0 && (
                         <p
                           aria-label={den}
-                          className="mb-4 text-center text-[10.5px] font-semibold text-ink-3"
+                          className="mb-3 text-center text-[10.5px] font-semibold tracking-[0.4px] text-ink-3 min-[90rem]:mb-4"
                         >
                           <span className="inline-block rounded-full bg-povrch-2 px-2.5 py-[3px] first-letter:uppercase">
                             {den}
                           </span>
                         </p>
                       )}
-                      <ul className="min-w-0 space-y-1.5">
+                      <ul className="m-0 min-w-0 list-none space-y-3 p-0 min-[90rem]:space-y-2">
                         {seskupRadkyVlakna(blok.zpravy).map((radek, index) => {
                           const zprava = radek.druh === "zprava" ? radek.zprava : radek.zpravy[0];
                           if (zprava === undefined) return null;
@@ -775,6 +992,7 @@ export default function KonverzaceDetail({
                               onOtevriObrazek={
                                 maLightroom ? (prilohaId) => void lightroom.otevri(prilohaId) : undefined
                               }
+                              hledat={hledany}
                               skrytHlavicku={index > 0}
                             />
                           );
@@ -789,13 +1007,12 @@ export default function KonverzaceDetail({
 
             {/* Composer sits under the thread so history can use the rest of the phone. */}
             <div
-              className="shrink-0 border-t border-linka px-4 pt-3.5 min-[90rem]:px-5"
-              style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
+              className="shrink-0 pb-[env(safe-area-inset-bottom,0px)] lg:border-t lg:border-linka lg:px-5 lg:pb-4 lg:pt-3.5"
             >
               {!prihlasen ? (
                 <p
                   role="status"
-                  className="rounded-2xl bg-mech/10 p-3 text-center text-sm text-inkoust/70"
+                  className="rounded-2xl bg-povrch-2 p-3 text-center text-[13px] text-mech"
                 >
                   Konverzaci čte každý, psát můžou přihlášení — přihlas se a
                   přidej vzkaz.
@@ -821,9 +1038,14 @@ export default function KonverzaceDetail({
                           : `Napsat do ${nazev}`
                   }
                   placeholder={
-                    jeDulezite
-                      ? "Stručně a jasně pro všechny…"
-                      : "Napiš něco…"
+                    // Telefon: jedno krátké znění, kam se píše, je v hlavičce.
+                    !sirokaObrazovka
+                      ? jeDulezite
+                        ? "Napsat oznámení…"
+                        : "Napsat zprávu…"
+                      : jeDulezite
+                        ? "Stručně a jasně pro všechny…"
+                        : `Napsat zprávu${jeSoukrome ? "" : ` do ${konverzace.channel === "general" ? "Obecného" : nazev}`}…`
                   }
                   odesilaSe={odesilaSe}
                   chyba={chybaOdeslani}
@@ -831,6 +1053,7 @@ export default function KonverzaceDetail({
                   onOdeslat={(text, soubory) => void naOdeslat(text, soubory)}
                   zminky={jeGlobal}
                   clenove={clenove}
+                  pretazene={pretazene}
                 />
               )}
             </div>

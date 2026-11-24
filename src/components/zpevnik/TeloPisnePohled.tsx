@@ -1,18 +1,11 @@
 /**
- * Chord sheet in a fixed-width grid. Spaces stay where they were typed
- * and each chord starts on the same column as its letter.
- * Wide screens use two real columns of whole lines when the longest line fits.
- * CSS column flow was slicing a chord line away from its lyric, so the right
- * column looked broken.
+ * Text písně podle ExApp.pen: písmo aplikace, akord nad slabikou, ke které patří.
+ * Řádek je poskládaný ze slov, takže se láme jen mezi slovy a akord se od textu
+ * neodtrhne. Na počítači text teče do dvou sloupců (viz ZpevnikPisenPage).
  */
-import { useLayoutEffect, useRef, useState, type JSX } from "react";
+import type { JSX } from "react";
 import type { Blok, Radek, TeloPisne, TypBloku } from "../../shared/zpevnik";
 
-const NEJVETSI_PX = 20;
-const NEJMENSI_PX = 12;
-/** `lg:text-lg` and `lg:gap-x-16` on the sheet. */
-const SIROKE_PX = 18;
-const MEZERA_SLOUPCU_PX = 64;
 const TOKEN_AKORDU =
   /^([A-H])([#b])?(maj|min|mi|dim|aug|sus|add|m|-)?(\d+)?(sus\d+|add\d+|maj\d+)?(?:\/([A-H])([#b])?)?$/;
 
@@ -20,21 +13,6 @@ const POPISEK: Record<TypBloku, string> = {
   sloka: "Sloka",
   refren: "Refrén",
 };
-
-function zobrazeni(radek: Radek): { akordy: string; text: string } {
-  let text = "";
-  const akordy: string[] = [];
-  for (const slabika of radek.slabiky) {
-    if (slabika.akord !== undefined) {
-      // Chords past a short lyric share a column, so each one goes after the last.
-      const zacatek = akordy.length > 0 && akordy.length >= text.length ? akordy.length + 1 : text.length;
-      while (akordy.length < zacatek) akordy.push(" ");
-      akordy.push(...slabika.akord);
-    }
-    text += slabika.text;
-  }
-  return { akordy: akordy.join("").trimEnd(), text };
-}
 
 function textRadku(radek: Radek): string {
   return radek.slabiky.map((slabika) => slabika.text).join("");
@@ -113,128 +91,71 @@ function opravBloky(bloky: Blok[]): Blok[] {
   return bloky.map((blok) => ({ ...blok, radky: opravRadky([...blok.radky]) }));
 }
 
-/** First half, then second half, splitting only between whole lines. */
-function naDvaSloupce(bloky: Blok[]): [Blok[], Blok[]] {
-  const radky = bloky.flatMap((blok) => blok.radky.map((radek) => ({ typ: blok.typ, radek })));
-  const rez = Math.ceil(radky.length / 2);
-  return [seskup(radky.slice(0, rez)), seskup(radky.slice(rez))];
-}
+type Usek = { akord: string | null; text: string };
 
-function seskup(polozky: { typ: TypBloku; radek: Radek }[]): Blok[] {
-  const vysledek: Blok[] = [];
-  for (const polozka of polozky) {
-    const posledni = vysledek[vysledek.length - 1];
-    if (posledni !== undefined && posledni.typ === polozka.typ) {
-      posledni.radky.push(polozka.radek);
-      continue;
+/** Rozdělí řádek na slova, každé slovo na úseky začínající akordem. */
+function slovaRadku(radek: Radek): Usek[][] {
+  const slova: Usek[][] = [];
+  let slovo: Usek[] = [];
+  const uzavri = (): void => {
+    if (slovo.length > 0) slova.push(slovo);
+    slovo = [];
+  };
+  for (const slabika of radek.slabiky) {
+    let akord = slabika.akord ?? null;
+    // Mezera zůstává na konci slova, aby se řádek lámal za ní.
+    for (const kus of slabika.text.split(/(?<=\s)(?=\S)/)) {
+      if (kus.length === 0 && akord === null) continue;
+      const posledni = slovo[slovo.length - 1];
+      if (akord === null && posledni !== undefined) posledni.text += kus;
+      else slovo.push({ akord, text: kus });
+      akord = null;
+      if (/\s$/.test(kus)) uzavri();
     }
-    vysledek.push({ typ: polozka.typ, radky: [polozka.radek] });
+    if (slabika.text.length === 0 && akord !== null) slovo.push({ akord, text: "" });
   }
-  return vysledek;
+  uzavri();
+  return slova;
 }
 
-function Sloupec({ bloky, pokracovani }: { bloky: Blok[]; pokracovani: boolean }): JSX.Element {
+function RadekPisne({ radek }: { radek: Radek }): JSX.Element {
+  const maAkord = radek.slabiky.some((slabika) => slabika.akord !== undefined);
+  if (!maAkord) {
+    const text = textRadku(radek);
+    return <p className="whitespace-pre-wrap break-inside-avoid">{text.length > 0 ? text : "\u00a0"}</p>;
+  }
   return (
-    <div className="min-w-0 space-y-6">
-      {bloky.map((blok, indexBloku) => (
-        <section key={`${blok.typ}-${indexBloku}`} className="space-y-3">
-          {(indexBloku > 0 || !pokracovani) && (
-            <h2 className="text-xs font-bold uppercase tracking-wide text-mech">{POPISEK[blok.typ]}</h2>
-          )}
-          <div className="max-w-full font-mono leading-tight lg:leading-snug">
-            {blok.radky.map((radek, indexRadku) => {
-              const { akordy, text } = zobrazeni(radek);
-              return (
-                <div key={indexRadku} data-zpevnik-radek="" className="mb-3 w-full whitespace-pre">
-                  {akordy.length > 0 && <div className="font-bold text-red-700">{akordy}</div>}
-                  {(text.length > 0 || akordy.length === 0) && <div>{text.length > 0 ? text : "\u00a0"}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+    <p className="break-inside-avoid">
+      {slovaRadku(radek).map((slovo, i) => (
+        <span key={i} className="inline-flex max-w-full items-end whitespace-pre align-bottom">
+          {slovo.map((usek, j) => (
+            <span key={j} className="inline-flex flex-col gap-0.5 min-[90rem]:gap-0">
+              <span className="h-[15px] pr-1 text-xs font-bold leading-[15px] text-okr min-[90rem]:h-[14px] min-[90rem]:text-[10.5px] min-[90rem]:leading-[14px] min-[90rem]:tracking-[1.2px] min-[90rem]:text-akcent">
+                {usek.akord ?? ""}
+              </span>
+              <span>{usek.text.length > 0 ? usek.text : "\u00a0"}</span>
+            </span>
+          ))}
+        </span>
       ))}
-    </div>
+    </p>
   );
 }
 
 export function TeloPisnePohled({ telo }: { telo: TeloPisne }): JSX.Element {
-  const list = useRef<HTMLDivElement>(null);
-  const [dvaSloupce, setDvaSloupce] = useState(false);
-  const opravene = opravBloky(telo.bloky);
-  const [levy, pravy] = dvaSloupce ? naDvaSloupce(opravene) : [opravene, []];
-  const pokracuje = pravy[0] !== undefined && levy[levy.length - 1]?.typ === pravy[0].typ;
-
-  useLayoutEffect(() => {
-    const koren = list.current;
-    if (koren === null) return;
-    const siroke = window.matchMedia("(min-width: 1024px)");
-    const platno = document.createElement("canvas").getContext("2d");
-    let posledni = "";
-
-    const prizpusob = (): void => {
-      if (platno === null) {
-        posledni = "";
-        koren.style.fontSize = "";
-        setDvaSloupce(false);
-        return;
-      }
-      const misto = koren.clientWidth;
-      if (misto <= 0) return;
-      const vzor = koren.querySelector("[data-zpevnik-radek]");
-      const rodina = vzor === null ? "monospace" : getComputedStyle(vzor).fontFamily;
-      let nejdelsi = "";
-      for (const radek of koren.querySelectorAll("[data-zpevnik-radek]")) {
-        for (const dite of radek.children) {
-          const text = dite.textContent ?? "";
-          if (text.length > nejdelsi.length) nejdelsi = text;
-        }
-      }
-      if (nejdelsi.length === 0) return;
-      const sirka = (px: number): number => {
-        platno.font = `700 ${px}px ${rodina}`;
-        return platno.measureText(nejdelsi).width;
-      };
-      // Two columns only when the longest line fits in half the sheet.
-      const sirkaNaSirokem = sirka(SIROKE_PX);
-      setDvaSloupce(siroke.matches && sirkaNaSirokem <= (misto - MEZERA_SLOUPCU_PX) / 2);
-      if (siroke.matches && sirkaNaSirokem <= misto) {
-        posledni = "";
-        koren.style.fontSize = "";
-        return;
-      }
-      const nejvetsi = siroke.matches ? SIROKE_PX : NEJVETSI_PX;
-      let zvolene = nejvetsi;
-      for (let px = nejvetsi; px >= NEJMENSI_PX; px -= 1) {
-        zvolene = px;
-        if (sirka(px) <= misto) break;
-      }
-      const text = `${zvolene}px`;
-      if (text === posledni) return;
-      posledni = text;
-      koren.style.fontSize = text;
-    };
-
-    prizpusob();
-    const pozorovatel = new ResizeObserver(prizpusob);
-    pozorovatel.observe(koren);
-    siroke.addEventListener("change", prizpusob);
-    return () => {
-      pozorovatel.disconnect();
-      siroke.removeEventListener("change", prizpusob);
-    };
-  }, [telo]);
-
+  const bloky = opravBloky(telo.bloky);
   return (
-    <div
-      ref={list}
-      data-dva-sloupce={pravy.length > 0 ? "" : undefined}
-      className={`min-w-0 lg:text-lg ${
-        pravy.length > 0 ? "max-lg:space-y-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-16" : ""
-      }`}
-    >
-      <Sloupec bloky={levy} pokracovani={false} />
-      {pravy.length > 0 && <Sloupec bloky={pravy} pokracovani={pokracuje} />}
+    <div className="text-[15px] text-inkoust min-[90rem]:text-sm min-[90rem]:leading-5">
+      {bloky.map((blok, index) => (
+        <section key={`${blok.typ}-${index}`} className={index === 0 ? "" : "mt-5 min-[90rem]:mt-[22px]"}>
+          <h2 className="sr-only">{POPISEK[blok.typ]}</h2>
+          <div className="flex flex-col gap-2.5 min-[90rem]:block min-[90rem]:space-y-1.5">
+            {blok.radky.map((radek, i) => (
+              <RadekPisne key={i} radek={radek} />
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

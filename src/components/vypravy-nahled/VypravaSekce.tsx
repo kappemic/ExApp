@@ -30,7 +30,7 @@ export default function VypravaSekce({
             {nadpis}
           </h2>
           {pocet !== undefined && pocet > 0 ? (
-            <span className="hidden rounded-full bg-povrch-2 px-[9px] py-[3px] text-[11.5px] font-semibold tabular-nums text-mech min-[90rem]:inline-flex">
+            <span className="hidden rounded-full bg-povrch-2 px-[9px] py-[3px] text-[11.5px] font-semibold text-mech min-[90rem]:inline-flex">
               {pocet}
             </span>
           ) : null}
@@ -39,15 +39,14 @@ export default function VypravaSekce({
           <button
             type="button"
             onClick={akce.onClick}
-            className="nahled-press -mr-1 inline-flex min-h-11 shrink-0 items-center gap-1 px-1 text-[13px] text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:gap-1.5 min-[90rem]:font-medium"
+            className="nahled-press -my-2.5 -mr-1 inline-flex min-h-11 shrink-0 items-center gap-1 px-1 text-[13px] text-mech focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:gap-1.5 min-[90rem]:font-medium"
           >
             {akce.popisek}
-            <Ikona nazev="chevron-right" className="size-3.5 text-ink-3 min-[90rem]:hidden" />
-            <Ikona nazev="arrow-right" className="hidden size-3.5 text-ink-3 min-[90rem]:block" />
+            <Ikona nazev="arrow-right" className="size-3.5 text-ink-3" />
           </button>
         ) : null}
       </div>
-      <div className="mt-2.5 min-[90rem]:mt-4">{children}</div>
+      <div className="mt-[22px] min-[90rem]:mt-4">{children}</div>
     </section>
   );
 }

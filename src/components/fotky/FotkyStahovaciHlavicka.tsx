@@ -1,13 +1,19 @@
 import type { JSX } from "react";
-import { fotkyHoverBgSmrk, fotkyTlacitkoSekundarni, fotkyTlacitkoZaklad } from "./fotky-ui";
+import Ikona from "../Ikona";
+import { fotkyTlacitkoPrimarni, fotkyTlacitkoSekundarni } from "./fotky-ui";
 
 interface FotkyStahovaciHlavickaProps {
   maFotky: boolean;
   stahovaciRezim: boolean;
   vybranyPocet: number;
+  vybranoVse: boolean;
+  /** Files are fetched and wait for a fresh tap (iOS needs one for the share sheet). */
+  galeriePripravena: boolean;
   stahujeSe: boolean;
   onZacniStahovani: () => void;
   onZrusStahovani: () => void;
+  onPrepnoutVse: () => void;
+  onUlozitDoGalerie: () => void;
   onStahnoutVybrane: () => void;
   onStahnoutVse: () => void;
 }
@@ -20,18 +26,17 @@ export default function FotkyStahovaciHlavicka({
   maFotky,
   stahovaciRezim,
   vybranyPocet,
+  vybranoVse,
+  galeriePripravena,
   stahujeSe,
   onZacniStahovani,
   onZrusStahovani,
+  onPrepnoutVse,
+  onUlozitDoGalerie,
   onStahnoutVybrane,
   onStahnoutVse,
 }: FotkyStahovaciHlavickaProps): JSX.Element | null {
   if (!maFotky) return null;
-
-  const zaklad = `${fotkyTlacitkoZaklad} rounded-lg border px-3 text-sm font-bold disabled:opacity-60`;
-  const akcni = `${zaklad} w-full border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-smrk/35 sm:w-auto ${fotkyHoverBgSmrk}`;
-  const akcniPlne = `${zaklad} w-full border-smrk bg-smrk text-papir sm:w-auto ${fotkyHoverBgSmrk}`;
-  const neutralni = `${zaklad} w-full border-linka bg-povrch text-inkoust shadow-denik sm:w-auto`;
 
   if (!stahovaciRezim) {
     return (
@@ -42,7 +47,7 @@ export default function FotkyStahovaciHlavicka({
         title="Stáhnout"
         className={`${fotkyTlacitkoSekundarni} nahled-press min-h-11 gap-1.5 px-3`}
       >
-        <IkonaStazeni />
+        <Ikona nazev="download" className="size-4" />
         <span className="sr-only sm:not-sr-only sm:inline">Stáhnout</span>
       </button>
     );
@@ -59,48 +64,42 @@ export default function FotkyStahovaciHlavicka({
         type="button"
         onClick={onZrusStahovani}
         disabled={stahujeSe}
-        className={`${neutralni} order-2 sm:order-1`}
+        className={`${fotkyTlacitkoSekundarni} order-2 sm:order-1`}
       >
         Zrušit
       </button>
       <button
         type="button"
-        onClick={onStahnoutVybrane}
-        disabled={vybranyPocet === 0 || stahujeSe}
-        className={`${akcniPlne} order-1 col-span-2 sm:order-3`}
-      >
-        {stahujeSe ? "Ukládám…" : "Stáhnout vybrané"}
-      </button>
-      <button
-        type="button"
-        onClick={onStahnoutVse}
+        onClick={onPrepnoutVse}
         disabled={stahujeSe}
-        className={`${akcni} order-3 sm:order-2`}
+        className={`${fotkyTlacitkoSekundarni} order-3 sm:order-2`}
       >
-        Stáhnout vše
+        {vybranoVse ? "Zrušit výběr" : "Vybrat vše"}
       </button>
+      {galeriePripravena ? (
+        <button
+          type="button"
+          onClick={onUlozitDoGalerie}
+          disabled={stahujeSe}
+          className={`${fotkyTlacitkoPrimarni} order-1 col-span-2 sm:order-3`}
+        >
+          Uložit do galerie
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={vybranyPocet > 0 ? onStahnoutVybrane : onStahnoutVse}
+          disabled={stahujeSe}
+          className={`${fotkyTlacitkoPrimarni} order-1 col-span-2 sm:order-3`}
+        >
+          <Ikona nazev="download" className="size-4" />
+          {stahujeSe
+            ? "Stahuji…"
+            : vybranyPocet > 0
+              ? `Stáhnout vybrané (${vybranyPocet})`
+              : "Stáhnout vše"}
+        </button>
+      )}
     </div>
-  );
-}
-
-function IkonaStazeni(): JSX.Element {
-  return (
-    <svg
-      width={22}
-      height={22}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      className="shrink-0"
-    >
-      <path
-        d="M12 4v10M8 10.5 12 14.5 16 10.5M5 19h14"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

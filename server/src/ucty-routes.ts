@@ -3,6 +3,8 @@
  */
 
 import {
+  desc,
+  gt,
   lte,
   sql,
 } from "drizzle-orm";
@@ -12,10 +14,12 @@ import {
   type Response,
 } from "express";
 import type {
+  OvereniKoduResponse,
   PrihlaseniResponse,
   RegistraceResponse,
   UpravitProfilResponse,
   VytvoritKodResponse,
+  ZiveKodyResponse,
 } from "../../src/shared/api-types";
 import {
   hashHesla,
@@ -60,7 +64,9 @@ import {
 import {
   nahodnyKod,
 } from "./kody";
+import { rozhodniOvereniKodu } from "./overeni-kodu";
 import {
+  validujOvereniKodu,
   validujPoznamkuKodu,
   validujPrihlaseni,
   validujProfilUpdate,
@@ -110,6 +116,39 @@ export function registrujUcty(app: Express): void {
     posliChybu(res, "MOC_POZADAVKU", "Pokusů je moc. Počkej chvíli a zkus to znovu.");
     return true;
   }
+
+  /* ------------------------------------------------------------------ */
+  /* GET /api/admin/codes — jen ADMIN. Živé řádky, jen code a expiresAt. */
+  /* ------------------------------------------------------------------ */
+
+  app.get("/api/admin/codes", (req: Request, res: Response) => {
+    vyzadujAdmina(req, res, () => {
+      void (async (): Promise<void> => {
+        try {
+          const db = getDb();
+          const radky = await db
+            .select({
+              code: registrationCodes.code,
+              expiresAt: registrationCodes.expiresAt,
+            })
+            .from(registrationCodes)
+            .where(gt(registrationCodes.expiresAt, new Date()))
+            .orderBy(desc(registrationCodes.expiresAt));
+          const telo: ZiveKodyResponse = {
+            kody: radky.map((radek) => ({
+              code: radek.code,
+              expiresAt: radek.expiresAt.toISOString(),
+            })),
+          };
+          res.status(200).json(telo);
+        } catch {
+          if (!res.headersSent) {
+            posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+          }
+        }
+      })();
+    });
+  });
 
   /* ------------------------------------------------------------------ */
   /* POST /api/admin/codes — jen ADMIN. Bez admina v DB kód nevznikne;   */
@@ -177,6 +216,49 @@ export function registrujUcty(app: Express): void {
     }
     posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
   }
+
+  /* ------------------------------------------------------------------ */
+  /* POST /api/kody/overit — jen čte. Řádek se nespotřebuje ani nemaže.  */
+  /* Neznámý nebo expirovaný kód → 422, platný → 200 { platny, expiresAt }. */
+  /* ------------------------------------------------------------------ */
+
+  app.post("/api/kody/overit", (req: Request, res: Response) => {
+    void (async (): Promise<void> => {
+      if (odmitniKdyzMocPokusu(req, res)) return;
+      const overeni = validujOvereniKodu(req.body as unknown);
+      if (!overeni.uspech || overeni.data === null) {
+        posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
+        return;
+      }
+      try {
+        const db = getDb();
+        const nalezene = await db
+          .select({
+            code: registrationCodes.code,
+            expiresAt: registrationCodes.expiresAt,
+          })
+          .from(registrationCodes)
+          .where(sql`${registrationCodes.code} = ${overeni.data.kod}`)
+          .limit(1);
+        const rozhodnuti = rozhodniOvereniKodu(nalezene, overeni.data.kod, Date.now());
+        if (!rozhodnuti.platny) {
+          posliChybu(res, "VALIDATION_ERROR", rozhodnuti.chyba, {
+            kod: [rozhodnuti.chyba],
+          });
+          return;
+        }
+        const telo: OvereniKoduResponse = {
+          platny: true,
+          expiresAt: rozhodnuti.expiresAt,
+        };
+        res.status(200).json(telo);
+      } catch {
+        if (!res.headersSent) {
+          posliChybu(res, "VNITRNI_CHYBA", "Něco se pokazilo. Zkus to prosím později.");
+        }
+      }
+    })();
+  });
 
   /* ------------------------------------------------------------------ */
   /* POST /api/register — veřejné, platný kód povinný.                   */
@@ -299,7 +381,7 @@ export function registrujUcty(app: Express): void {
           posliChybu(res, "SPATNE_HESLO", "Špatný e-mail nebo heslo.");
           return;
         }
-        nastavSessionCookie(res, podepisToken(uzivatel.id));
+        nastavSessionCookie(res, podepisToken(uzivatel.id), overeni.data.zustat);
         const telo: PrihlaseniResponse = { user: toApiUser(uzivatel) };
         res.json(telo);
       } catch {

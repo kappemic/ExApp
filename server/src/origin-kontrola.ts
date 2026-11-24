@@ -11,7 +11,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { jeBearerBezSessionCookie } from "./auth";
 import { posliChybu } from "./chyby";
-import { normalizujPuvod } from "./cors";
+import { normalizujPuvod, puvodJePovoleny } from "./cors";
 
 const BEZPECNE_METODY: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -27,22 +27,28 @@ export interface PozadavekNaPuvod {
 export function smiPuvod(
   pozadavek: PozadavekNaPuvod,
   povolene: ReadonlySet<string>,
+  lokalniPorty = false,
 ): boolean {
   if (BEZPECNE_METODY.has(pozadavek.metoda.toUpperCase())) return true;
   if (pozadavek.bearerBezCookie) return true;
   if (pozadavek.origin === undefined) return true;
   const puvod = normalizujPuvod(pozadavek.origin);
   if (puvod === null) return false;
-  return povolene.has(puvod) || puvod === normalizujPuvod(pozadavek.vlastniPuvod);
+  const vlastni = normalizujPuvod(pozadavek.vlastniPuvod);
+  return puvod === vlastni || puvodJePovoleny(puvod, povolene, lokalniPorty);
 }
 
 /** Middleware for `/api`. Reads headers only and leaves the body to the handlers. */
-export function vytvorOriginKontrolu(povolene: readonly string[]): RequestHandler {
+export function vytvorOriginKontrolu(
+  povolene: readonly string[],
+  volby: { lokalniPorty?: boolean } = {},
+): RequestHandler {
   const mnozina = new Set(
     povolene
       .map((puvod) => normalizujPuvod(puvod))
       .filter((puvod): puvod is string => puvod !== null),
   );
+  const lokalniPorty = volby.lokalniPorty === true;
   return (req: Request, res: Response, next: NextFunction): void => {
     const povoleno = smiPuvod(
       {
@@ -52,6 +58,7 @@ export function vytvorOriginKontrolu(povolene: readonly string[]): RequestHandle
         vlastniPuvod: `${req.protocol}://${req.host}`,
       },
       mnozina,
+      lokalniPorty,
     );
     if (!povoleno) {
       posliChybu(res, "ZAKAZANO", "Požadavek z téhle adresy není povolený.");

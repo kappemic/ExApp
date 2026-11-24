@@ -1,27 +1,24 @@
-import { useEffect, useState, type FormEvent, type JSX } from "react";
-import { Link, useParams } from "react-router-dom";
-import HlavickaZpet, { AkceHlavicky } from "../components/HlavickaZpet";
+import { useEffect, useState, type JSX } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import HlavickaZpet, { AkceHlavicky, ZpetPocitac } from "../components/HlavickaZpet";
 import PrazdnyStav from "../components/PrazdnyStav";
-import { DlazdiceStatu, IdentitaProfilu, RadekUdaje } from "../components/ProfilKusy";
-import { SEZNAM_KARTA_TRIDA, SeznamKarta, SeznamRadek } from "../components/SeznamKarta";
+import { DlazdiceStatu, IdentitaProfilu, KARTA_UDAJU, ProfilovaKarta, RadekUdaje, ZALOZKY_DRAHA, tridaZalozky } from "../components/ProfilKusy";
+import Ikona from "../components/Ikona";
+import { barvaAvataru } from "../components/AvatarKruh";
+import { formatCelyDatum } from "../lib/expedition-utils";
 import { IkonaKompas } from "../components/SeznamIkony";
-import SpodniSheet, { PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../components/shell/SpodniSheet";
-import {
-  chybaKombinace3D,
-  mapujRoliNaProfil,
-  type Clenstvi,
-  type ClenskyProfil,
-  type Funkce,
-} from "../config/roles";
 import { useAuth } from "../hooks/useAuth";
 import { apiBase } from "../lib/api-base";
-import { popisekClena } from "../lib/clen-popisek";
+import { popisekClena, profilClena } from "../lib/clen-popisek";
 import { inicialyProAvatar } from "../lib/storage/avatar";
-import { nactiCleny, ulozProfilClena } from "../lib/admin-clenove";
+import SpravaClena from "../components/Admin/SpravaClena";
+import { nactiCleny } from "../lib/admin-clenove";
 import { formatKmZaokrouhlene } from "../lib/format-cisla";
 import { getZebricek } from "../lib/zebricky-api";
 import { expediceListUrl, type UserListItem } from "../shared/api-types";
 import { klicSoukromehoChatu } from "../shared/soukromy-klic";
+import { zobrazeniTelefonu } from "../shared/telefon";
+import { useNabeh } from "../lib/pohyb";
 
 type VypravaRadka = { id: string; nazev: string; datum: string };
 
@@ -74,6 +71,16 @@ async function nactiVypravyClena(
   }
 }
 
+function StavVypravy({ probehla }: { probehla: boolean }): JSX.Element {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-[9px] py-1 text-[11px] font-semibold ${probehla ? "bg-povrch-2 text-mech" : "bg-mlha text-smrk"}`}
+    >
+      {probehla ? "Proběhla" : "Jede"}
+    </span>
+  );
+}
+
 export default function ClenDetailPage(): JSX.Element {
   const { id } = useParams();
   const { user, isSuperadmin } = useAuth();
@@ -83,30 +90,9 @@ export default function ClenDetailPage(): JSX.Element {
   const [souhrn, setSouhrn] = useState<Souhrn>(null);
   const [vypravy, setVypravy] = useState<VypravaRadka[] | null>(null);
   const [sprava, setSprava] = useState(false);
-  const [ukladam, setUkladam] = useState(false);
-  const [chybaRole, setChybaRole] = useState<string | null>(null);
-  const [clenstvi, setClenstvi] = useState<Clenstvi>("clen");
-  const [funkce, setFunkce] = useState<Funkce>(null);
-  const [jeAdmin, setJeAdmin] = useState(false);
-  const [jeHlavni, setJeHlavni] = useState(false);
-
-  function profilZE(clenPolozka: UserListItem): ClenskyProfil {
-    const zaklad = mapujRoliNaProfil(clenPolozka.role);
-    return {
-      clenstvi: clenPolozka.clenstvi ?? zaklad.clenstvi,
-      funkce: clenPolozka.funkce ?? zaklad.funkce,
-      isAdmin: clenPolozka.isAdmin ?? zaklad.isAdmin,
-    };
-  }
-
-  function naplnSpravu(polozka: UserListItem): void {
-    const profil = profilZE(polozka);
-    setClenstvi(profil.clenstvi);
-    setFunkce(profil.funkce);
-    setJeAdmin(profil.isAdmin || polozka.isSuperadmin);
-    setJeHlavni(polozka.isSuperadmin);
-  }
-
+  const [zalozka, setZalozka] = useState<"prehled" | "vypravy">("prehled");
+  const zalozkaRef = useNabeh<HTMLDivElement>(zalozka);
+  const navigate = useNavigate();
   useEffect(() => {
     const hledane = id ?? "";
     if (hledane.length === 0) {
@@ -131,7 +117,6 @@ export default function ClenDetailPage(): JSX.Element {
         return;
       }
       setClen(nalezeny);
-      naplnSpravu(nalezeny);
       setStav("hotovo");
 
       const zebricek = await getZebricek("celkem");
@@ -156,36 +141,6 @@ export default function ClenDetailPage(): JSX.Element {
     };
   }, [id]);
 
-  async function naUlozitRoli(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (clen === null || ukladam) return;
-    const kombinace = chybaKombinace3D({
-      clenstvi,
-      funkce,
-      isAdmin: jeAdmin || jeHlavni,
-    });
-    if (kombinace !== null) {
-      setChybaRole(kombinace);
-      return;
-    }
-    setUkladam(true);
-    setChybaRole(null);
-    const vysledek = await ulozProfilClena(clen.id, {
-      clenstvi,
-      funkce,
-      isAdmin: jeAdmin || jeHlavni,
-      isSuperadmin: jeHlavni,
-    });
-    setUkladam(false);
-    if (!vysledek.ok) {
-      setChybaRole(vysledek.chyba);
-      return;
-    }
-    setClen(vysledek.data);
-    naplnSpravu(vysledek.data);
-    setSprava(false);
-  }
-
   const chatCil = ((): string => {
     if (user === null || clen === null) return "/chat";
     const klic = klicSoukromehoChatu(user.id, clen.id);
@@ -193,21 +148,20 @@ export default function ClenDetailPage(): JSX.Element {
     return `/chat?konverzace=${encodeURIComponent(klic)}`;
   })();
 
-  const otevriSpravu = (): void => {
-    if (clen === null) return;
-    naplnSpravu(clen);
-    setChybaRole(null);
-    setSprava(true);
-  };
+  const otevriSpravu = (): void => setSprava(true);
   const dnes = new Date().toISOString().slice(0, 10);
+  const kmText = souhrn === null ? "—" : formatKmZaokrouhlene(souhrn.km).replace(/\s*km$/, "");
+  const zakladna = clen !== null && profilClena(clen).clenstvi === "aktivni_clen" ? "Aktivní člen" : "Člen";
+  const serazeneVypravy = [...(vypravy ?? [])].sort((a, b) => b.datum.localeCompare(a.datum));
   const jsemTo = user !== null && clen !== null && user.id === clen.id;
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
+    <main className="mx-auto w-full max-w-lg px-5 pb-6 sm:max-w-[46rem] pt-4 sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <HlavickaZpet
         zpet="/cleny"
         zpetPopisek="Zpět na členy"
         titulek="Člen"
+        className="min-[90rem]:hidden"
         akce={
           isSuperadmin && clen !== null ? (
             <AkceHlavicky onClick={otevriSpravu}>Spravovat</AkceHlavicky>
@@ -215,193 +169,220 @@ export default function ClenDetailPage(): JSX.Element {
         }
       />
 
-      {stav === "nacteni" ? (
-        <p className="mt-6 text-base text-mech">Načítám člena…</p>
-      ) : null}
+      {stav === "nacteni" ? <p className="mt-6 text-sm text-mech">Načítám člena…</p> : null}
 
       {stav === "chyba" ? (
-        <p role="alert" className="mt-6 text-base font-bold text-inkoust">
+        <p role="alert" className="mt-6 text-sm font-semibold text-inkoust">
           {chyba}
         </p>
       ) : null}
 
       {stav === "hotovo" && clen !== null ? (
-        <article className="mt-4">
-          <IdentitaProfilu
-            inicialy={inicialyProAvatar(clen.jmeno)}
-            jmeno={clen.jmeno}
-            podtitul={clen.email}
-            stitek={popisekClena(profilZE(clen), clen.isSuperadmin)}
-          />
-
-          <div className="grid grid-cols-3 gap-2">
-            <DlazdiceStatu popisek="Výprav" hodnota={souhrn === null ? "—" : String(souhrn.vypravy)} />
-            <DlazdiceStatu
-              popisek="Kilometrů"
-              hodnota={souhrn === null ? "—" : formatKmZaokrouhlene(souhrn.km).replace(/\s*km$/, "")}
+        <article className="mt-5 min-[90rem]:mt-0">
+          {/* Telefon */}
+          <div className="flex flex-col gap-5 min-[90rem]:hidden">
+            <IdentitaProfilu
+              inicialy={inicialyProAvatar(clen.jmeno)}
+              url={clen.avatarUrl}
+              jmeno={clen.jmeno}
+              podtitul={clen.email}
+              stitek={popisekClena(profilClena(clen), clen.isSuperadmin)}
+              barva={barvaAvataru(clen.jmeno)}
             />
-            <DlazdiceStatu popisek="Fotek" hodnota={String(clen.pocetFotek)} />
+            <div className="grid grid-cols-3 gap-2">
+              <DlazdiceStatu popisek="Výprav" hodnota={souhrn === null ? "—" : String(souhrn.vypravy)} />
+              <DlazdiceStatu popisek="Kilometrů" hodnota={kmText} />
+              <DlazdiceStatu popisek="Fotek" hodnota={String(clen.pocetFotek)} />
+            </div>
+            {!jsemTo ? (
+              <section className="flex flex-col gap-2.5 rounded-2xl border border-linka bg-povrch p-4 shadow-jemny">
+                <h3 className="font-sans text-[15px] font-semibold tracking-normal text-inkoust">Soukromá zpráva</h3>
+                <p className="text-[13px] leading-[18px] text-mech">Otevře soukromý chat. Uvidíte ho jen vy dva.</p>
+                <Link
+                  to={chatCil}
+                  className="nahled-press inline-flex h-11 w-full items-center justify-center rounded-xl bg-smrk px-4 text-sm font-semibold text-povrch"
+                >
+                  Napsat zprávu
+                </Link>
+              </section>
+            ) : null}
+            <ul aria-label="Údaje člena" className={KARTA_UDAJU}>
+              <RadekUdaje popisek="E-mail" hodnota={clen.email} />
+              <RadekUdaje popisek="Telefon" hodnota={zobrazeniTelefonu(clen.telefon).text} />
+              <RadekUdaje popisek="Discord nick" hodnota={clen.discordNick ?? ""} />
+              <RadekUdaje popisek="Škola" hodnota={clen.skola} />
+              <RadekUdaje popisek="Třída" hodnota={clen.trida} />
+              <RadekUdaje popisek="Datum narození" hodnota={clen.narozeniny === null ? "" : formatujDen(clen.narozeniny)} />
+              <RadekUdaje popisek="Role" hodnota={popisekClena(profilClena(clen), clen.isSuperadmin)} />
+              <RadekUdaje popisek="Základna" hodnota={zakladna} />
+            </ul>
+            {vypravy !== null && vypravy.length > 0 ? (
+              <section className="overflow-hidden rounded-2xl border border-linka bg-povrch">
+                <div className="flex items-center justify-between px-3.5 pb-2 pt-3.5">
+                  <h2 className="font-display text-base font-bold text-inkoust">Výpravy</h2>
+                  <span className="text-[13px] font-medium text-ink-3">{vypravy.length}</span>
+                </div>
+                <ul className="m-0 list-none divide-y divide-linka p-0">
+                  {serazeneVypravy.map((vyprava) => (
+                    <li key={vyprava.id}>
+                      <Link
+                        to={`/vypravy/${encodeURIComponent(vyprava.id)}`}
+                        className="nahled-press flex min-h-11 items-center gap-3 px-3.5 py-2.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-[13.5px] font-semibold text-inkoust">{vyprava.nazev}</span>
+                          <span className="text-xs text-ink-3">{formatujDen(vyprava.datum)}</span>
+                        </span>
+                        <StavVypravy probehla={vyprava.datum.slice(0, 10) < dnes} />
+                        <Ikona nazev="chevron-right" className="size-4 text-ink-3" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {isSuperadmin ? (
+              <button
+                type="button"
+                className="nahled-press inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-linka bg-povrch px-4 text-sm font-semibold text-inkoust"
+                onClick={otevriSpravu}
+              >
+                <Ikona nazev="settings-2" className="size-4 text-mech" />
+                Spravovat člena
+              </button>
+            ) : null}
           </div>
 
-          {!jsemTo ? (
-            <section className="mt-4 rounded-2xl border border-linka bg-povrch p-4">
-              <h3 className="font-display text-[17px] font-bold text-inkoust">Soukromá zpráva</h3>
-              <p className="mt-1 text-sm leading-relaxed text-ink-3">
-                Otevře se vaše společná konverzace v chatu.
-              </p>
-              <Link
-                to={chatCil}
-                className="nahled-press mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-smrk px-4 text-[15px] font-semibold text-papir"
-              >
-                Napsat zprávu
-              </Link>
-            </section>
-          ) : null}
+          {/* Počítač */}
+          <div className="hidden min-[90rem]:block">
+            <ZpetPocitac zpet="/cleny" popisek="Zpět" />
+            <div className="flex items-end justify-between gap-6">
+              <div className="flex min-w-0 flex-col gap-3">
+                <h1 className="font-display text-[46px] font-bold leading-[45px] tracking-[-1.4px] text-inkoust">{clen.jmeno}</h1>
+                <nav aria-label="Cesta" className="flex items-center gap-1.5 text-[13px] font-medium">
+                  <Link to="/cleny" className="text-ink-3 hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk">
+                    Členové
+                  </Link>
+                  <Ikona nazev="chevron-right" className="size-3 text-ink-3" />
+                  <span className="text-mech">Profil člena</span>
+                </nav>
+              </div>
+              <div className="flex shrink-0 items-center gap-2.5">
+                {isSuperadmin ? (
+                  <button
+                    type="button"
+                    onClick={otevriSpravu}
+                    className="nahled-press inline-flex h-[46px] items-center gap-2 rounded-xl border border-linka bg-povrch px-4 text-sm font-semibold text-inkoust hover:bg-povrch-2"
+                  >
+                    <Ikona nazev="settings-2" className="size-4 text-mech" />
+                    Spravovat
+                  </button>
+                ) : null}
+                {!jsemTo ? (
+                  <Link
+                    to={chatCil}
+                    className="nahled-press inline-flex h-[46px] items-center gap-2 rounded-xl bg-smrk px-[18px] text-sm font-semibold text-povrch hover:opacity-90"
+                  >
+                    <Ikona nazev="message-circle" className="size-4" />
+                    Napsat
+                  </Link>
+                ) : null}
+              </div>
+            </div>
 
-          <ul aria-label="Údaje člena" className={`mt-4 ${SEZNAM_KARTA_TRIDA}`}>
-            <RadekUdaje popisek="E-mail" hodnota={clen.email} />
-            <RadekUdaje popisek="Telefon" hodnota={clen.telefon ?? ""} />
-            <RadekUdaje popisek="Discord nick" hodnota={clen.discordNick ?? ""} />
-            <RadekUdaje popisek="Škola" hodnota={clen.skola} />
-            <RadekUdaje popisek="Třída" hodnota={clen.trida} />
-            <RadekUdaje
-              popisek="Narozeniny"
-              hodnota={clen.narozeniny === null ? "" : formatujDen(clen.narozeniny)}
-            />
-          </ul>
-
-          {vypravy !== null ? (
-            <section className="mt-6">
-              <h2 className="px-1 font-display text-[17px] font-bold text-inkoust">Výpravy</h2>
-              {vypravy.length === 0 ? (
-                <PrazdnyStav
-                  className="mt-2"
-                  ikona={<IkonaKompas />}
-                  nadpis="Zatím žádná výprava"
-                  text="Až se člen přihlásí na výpravu, objeví se tady."
-                />
-              ) : (
-                <SeznamKarta popisek="Výpravy člena" className="mt-2">
-                  {vypravy.map((vyprava) => {
-                    const probehla = vyprava.datum.slice(0, 10) < dnes;
-                    return (
-                      <SeznamRadek
-                        key={vyprava.id}
-                        odkaz={`/vypravy?vyprava=${encodeURIComponent(vyprava.id)}`}
-                        nazev={vyprava.nazev}
-                        podtitul={formatujDen(vyprava.datum)}
-                        vpravo={
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              probehla ? "bg-povrch-2 text-ink-3" : "bg-mlha text-smrk"
-                            }`}
+            <div className="mt-8 grid grid-cols-[340px_minmax(0,1fr)] items-start gap-7">
+              <ProfilovaKarta
+                inicialy={inicialyProAvatar(clen.jmeno)}
+                url={clen.avatarUrl}
+                barva={`${barvaAvataru(clen.jmeno)} text-povrch`}
+                jmeno={clen.jmeno}
+                email={clen.email}
+                stitky={[
+                  { text: popisekClena(profilClena(clen), clen.isSuperadmin), ton: "neutralni" },
+                  ...(zakladna !== popisekClena(profilClena(clen), clen.isSuperadmin) ? [{ text: zakladna, ton: "smrk" as const }] : []),
+                ]}
+                cisla={[
+                  { popisek: "Výprav", hodnota: souhrn === null ? "—" : String(souhrn.vypravy) },
+                  { popisek: "Kilometry", hodnota: kmText },
+                  { popisek: "Fotky", hodnota: String(clen.pocetFotek) },
+                ]}
+              />
+              <div className="flex min-w-0 flex-col gap-5">
+                <div role="tablist" aria-label="Části profilu" className={ZALOZKY_DRAHA}>
+                  {(["prehled", "vypravy"] as const).map((id) => (
+                    <button key={id} type="button" role="tab" aria-selected={zalozka === id} onClick={() => setZalozka(id)} className={tridaZalozky(zalozka === id)}>
+                      {id === "prehled" ? "Přehled" : "Výpravy"}
+                    </button>
+                  ))}
+                </div>
+                <div ref={zalozkaRef} className="flex min-w-0 flex-col gap-5">
+                <section className="overflow-hidden rounded-2xl border border-linka bg-povrch shadow-denik">
+                  <h2 className="border-b border-linka px-5 py-[18px] font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">
+                    {zalozka === "prehled" ? "Poslední výpravy" : "Výpravy"}
+                  </h2>
+                  {serazeneVypravy.length === 0 ? (
+                    <PrazdnyStav ikona={<IkonaKompas />} nadpis="Zatím žádná výprava" text="Až se člen přihlásí na výpravu, objeví se tady." vzhled="vlozeny" />
+                  ) : (
+                    <ul className="m-0 list-none divide-y divide-linka p-0">
+                      {(zalozka === "prehled" ? serazeneVypravy.slice(0, 4) : serazeneVypravy).map((vyprava) => (
+                        <li key={vyprava.id}>
+                          <Link
+                            to={`/vypravy/${encodeURIComponent(vyprava.id)}`}
+                            className="bez-prejeti flex items-center gap-4 px-5 py-4 hover:bg-povrch-2/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
                           >
-                            {probehla ? "Proběhla" : "Jede"}
-                          </span>
-                        }
-                      />
-                    );
-                  })}
-                </SeznamKarta>
-              )}
-            </section>
-          ) : null}
-
-          {isSuperadmin ? (
-            <button
-              type="button"
-              className="nahled-press mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-linka bg-povrch px-4 text-[15px] font-semibold text-inkoust"
-              onClick={otevriSpravu}
-            >
-              Spravovat člena
-            </button>
-          ) : null}
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="text-[13.5px] font-semibold text-inkoust">{vyprava.nazev}</span>
+                              <span className="text-xs text-ink-3">{formatCelyDatum(vyprava.datum)}</span>
+                            </span>
+                            <StavVypravy probehla={vyprava.datum.slice(0, 10) < dnes} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                {zalozka === "prehled" ? (
+                  <section className="flex flex-col gap-4 rounded-2xl border border-linka bg-povrch p-5 shadow-denik">
+                    <h2 className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">Kontakt</h2>
+                    <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-4">
+                      {(
+                        [
+                          ["Jméno", clen.jmeno.split(" ")[0] ?? ""],
+                          ["Příjmení", clen.jmeno.split(" ").slice(1).join(" ")],
+                          ["E-mail", clen.email],
+                          ["Telefon", zobrazeniTelefonu(clen.telefon).text],
+                          ["Datum narození", clen.narozeniny === null ? "" : formatujDen(clen.narozeniny)],
+                          ["Discord nick", clen.discordNick ?? ""],
+                          ["Škola", clen.skola],
+                          ["Třída", clen.trida],
+                        ] as const
+                      ).map(([popisek, hodnota]) => (
+                        <div key={popisek} className="flex min-w-0 flex-col gap-1.5">
+                          <dt className="text-[11.5px] font-semibold text-mech">{popisek}</dt>
+                          <dd className="m-0 min-w-0 break-words text-[13.5px] text-inkoust">{hodnota.trim().length > 0 ? hodnota : "—"}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ) : null}
+                </div>
+                <div className="flex justify-end">
+                  <Link to="/cleny" className="inline-flex h-11 items-center px-2.5 text-sm font-semibold text-mech hover:text-inkoust">
+                    Zpět na členy
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
         </article>
       ) : null}
 
-      <SpodniSheet
-        otevreno={sprava && isSuperadmin && clen !== null}
-        titulek="Správa člena"
+      <SpravaClena
+        clen={sprava && isSuperadmin ? clen : null}
         onZavrit={() => setSprava(false)}
-      >
-        <form className="flex flex-col gap-3" onSubmit={(event) => void naUlozitRoli(event)}>
-          <label htmlFor="sprava-clenstvi" className="text-sm font-bold">
-            Členství
-          </label>
-          <select
-            id="sprava-clenstvi"
-            value={clenstvi}
-            onChange={(e) => {
-              const nove = e.target.value === "aktivni_clen" ? "aktivni_clen" : "clen";
-              setClenstvi(nove);
-              if (nove === "clen") setFunkce(null);
-            }}
-            className="min-h-11 w-full rounded-2xl border border-pole bg-papir px-3 text-base text-inkoust"
-          >
-            <option value="clen">Člen</option>
-            <option value="aktivni_clen">Aktivní člen</option>
-          </select>
-          <label htmlFor="sprava-funkce" className="text-sm font-bold">
-            Funkce
-          </label>
-          <select
-            id="sprava-funkce"
-            value={funkce ?? ""}
-            disabled={clenstvi === "clen"}
-            onChange={(e) => {
-              const v = e.target.value;
-              setFunkce(v === "rada" ? "rada" : v === "vedeni" ? "vedeni" : null);
-            }}
-            className="min-h-11 w-full rounded-2xl border border-pole bg-papir px-3 text-base text-inkoust disabled:opacity-50"
-          >
-            <option value="">Bez funkce</option>
-            <option value="rada">Rada</option>
-            <option value="vedeni">Vedení</option>
-          </select>
-          <label className="flex min-h-11 items-center gap-2 text-base">
-            <input
-              type="checkbox"
-              checked={jeAdmin}
-              disabled={jeHlavni}
-              onChange={(e) => setJeAdmin(e.target.checked)}
-            />
-            Admin
-          </label>
-          <label className="flex min-h-11 items-center gap-2 text-base">
-            <input
-              type="checkbox"
-              checked={jeHlavni}
-              onChange={(e) => {
-                const zapnuto = e.target.checked;
-                setJeHlavni(zapnuto);
-                if (zapnuto) setJeAdmin(true);
-              }}
-            />
-            Hlavní admin
-          </label>
-          {chybaRole !== null ? (
-            <p role="alert" className="text-base text-inkoust">
-              {chybaRole}
-            </p>
-          ) : null}
-          <div className={PATICKA_SHEETU}>
-            <button
-              type="button"
-              onClick={() => setSprava(false)}
-              className={TLACITKO_PATICKY_ZRUSIT}
-            >
-              Zrušit
-            </button>
-            <button
-              type="submit"
-              disabled={ukladam}
-              className={TLACITKO_PATICKY_HLAVNI}
-            >
-              {ukladam ? "Ukládám…" : "Uložit"}
-            </button>
-          </div>
-        </form>
-      </SpodniSheet>
+        onUlozeno={setClen}
+        onSmazano={() => navigate("/cleny", { replace: true })}
+      />
     </main>
   );
 }

@@ -80,10 +80,38 @@ export function formatVelikostiPrilohy(bajty: number): string {
   return `${text.replace(".", ",")} MB`;
 }
 
+const nahledyOptimisticke = new Map<string, string>();
+let citacOptimistickych = 0;
+
+/** Místní náhled fotky, která se teprve nahrává. */
+export function nahledOptimisticke(id: string): string | null {
+  return nahledyOptimisticke.get(id) ?? null;
+}
+
+/** Fotka, kterou prohlížeč umí ukázat rovnou z disku (HEIC ne). */
+export function jeFotkaKNahledu(soubor: File): boolean {
+  return /^image\/(?:jpeg|png|webp|gif)$/.test(soubor.type);
+}
+
+function idOptimisticke(soubor: File, index: number): string {
+  citacOptimistickych += 1;
+  const id = `optimistic-soubor-${index}-${soubor.size}-${citacOptimistickych}`;
+  if (jeFotkaKNahledu(soubor) && typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+    const url = URL.createObjectURL(soubor);
+    nahledyOptimisticke.set(id, url);
+    // Po potvrzení serverem už náhled nikdo nekreslí.
+    setTimeout(() => {
+      nahledyOptimisticke.delete(id);
+      URL.revokeObjectURL(url);
+    }, 120_000);
+  }
+  return id;
+}
+
 /** Placeholder rows so a file-only send is visible before the server answers. */
 export function optimistickePrilohy(soubory: readonly File[]): ApiZpravaPriloha[] {
   return soubory.map((soubor, index) => ({
-    id: `optimistic-soubor-${index}-${soubor.size}`,
+    id: idOptimisticke(soubor, index),
     nazev: soubor.name.trim().length > 0 ? soubor.name : "soubor",
     bajty: soubor.size,
     contentType: soubor.type.length > 0 ? soubor.type : "application/octet-stream",

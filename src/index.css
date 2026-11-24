@@ -23,6 +23,12 @@
   --color-okr-tmavy: #5e4518;
   --color-okr-100: #f3eadb;
   --color-salvej: #7e9370;
+  /* Zástupný text v polích formulářů a nejslabší popisky (čas zprávy, pořadí). */
+  --color-ink-4: #9aa189;
+  --color-ink-5: #b3b8a4;
+  /* Podklad pole na počítači a záhlaví tabulek. */
+  --color-pole-podklad: #f6f2e6;
+  --color-zahlavi: #fbf8ef;
   /* Field border stays darker than the hairline. Do not set this to #e4dfce. */
   --color-pole: #8c937b;
 
@@ -40,6 +46,16 @@
   --shadow-razitko: 0 1px 2px rgba(38, 48, 26, 0.12),
     0 2px 8px rgba(38, 48, 26, 0.1);
 
+  /* Řádkování „normal“ i u pojmenovaných velikostí, jak je má návrh. */
+  --text-xs--line-height: normal;
+  --text-sm--line-height: normal;
+  --text-base--line-height: normal;
+  --text-lg--line-height: normal;
+  --text-xl--line-height: normal;
+  --text-2xl--line-height: normal;
+  --text-3xl--line-height: normal;
+  --text-4xl--line-height: normal;
+
   --font-sans: "Onest Variable", "Segoe UI", system-ui, -apple-system,
     "Helvetica Neue", Arial, sans-serif;
   --font-display: "Bricolage Grotesque Variable", "Onest Variable",
@@ -54,6 +70,9 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overscroll-behavior: none;
+    /* Návrh má řádkování „normal“ (podle písma). Tailwind dává 1.5 a všechny
+       nadpisy a řádky tím narostou o pár pixelů. */
+    line-height: normal;
   }
 
   button,
@@ -110,6 +129,15 @@
   }
 }
 
+/* Karta: na telefonu jen jemný stín, od 1440 px i měkký spodní (ExApp.pen). */
+@utility shadow-karta {
+  box-shadow: 0 1px 2px #1c261512;
+
+  @media (width >= 90rem) {
+    box-shadow: 0 1px 2px #1c261512, 0 12px 32px #1c26150f;
+  }
+}
+
 @layer components {
   /* ——— Heatmapa (Krok 4): deníkové ovládání nad OSM dlaždicemi ——— */
   .heatmapa-plocha {
@@ -160,8 +188,8 @@
     line-height: 1.35;
     color: var(--color-inkoust);
     background: var(--color-papir);
-    border: 2px solid var(--color-inkoust);
-    border-radius: 6px;
+    border: 1.5px solid var(--color-linka);
+    border-radius: 9px;
     box-shadow: var(--shadow-denik);
   }
 
@@ -227,8 +255,12 @@ button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):n
   from {
     transform: translateY(100%);
   }
-  to {
-    transform: none;
+}
+
+@keyframes exapp-okno {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
   }
 }
 
@@ -247,17 +279,57 @@ button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):n
   animation: exapp-vstup 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* Telefon: panel vyjede zespodu. Tablet a počítač: okno naběhne na místě. */
 .exapp-sheet {
-  animation: exapp-sheet 280ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation: exapp-sheet 340ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (width >= 48rem) {
+  .exapp-sheet {
+    animation: exapp-okno 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
 }
 
 .exapp-radek {
   animation: exapp-radek 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.exapp-sheet-bez-pohybu {
-  animation: none;
-  transform: none;
+/* Uzel, který React už odebral a jen dohrává odchod (lib/pohyb.ts). */
+[data-odchod],
+[data-odchod] * {
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
+}
+
+/* Drobné vysunutí: hledání ve vlákně, chipy příloh, nabídka zmínek. */
+.nabeh-dolu,
+.nabeh-nahoru {
+  transition:
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@starting-style {
+  .nabeh-dolu {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  .nabeh-nahoru {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.lightbox-nabeh {
+  transition: opacity 180ms ease-out;
+}
+
+@starting-style {
+  .lightbox-nabeh {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -265,57 +337,6 @@ button:not(.nahled-radek):not(.nahled-karta):not(.text-left):not(.bez-prejeti):n
   .exapp-sheet,
   .exapp-radek {
     animation: none;
-    transform: none;
-  }
-}
-
-/* Album picker: ink wash sits on the wrapper. A transform on the select
-   or any ancestor drops clicks on the native option list in Chromium. */
-.fotky-album-vyber {
-  position: relative;
-  isolation: isolate;
-}
-
-.fotky-album-vyber::before {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
-  height: 3px;
-  background: var(--color-inkoust);
-  transform: scaleX(0);
-  transform-origin: left center;
-  pointer-events: none;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.fotky-album-vyber select {
-  position: relative;
-  z-index: 1;
-  background-color: var(--color-papir);
-  color: var(--color-inkoust);
-}
-
-/* The native list inherits the select color. Keep names dark on paper. */
-.fotky-album-vyber select option {
-  background-color: var(--color-papir);
-  color: var(--color-inkoust);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .fotky-album-vyber:hover::before {
-    transform: scaleX(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fotky-album-vyber::before {
-    transition: none;
-  }
-
-  .fotky-album-vyber:hover::before {
     transform: none;
   }
 }
@@ -367,7 +388,7 @@ input[type="file"]:active::-webkit-file-upload-button {
 
 .registrace-nabidka,
 .nabidka-seznam {
-  animation: registrace-nabidka-enter 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation: registrace-nabidka-enter 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -379,19 +400,77 @@ input[type="file"]:active::-webkit-file-upload-button {
 
 /* Trash manage mode: the status line stays one row. The action buttons
    wrap underneath instead of squeezing the label into a vertical strip. */
-[data-fotky-album-toolbar][data-kos-sprava] {
-  flex-direction: column;
-  align-items: stretch;
+/* Pět tlačítek koše se vejde vedle počtu až na počítači. */
+@media (width < 90rem) {
+  [data-fotky-album-toolbar][data-kos-sprava] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  [data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-toolbar-nadpis] {
+    flex: none;
+    width: 100%;
+  }
+
+  [data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-akce-row] {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
-[data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-toolbar-nadpis] {
-  flex: none;
-  width: 100%;
+/* Navigace: ikona vybrané záložky poskočí, jak pod ni bublina doletí. */
+@keyframes lista-poskok {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(-4px) scale(1.08);
+  }
+  70% {
+    transform: translateY(1px) scale(0.98);
+  }
 }
 
-[data-fotky-album-toolbar][data-kos-sprava] [data-fotky-album-akce-row] {
-  width: 100%;
-  justify-content: flex-end;
+.lista-ikona-aktivni {
+  animation: lista-poskok 310ms cubic-bezier(0.3, 0.7, 0.3, 1) 40ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lista-ikona-aktivni {
+    animation: none;
+  }
+}
+
+/* Posuvník karet: karty za krajem zaplouvají do ztracena. Šířky přechodů
+   nastavuje usePosuvnikKaret podle toho, kolik je na které straně schováno. */
+.posuvnik-karet {
+  --vlevo: 0px;
+  --vpravo: 0px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    rgb(0 0 0 / 0.35) calc(var(--vlevo) * 0.45),
+    #000 var(--vlevo),
+    #000 calc(100% - var(--vpravo)),
+    rgb(0 0 0 / 0.35) calc(100% - var(--vpravo) * 0.45),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    rgb(0 0 0 / 0.35) calc(var(--vlevo) * 0.45),
+    #000 var(--vlevo),
+    #000 calc(100% - var(--vpravo)),
+    rgb(0 0 0 / 0.35) calc(100% - var(--vpravo) * 0.45),
+    transparent
+  );
+}
+
+@media (width >= 90rem) {
+  .posuvnik-karet {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
 /* Upload/download status sits above the mobile tab bar (z-40) and is
@@ -416,8 +495,8 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 }
 
-/* Posuvník podle ExApp.pen („Počítač · Posuvník“): okraj 16 px, dráha 6 px
-   v barvě linky, jezdec v ink-3, oboje plně zaoblené. Jen pro myš, na dotyku
+/* Posuvník: tišší než v ExApp.pen (přání klubu). Okraj 16 px, bez viditelné
+   dráhy, světlý jezdec 6 px, který ztmavne až pod myší. Jen pro myš, na dotyku
    zůstává systémový překryvný posuvník. `.posuvnik` je užší varianta do seznamů
    uvnitř panelů. Chromium bere ::-webkit-scrollbar, jen když chybí scrollbar-color,
    proto standardní vlastnosti dostane jen Firefox. */
@@ -429,16 +508,12 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 
   ::-webkit-scrollbar-track {
-    background-color: var(--color-linka);
-    background-clip: padding-box;
-    border: solid transparent;
-    border-width: 8px 5px;
-    border-radius: 999px;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
     min-height: 48px;
-    background-color: var(--color-ink-3);
+    background-color: color-mix(in oklab, var(--color-ink-5) 55%, transparent);
     background-clip: padding-box;
     border: solid transparent;
     border-width: 8px 5px;
@@ -446,13 +521,13 @@ input[type="file"]:active::-webkit-file-upload-button {
     transition: background-color 160ms ease-out;
   }
 
-  ::-webkit-scrollbar-track:horizontal,
   ::-webkit-scrollbar-thumb:horizontal {
     border-width: 5px 8px;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-mech);
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-ink-4);
   }
 
   ::-webkit-scrollbar-corner {
@@ -464,11 +539,9 @@ input[type="file"]:active::-webkit-file-upload-button {
     width: 10px;
   }
 
-  .posuvnik::-webkit-scrollbar-track,
   .posuvnik::-webkit-scrollbar-thumb,
-  .seznam-scroll::-webkit-scrollbar-track,
   .seznam-scroll::-webkit-scrollbar-thumb {
-    border-width: 4px 2px;
+    border-width: 4px 3px;
   }
 }
 
@@ -478,7 +551,7 @@ input[type="file"]:active::-webkit-file-upload-button {
     .posuvnik,
     .seznam-scroll {
       scrollbar-width: thin;
-      scrollbar-color: var(--color-ink-3) var(--color-linka);
+      scrollbar-color: var(--color-ink-5) transparent;
     }
   }
 }
@@ -498,4 +571,66 @@ input[type="file"]:active::-webkit-file-upload-button {
   .exapp-zavoj {
     animation: none;
   }
+}
+
+/* Smazání zprávy v chatu je pod bublinou. Na dotyku se řádek rozbalí klepnutím
+   na bublinu. S myší má místo pořád a ukáže se najetím, aby vlákno neskákalo. */
+.bublina-akce {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms ease-out;
+}
+
+.bublina-akce > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bublina-sloupec[data-akce="true"] .bublina-akce,
+.bublina-akce:focus-within {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bublina-akce {
+    grid-template-rows: 1fr;
+  }
+
+  .bublina-sloupec:hover .bublina-akce {
+    opacity: 1;
+  }
+
+  .bublina-akce .smazat-zpravu {
+    min-width: 0;
+    min-height: 24px;
+    font-size: 11.5px;
+  }
+
+  .bublina-pata {
+    margin-block: -4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bublina-akce {
+    transition: none;
+  }
+}
+
+/* Teplotní mapa tras: podklad ztlumený do palety, vynikají jen čáry. */
+.heatmapa-plocha .leaflet-tile-pane {
+  opacity: 0.6;
+  filter: sepia(0.35) saturate(0.5);
+}
+.heatmapa-plocha.leaflet-container {
+  background: var(--color-povrch-2);
+}
+.heatmapa-plocha .leaflet-control-attribution {
+  background: transparent;
+  font-size: 9px;
+  color: var(--color-ink-3);
 }

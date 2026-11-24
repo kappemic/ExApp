@@ -2,10 +2,10 @@ import type { JSX, ReactNode } from "react";
 import { useVodorovnyPosun } from "../../hooks/useVodorovnyPosun";
 
 const SIPKA =
-  "bez-prejeti flex min-h-[44px] min-w-[36px] items-center justify-center rounded-full text-mech transition-colors motion-reduce:transition-none hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]";
+  "bez-prejeti -my-1.5 flex min-h-[44px] min-w-[36px] items-center justify-center rounded-full text-mech transition-colors motion-reduce:transition-none hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]";
 
 const DNES =
-  "bez-prejeti group inline-flex min-h-[44px] items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]";
+  "bez-prejeti group -my-1.5 inline-flex min-h-[44px] items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]";
 
 function Sipka({ smer }: { smer: "vlevo" | "vpravo" }): JSX.Element {
   return (
@@ -25,16 +25,14 @@ export interface PosunKalendare {
 
 /**
  * Hlavička mřížky podle ExApp.pen: „‹ Listopad 2026 ›“ vlevo, „Dnes“ vpravo,
- * jeden řádek i na telefonu. Přepínač měsíc/týden je pod ní (od `lg` vedle).
+ * jeden řádek i na telefonu.
  */
 export function KalendarHlavicka({
   nadpis,
-  prepinac,
   posun,
   velkePismeno = false,
 }: {
   nadpis: ReactNode;
-  prepinac?: ReactNode;
   posun: PosunKalendare;
   velkePismeno?: boolean;
 }): JSX.Element {
@@ -45,7 +43,7 @@ export function KalendarHlavicka({
           <Sipka smer="vlevo" />
         </button>
         <h2
-          className={`min-w-0 truncate text-center text-base font-bold tabular-nums text-inkoust ${
+          className={`min-w-0 truncate text-center font-display text-base font-bold text-inkoust ${
             velkePismeno ? "first-letter:uppercase" : ""
           }`}
         >
@@ -60,7 +58,6 @@ export function KalendarHlavicka({
           </span>
         </button>
       </div>
-      {prepinac !== undefined ? <div className="min-w-0">{prepinac}</div> : null}
     </div>
   );
 }
@@ -80,7 +77,7 @@ export function KalendarPlocha({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="kalendar-plocha mt-3 [touch-action:pan-y] min-[90rem]:mt-0"
+      className="kalendar-plocha mt-5 [touch-action:pan-y] min-[90rem]:mt-0"
       onPointerDown={posun.onPointerDown}
       onClickCapture={posun.onClickCapture}
     >

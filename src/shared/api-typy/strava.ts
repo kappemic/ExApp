@@ -599,6 +599,8 @@ export interface ZebrickyRadek {
   vypravy: number;
   /** Součet km (null = nespárováno → 0, zaokrouhleno na 1 desetinné). */
   km: number;
+  /** Rok založení účtu („člen od 2024“). Starší server ho neposílá. */
+  clenOd?: number;
 }
 
 /** Odpověď plural žebříčku — řazeno vypravy DESC, km DESC, jmeno ASC. */

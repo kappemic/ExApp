@@ -1,13 +1,16 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AuthRozlozeni from "../components/Auth/AuthRozlozeni";
 import {
-  AUTH_VSTUP,
-  AUTH_VSTUP_CHYBA,
+  AuthChyba,
+  AuthHeslo,
+  AuthNadpis,
+  AuthOdkaz,
   AuthPrimarniTlacitko,
+  AuthSpodek,
   AuthVstup,
-  IkonaZamku,
 } from "../components/Auth/authVstupy";
+import Ikona from "../components/Ikona";
 import { useAuth, type PolePrihlaseni } from "../hooks/useAuth";
 
 /**
@@ -32,7 +35,7 @@ export default function LoginPage(): JSX.Element {
   const [email, setEmail] = useState("");
   const [heslo, setHeslo] = useState("");
   const [ukazatHeslo, setUkazatHeslo] = useState(false);
-  const [zustat, setZustat] = useState(false);
+  const [zustat, setZustat] = useState(true);
   const [chyby, setChyby] = useState<ChybyPoli>({});
   const [formChyba, setFormChyba] = useState<string | null>(null);
   const [odesilaSe, setOdesilaSe] = useState(false);
@@ -52,35 +55,23 @@ export default function LoginPage(): JSX.Element {
     setOdesilaSe(false);
   }
 
-  const hesloTridy = chyby.heslo !== undefined ? AUTH_VSTUP_CHYBA : AUTH_VSTUP;
-
   return (
     <AuthRozlozeni>
-      <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight text-inkoust">
-        Přihlas se do klubu
-      </h1>
+      <AuthNadpis>Přihlas se do klubu</AuthNadpis>
 
       <form
         onSubmit={onSubmit}
         noValidate
         aria-describedby={formChyba !== null ? "prihlaseni-chyba" : undefined}
-        className="mt-7 flex flex-col gap-4"
+        className="flex flex-1 flex-col gap-5 lg:flex-none lg:gap-[22px]"
       >
-        {formChyba !== null ? (
-          <p
-            id="prihlaseni-chyba"
-            role="alert"
-            className="rounded-2xl border-2 border-red-800/40 bg-red-50 px-3.5 py-2.5 text-sm font-bold text-red-900"
-          >
-            {formChyba}
-          </p>
-        ) : null}
+        {formChyba !== null ? <AuthChyba id="prihlaseni-chyba">{formChyba}</AuthChyba> : null}
 
         <AuthVstup
           id="prihlaseni-email"
           label="E-mail"
           chyba={chyby.email}
-          ikonaVpravo={<IkonaZamku />}
+          ikona="mail"
           vstup={{
             name: "email",
             type: "email",
@@ -88,65 +79,48 @@ export default function LoginPage(): JSX.Element {
             inputMode: "email",
             value: email,
             onChange: (e) => setEmail(e.target.value),
-            placeholder: "anezka@example.cz",
-            className: chyby.email !== undefined ? AUTH_VSTUP_CHYBA : AUTH_VSTUP,
+            placeholder: "jmeno@email.cz",
           }}
         />
 
-        <div>
-          <label htmlFor="prihlaseni-heslo" className="mb-1.5 block text-sm font-semibold text-inkoust">
-            Heslo
-          </label>
-          <div className="relative">
-            <input
-              id="prihlaseni-heslo"
-              name="heslo"
-              type={ukazatHeslo ? "text" : "password"}
-              autoComplete="current-password"
-              value={heslo}
-              onChange={(e) => setHeslo(e.target.value)}
-              aria-invalid={chyby.heslo !== undefined}
-              aria-describedby={chyby.heslo !== undefined ? "prihlaseni-heslo-chyba" : undefined}
-              placeholder="Tvoje heslo"
-              className={`${hesloTridy} pr-12`}
-            />
-            <button
-              type="button"
-              aria-pressed={ukazatHeslo}
-              aria-label={ukazatHeslo ? "Skrýt heslo" : "Zobrazit heslo"}
-              onClick={() => setUkazatHeslo((v) => !v)}
-              className="absolute inset-y-0 right-0 flex min-h-11 min-w-11 items-center justify-center rounded-full pr-1 text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none"
-            >
-              <IkonaZamku />
-            </button>
-          </div>
-          {chyby.heslo !== undefined ? (
-            <p id="prihlaseni-heslo-chyba" role="alert" className="mt-1.5 text-xs font-bold text-red-800">
-              {chyby.heslo}
-            </p>
-          ) : null}
-        </div>
+        <AuthHeslo
+          id="prihlaseni-heslo"
+          chyba={chyby.heslo}
+          ukazat={ukazatHeslo}
+          onUkazat={() => setUkazatHeslo((v) => !v)}
+          vstup={{
+            name: "heslo",
+            autoComplete: "current-password",
+            value: heslo,
+            onChange: (e) => setHeslo(e.target.value),
+            placeholder: "••••••••",
+          }}
+        />
 
-        <label className="flex min-h-11 items-center gap-3 text-base text-inkoust">
+        <label className="-my-3 flex min-h-11 cursor-pointer items-center gap-2 self-start text-[12.5px] text-mech lg:font-medium">
           <input
             type="checkbox"
             checked={zustat}
             onChange={(e) => setZustat(e.target.checked)}
-            className="h-5 w-5 rounded border-pole accent-smrk"
+            className="peer sr-only"
           />
+          <span
+            aria-hidden="true"
+            className={`flex size-[22px] shrink-0 items-center justify-center rounded-[6px] text-povrch peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-smrk lg:size-[18px] lg:rounded-[5px] ${
+              zustat ? "bg-smrk" : "border border-pole bg-povrch"
+            }`}
+          >
+            {zustat ? <Ikona nazev="check" className="size-3 lg:size-[11px]" tloustka={3} /> : null}
+          </span>
           Zůstat přihlášený
         </label>
 
-        <AuthPrimarniTlacitko type="submit" disabled={odesilaSe}>
-          {odesilaSe ? "Přihlašuji…" : "Přihlásit se"}
-        </AuthPrimarniTlacitko>
-
-        <p className="text-center text-sm leading-relaxed text-mech">
-          Máš pozvánkový kód od vedoucího?{" "}
-          <Link to="/register" className="font-semibold text-smrk underline underline-offset-2">
-            Zadej kód
-          </Link>
-        </p>
+        <AuthSpodek>
+          <AuthPrimarniTlacitko type="submit" disabled={odesilaSe}>
+            {odesilaSe ? "Přihlašuji…" : "Přihlásit se"}
+          </AuthPrimarniTlacitko>
+          <AuthOdkaz otazka="Máš pozvánkový kód od vedoucího?" odkaz="Zadej kód" cil="/register" />
+        </AuthSpodek>
       </form>
     </AuthRozlozeni>
   );

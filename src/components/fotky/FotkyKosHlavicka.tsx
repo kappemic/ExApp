@@ -1,11 +1,10 @@
 import type { JSX } from "react";
 import {
-  fotkyHoverBgJantar,
-  fotkyHoverBgJantarPlne,
-  fotkyHoverBgSmrk,
-  fotkyHoverBgOkrPlne,
   fotkyKosAkceObal,
-  fotkyTlacitkoZaklad,
+  fotkyTlacitkoOdebrat,
+  fotkyTlacitkoPrimarni,
+  fotkyTlacitkoSekundarni,
+  fotkyTlacitkoSmazat,
 } from "./fotky-ui";
 
 interface FotkyKosHlavickaProps {
@@ -38,17 +37,9 @@ export default function FotkyKosHlavicka({
 }: FotkyKosHlavickaProps): JSX.Element | null {
   if (!maFotky) return null;
 
-  const zaklad = `${fotkyTlacitkoZaklad} min-w-0 w-full rounded-lg border px-2.5 text-center text-xs font-bold leading-tight whitespace-normal disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm`;
-  const neutralni = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik`;
-  const spravovat = `${fotkyTlacitkoZaklad} w-auto rounded-lg border border-linka bg-papir px-3 text-sm font-bold text-inkoust shadow-denik ring-1 ring-smrk/30`;
-  const obnovit = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-smrk/35 ${fotkyHoverBgSmrk}`;
-  const obnovitPlne = `${zaklad} border-okr bg-okr text-inkoust shadow-denik ${fotkyHoverBgOkrPlne}`;
-  const destruktivniPlne = `${zaklad} border-jantar bg-jantar text-papir shadow-denik ${fotkyHoverBgJantarPlne}`;
-  const destruktivniOkraj = `${zaklad} border-linka bg-povrch text-inkoust shadow-denik ring-1 ring-jantar/35 ${fotkyHoverBgJantar}`;
-
   if (!spravovaciRezim) {
     return (
-      <button type="button" onClick={onZacniSpravovat} className={spravovat}>
+      <button type="button" onClick={onZacniSpravovat} className={`${fotkyTlacitkoSekundarni} shrink-0`}>
         Spravovat
       </button>
     );
@@ -60,20 +51,20 @@ export default function FotkyKosHlavicka({
         type="button"
         onClick={onZrusit}
         disabled={pracujeSe}
-        className={`${neutralni} order-last col-span-2 sm:order-none sm:col-span-1`}
+        className={`${fotkyTlacitkoSekundarni} order-last col-span-2 sm:order-none sm:col-span-1`}
       >
         Zrušit
       </button>
 
       <div className="contents" data-fotky-kos-skupina-obnovit role="group" aria-label="Obnovit fotky">
-        <button type="button" onClick={onObnovitVse} disabled={pracujeSe} className={obnovitPlne}>
+        <button type="button" onClick={onObnovitVse} disabled={pracujeSe} className={fotkyTlacitkoSekundarni}>
           Obnovit vše
         </button>
         <button
           type="button"
           onClick={onObnovitVybrane}
           disabled={vybranyPocet === 0 || pracujeSe}
-          className={obnovit}
+          className={fotkyTlacitkoPrimarni}
           aria-label={
             vybranyPocet > 0 ? `Obnovit vybrané (${vybranyPocet})` : "Obnovit vybrané"
           }
@@ -83,7 +74,7 @@ export default function FotkyKosHlavicka({
       </div>
 
       <div
-        className="hidden h-6 w-px shrink-0 bg-inkoust/15 sm:block"
+        className="hidden h-6 w-px shrink-0 bg-linka sm:block"
         aria-hidden
         data-fotky-kos-delic
       />
@@ -92,23 +83,24 @@ export default function FotkyKosHlavicka({
         <button
           type="button"
           onClick={onSmazatNatrvaloVse}
+          aria-label="Smazat vše natrvalo"
           disabled={pracujeSe}
-          className={destruktivniPlne}
+          className={fotkyTlacitkoOdebrat}
         >
-          Smazat natrvalo vše
+          Smazat vše
         </button>
         <button
           type="button"
           onClick={onSmazatNatrvaloVybrane}
           disabled={vybranyPocet === 0 || pracujeSe}
-          className={destruktivniOkraj}
+          className={fotkyTlacitkoSmazat}
           aria-label={
             vybranyPocet > 0
-              ? `Smazat natrvalo vybrané (${vybranyPocet})`
-              : "Smazat natrvalo vybrané"
+              ? `Smazat vybrané natrvalo (${vybranyPocet})`
+              : "Smazat vybrané natrvalo"
           }
         >
-          Smazat natrvalo vybrané
+          Smazat vybrané
         </button>
       </div>
     </div>

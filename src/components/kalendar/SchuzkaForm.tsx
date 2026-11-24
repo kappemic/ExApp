@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent, type JSX } from "react";
 import { OBLAST_FORMULARE, POLE_FORMULARE, POPISEK_POLE } from "../formular-tridy";
-import { PATICKA_SHEETU } from "../shell/SpodniSheet";
+import { OBSAH_PANELU, PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
+import Ikona from "../Ikona";
 import {
   VALIDACE,
   VALIDACNI_ZPRAVY,
@@ -35,6 +36,8 @@ interface SchuzkaFormProps {
   poznamkaPopisu?: string | null;
   /** SpodniSheet already shows the title — hide the duplicate h2. */
   bezNadpisu?: boolean;
+  /** Nová schůzka podle návrhu popis nemá. */
+  bezPopisu?: boolean;
 }
 
 const DATUM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,7 +67,7 @@ function jeRealneDatum(hodnota: string): boolean {
 }
 
 function tridyPole(maChybu: boolean): string {
-  return maChybu ? `${POLE_FORMULARE} !border-red-800` : POLE_FORMULARE;
+  return maChybu ? `${POLE_FORMULARE} !border-akcent` : POLE_FORMULARE;
 }
 
 /**
@@ -84,6 +87,7 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
     onZrusit,
     poznamkaPopisu = null,
     bezNadpisu = false,
+    bezPopisu = false,
   } = props;
   const idPrefix = useId();
   const [nazev, setNazev] = useState<string>(vychozi?.nazev ?? "");
@@ -147,14 +151,14 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
         <h2 className="text-xl font-bold tracking-tight">{nadpis}</h2>
       )}
       {serverChyba !== null && (
-        <p role="alert" className="mt-3 rounded-2xl border border-red-800/40 bg-red-50 px-3 py-2 text-sm font-bold text-red-900">
+        <p role="alert" className="mb-3.5 rounded-[10px] bg-[#fbede7] p-3 text-[13px] leading-[18px] text-[#7a3a1b]">
           {serverChyba}
         </p>
       )}
 
-      <div className="mt-1 space-y-3.5">
+      <div className={OBSAH_PANELU}>
         <div>
-          <label htmlFor={`${idPrefix}-nazev`} className={POPISEK_POLE}>
+          <label htmlFor={`${idPrefix}-nazev`} className={`block ${POPISEK_POLE}`}>
             Název
           </label>
           <input
@@ -164,10 +168,10 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             maxLength={VALIDACE.schuzkaNazevMaxDelka}
             onChange={(e) => setNazev(e.target.value)}
             aria-invalid={chybaPole("nazev") !== undefined}
-            className={`mt-1.5 ${tridyPole(chybaPole("nazev") !== undefined)}`}
+            className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(chybaPole("nazev") !== undefined)}`}
           />
           {chybaPole("nazev") !== undefined && (
-            <p role="alert" className="mt-1 text-sm font-bold text-red-900">
+            <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
               {chybaPole("nazev")}
             </p>
           )}
@@ -175,35 +179,37 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor={`${idPrefix}-datum`} className={POPISEK_POLE}>
+            <label htmlFor={`${idPrefix}-datum`} className={`block ${POPISEK_POLE}`}>
               Den
             </label>
             <DatumVstup
               id={`${idPrefix}-datum`}
               value={datum}
               onChange={setDatum}
+              ikona="chevron-down"
               ariaInvalid={chybaPole("datum") !== undefined}
-              className={`mt-1.5 ${tridyPole(chybaPole("datum") !== undefined)}`}
+              className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(chybaPole("datum") !== undefined)}`}
             />
             {chybaPole("datum") !== undefined && (
-              <p role="alert" className="mt-1 text-sm font-bold text-red-900">
+              <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
                 {chybaPole("datum")}
               </p>
             )}
           </div>
           <div>
-            <label htmlFor={`${idPrefix}-cas`} className={POPISEK_POLE}>
+            <label htmlFor={`${idPrefix}-cas`} className={`block ${POPISEK_POLE}`}>
               Čas
             </label>
             <CasVstup
               id={`${idPrefix}-cas`}
               value={cas}
               onChange={setCas}
+              ikona="chevron-down"
               ariaInvalid={chybaPole("cas") !== undefined}
-              className={`mt-1.5 ${tridyPole(chybaPole("cas") !== undefined)}`}
+              className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(chybaPole("cas") !== undefined)}`}
             />
             {chybaPole("cas") !== undefined && (
-              <p role="alert" className="mt-1 text-sm font-bold text-red-900">
+              <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
                 {chybaPole("cas")}
               </p>
             )}
@@ -211,34 +217,30 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
         </div>
 
         <div>
-          <label htmlFor={`${idPrefix}-opakovani`} className={POPISEK_POLE}>
+          <label htmlFor={`${idPrefix}-opakovani`} className={`block ${POPISEK_POLE}`}>
             Opakování
           </label>
-          {/* No series end date. OpakovaniSchuzky stays jednorazova | tydenni. */}
+          {/* Konec řady backend neukládá. OpakovaniSchuzky je jednorazova | tydenni. */}
           <VyberPole
             id={`${idPrefix}-opakovani`}
             value={opakovani}
             onChange={(dalsi) =>
               setOpakovani(dalsi === "tydenni" ? "tydenni" : "jednorazova")
             }
-            className={`mt-1.5 ${tridyPole(false)}`}
+            ikona="repeat"
+            className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(false)}`}
             volby={[
               { value: "jednorazova", popisek: "Jednorázově" },
               { value: "tydenni", popisek: "Každý týden" },
             ]}
           />
-          {opakovani === "tydenni" ? (
-            <p className="mt-1 text-sm text-mech" aria-hidden="true">
-              Každý týden do 15. 12. — ukázka z návrhu, systém neukládá datum konce.
-            </p>
-          ) : null}
         </div>
 
         <div>
-          <label htmlFor={`${idPrefix}-mistnost`} className={POPISEK_POLE}>
-            Místo{" "}
-            <span className="font-normal text-ink-3">(nepovinné)</span>
+          <label htmlFor={`${idPrefix}-mistnost`} className={`block ${POPISEK_POLE}`}>
+            Místo
           </label>
+          <div className="relative mt-1.5">
           <input
             id={`${idPrefix}-mistnost`}
             type="text"
@@ -246,17 +248,21 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             maxLength={VALIDACE.schuzkaMistnostMaxDelka}
             onChange={(e) => setMistnost(e.target.value)}
             aria-invalid={chybaPole("mistnost") !== undefined}
-            className={`mt-1.5 ${tridyPole(chybaPole("mistnost") !== undefined)}`}
+            className={`min-[90rem]:pr-9 ${tridyPole(chybaPole("mistnost") !== undefined)}`}
           />
+            <Ikona nazev="map-pin" className="pointer-events-none absolute right-3 top-1/2 hidden size-3.5 -translate-y-1/2 text-ink-3 min-[90rem]:block" />
+          </div>
           {chybaPole("mistnost") !== undefined && (
-            <p role="alert" className="mt-1 text-sm font-bold text-red-900">
+            <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
               {chybaPole("mistnost")}
             </p>
           )}
         </div>
 
+        {/* Návrh nové schůzky popis nemá; při úpravě zůstává, ať jde opravit. */}
+        {bezPopisu ? null : (
         <div>
-          <label htmlFor={`${idPrefix}-popis`} className={POPISEK_POLE}>
+          <label htmlFor={`${idPrefix}-popis`} className={`block ${POPISEK_POLE}`}>
             Popis <span className="font-normal text-ink-3">(nepovinný)</span>
           </label>
           <textarea
@@ -266,25 +272,26 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             maxLength={VALIDACE.schuzkaPopisMaxDelka}
             onChange={(e) => setPopis(e.target.value)}
             aria-invalid={chybaPole("popis") !== undefined}
-            className={`mt-1.5 ${OBLAST_FORMULARE} ${chybaPole("popis") !== undefined ? "!border-red-800" : ""}`}
+            className={`mt-1.5 ${OBLAST_FORMULARE} ${chybaPole("popis") !== undefined ? "!border-akcent" : ""}`}
           />
           {chybaPole("popis") !== undefined && (
-            <p role="alert" className="mt-1 text-sm font-bold text-red-900">
+            <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
               {chybaPole("popis")}
             </p>
           )}
           {poznamkaPopisu !== null && opakovani === "tydenni" && (
-            <p className="mt-1 text-sm text-mech">{poznamkaPopisu}</p>
+            <p className="mt-1.5 text-[12.5px] leading-[17px] text-mech">{poznamkaPopisu}</p>
           )}
         </div>
+        )}
       </div>
 
-      <div className={`${PATICKA_SHEETU} mt-5`}>
+      <div className={PATICKA_SHEETU}>
         <button
           type="button"
           onClick={onZrusit}
           title="Zavřít bez uložení"
-          className="min-h-11 flex-1 whitespace-nowrap rounded-xl border border-linka bg-povrch px-4 py-2 text-base font-semibold sm:flex-none transition-colors motion-reduce:transition-none hover:bg-mlha focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+          className={TLACITKO_PATICKY_ZRUSIT}
         >
           Zrušit
         </button>
@@ -292,7 +299,7 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
           type="submit"
           disabled={odesilaSe}
           title={odesilaSe ? "Ukládám…" : odeslatPopisek}
-          className="min-h-11 flex-1 whitespace-nowrap rounded-xl bg-smrk px-4 py-2 sm:flex-none text-base font-semibold text-papir transition-colors motion-reduce:transition-none hover:brightness-95 focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 [touch-action:manipulation]"
+          className={TLACITKO_PATICKY_HLAVNI}
         >
           {odesilaSe ? "Ukládám…" : odeslatPopisek}
         </button>

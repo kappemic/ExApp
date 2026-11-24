@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { PolozkaAgendy } from "../../lib/agenda";
-import { isoCasNaEvropsky } from "../../lib/evropsky-cas";
+import { casKZobrazeni } from "../../lib/evropsky-cas";
+import { rozlozSraz } from "../../lib/sraz";
 import Ikona from "../Ikona";
 import { RailKarta, RailRadek } from "./RailKarta";
 
@@ -54,10 +55,13 @@ export default function AgendaBrzy({
           {viditelne.map(({ datum, udalost }) => {
             const { den, cislo } = popisDne(datum);
             const jeSchuzka = udalost.typ === "schuzka";
-            const cas = isoCasNaEvropsky(udalost.cas ?? "");
+            const cas = casKZobrazeni(udalost.cas ?? "");
+            const sraz = jeSchuzka || udalost.detail === null ? null : rozlozSraz(udalost.detail);
             const casti = jeSchuzka
               ? [cas, udalost.detail]
-              : [cas, udalost.detail !== null ? `sraz ${udalost.detail}` : "výprava"];
+              : sraz !== null
+                ? [sraz.cas, sraz.misto.length > 0 ? `sraz ${sraz.misto}` : null]
+                : [cas, "výprava"];
             const podtitul =
               casti.filter((c): c is string => typeof c === "string" && c.length > 0).join(" · ") ||
               "Schůzka";

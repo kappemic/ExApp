@@ -63,7 +63,7 @@ function RazitkoData({ isoDatum }: { isoDatum: string }): JSX.Element {
       aria-hidden="true"
       className="flex w-14 shrink-0 -rotate-3 flex-col items-center rounded-[4px] border-2 border-inkoust/80 bg-papir px-1 py-1.5 shadow-razitko"
     >
-      <span className="text-xl font-extrabold leading-none tabular-nums">
+      <span className="text-xl font-extrabold leading-none">
         {formatDen(isoDatum)}
       </span>
       <span className="mt-1 text-[11px] font-bold lowercase leading-none tracking-widest">
@@ -149,7 +149,7 @@ export default function ExpeditionCard({
 
         <div className="mt-3">
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-semibold tabular-nums">
+            <span className="font-semibold">
               {bezOmezeni ? (
                 <>
                   {expedice.kapacita.prihlaseno}

@@ -1,5 +1,5 @@
 import { forwardRef, useId, useRef, useState, type JSX } from "react";
-import Ikona from "./Ikona";
+import Ikona, { type NazevIkony } from "./Ikona";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 
 export interface VolbaVyberu {
@@ -13,6 +13,12 @@ interface VyberPoleProps {
   onChange: (value: string) => void;
   volby: readonly VolbaVyberu[];
   className?: string;
+  /** Text, dokud není nic vybrané. */
+  prazdnyPopisek?: string;
+  /** Ikona vpravo místo šipky (opakování). */
+  ikona?: NazevIkony;
+  /** Ikona vlevo před textem; šipka se pak neukazuje. */
+  ikonaVlevo?: NazevIkony;
   disabled?: boolean;
 }
 
@@ -20,7 +26,7 @@ interface VyberPoleProps {
  * Closed field with a paper list instead of the browser menu.
  */
 const VyberPole = forwardRef<HTMLButtonElement, VyberPoleProps>(function VyberPole(
-  { id, value, onChange, volby, className = "", disabled = false },
+  { id, value, onChange, volby, className = "", prazdnyPopisek = "Vyber", ikona = "chevron-down", ikonaVlevo, disabled = false },
   ref,
 ): JSX.Element {
   const [otevreno, setOtevreno] = useState(false);
@@ -40,12 +46,17 @@ const VyberPole = forwardRef<HTMLButtonElement, VyberPoleProps>(function VyberPo
         aria-expanded={otevreno}
         aria-controls={panelId}
         onClick={() => setOtevreno((stav) => !stav)}
-        className={`pole-vyberu flex items-center justify-between gap-2 text-left ${className}`}
+        className={`pole-vyberu flex items-center gap-2 text-left ${ikonaVlevo === undefined ? "justify-between" : ""} ${className}`}
       >
-        <span className={`min-w-0 truncate ${prazdne ? "font-medium text-mech" : ""}`}>
-          {vybrana?.popisek ?? "Vyber"}
+        {ikonaVlevo !== undefined ? (
+          <Ikona nazev={ikonaVlevo} className="hidden size-3.5 text-ink-3 min-[90rem]:block" />
+        ) : null}
+        <span className={`min-w-0 truncate ${prazdne && ikonaVlevo === undefined ? "font-medium text-mech" : ""}`}>
+          {vybrana?.popisek ?? prazdnyPopisek}
         </span>
-        <Ikona nazev="chevron-down" className={`size-4 text-mech transition-transform motion-reduce:transition-none ${otevreno ? "rotate-180" : ""}`} />
+        {ikonaVlevo === undefined ? (
+          <Ikona nazev={ikona} className={`size-4 text-mech transition-transform motion-reduce:transition-none min-[90rem]:size-3.5 min-[90rem]:text-ink-3 ${otevreno && ikona === "chevron-down" ? "rotate-180" : ""}`} />
+        ) : null}
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}

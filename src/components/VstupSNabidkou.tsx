@@ -80,14 +80,14 @@ export default function VstupSNabidkou({
             id={seznamId}
             role="listbox"
             style={{ top: ram.top, left: ram.left, width: ram.width }}
-            className="nabidka-seznam registrace-nabidka fixed z-[70] max-h-48 overflow-y-auto rounded-md border border-linka bg-papir py-1 shadow-denik"
+            className="nabidka-seznam registrace-nabidka posuvnik fixed z-[70] max-h-48 origin-top overflow-y-auto rounded-xl border border-linka bg-povrch p-1.5 shadow-modal"
           >
             {shody.map((polozka, index) => (
               <li key={polozka} role="option" aria-selected={index === zvyrazneny}>
                 <button
                   type="button"
-                  className={`bez-prejeti block min-h-[44px] w-full px-3.5 text-left text-base text-inkoust ${
-                    index === zvyrazneny ? "bg-linka" : ""
+                  className={`bez-prejeti block min-h-[44px] w-full rounded-lg px-2.5 text-left text-[13.5px] font-medium text-inkoust min-[90rem]:min-h-9 ${
+                    index === zvyrazneny ? "bg-mlha text-smrk" : ""
                   }`}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -157,6 +157,8 @@ export default function VstupSNabidkou({
             const polozka = shody[zvyrazneny];
             if (polozka !== undefined) vyber(polozka);
           } else if (e.key === "Escape") {
+            // Zavře jen nabídku, ne panel, ve kterém pole je.
+            e.stopPropagation();
             setOtevreno(false);
           }
         }}

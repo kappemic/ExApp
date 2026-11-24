@@ -7,6 +7,8 @@ import {
   muzeSpravovatSkupiny,
   normalizujPravaSkupiny,
   roleZProfilu,
+  souhrnPrav,
+  vychoziPravaSkupiny,
 } from "../src/lib/skupiny-pristup";
 
 describe("přístup ke skupinám podle rolí", () => {
@@ -75,5 +77,14 @@ describe("přístup ke skupinám podle rolí", () => {
       "11111111-1111-1111-1111-111111111111",
     );
     expect(idZeKliceSkupiny("general")).toBeNull();
+  });
+
+  it("souhrn do přehledu oprávnění oddělí psaní a čtení", () => {
+    expect(prava === null ? null : souhrnPrav(prava)).toEqual({
+      pise: "Aktivní člen, Člen rady",
+      cte: "Člen",
+    });
+    expect(souhrnPrav(vychoziPravaSkupiny())).toEqual({ pise: "všichni", cte: null });
+    expect(souhrnPrav([{ role: "clen", cist: true, psat: false }]).pise).toBe("nikdo");
   });
 });

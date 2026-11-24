@@ -86,16 +86,16 @@ describe("stavova brana Usle (Krok 17)", () => {
   });
 });
 
-describe("mini-mapa prehledu (ExpeditionTrasaPrehled)", () => {
-  it("bez Leafletu a bez reloadu, s pristupnou SVG carou", () => {
+describe("kilometry prehledu (ExpeditionTrasaPrehled)", () => {
+  it("bez mapy a bez reloadu, jen km a prevyseni podle navrhu", () => {
     const obsah = cti(
       "src/components/expeditions/ExpeditionTrasaPrehled.tsx",
     );
     expect(obsah).not.toContain('from "leaflet"');
     expect(obsah).not.toContain("import(\"leaflet\")");
     expect(obsah).not.toContain(".reload()");
-    expect(obsah).toContain('role="img"');
-    expect(obsah).toContain("Trasová čára");
+    expect(obsah).not.toContain("<svg");
+    expect(obsah).toContain("formatKmNaDesetinu");
   });
 
   it("krome verejneho detailu cte i vlastni stav (statistiky/moje)", () => {

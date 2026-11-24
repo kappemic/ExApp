@@ -245,6 +245,14 @@ const CESTY = {
       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
     </>
   ),
+  scan: (
+    <>
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+    </>
+  ),
   x: (
     <>
       <path d="M18 6 6 18" />
@@ -274,6 +282,7 @@ const CESTY = {
       <path d="M8 12h8" />
     </>
   ),
+  play: <polygon points="6 3 20 12 6 21 6 3" />,
   pause: (
     <>
       <rect x="14" y="4" width="4" height="16" rx="1" />

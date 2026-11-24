@@ -128,6 +128,7 @@ export {
 export type {
   UserListItem,
   UsersListResponse,
+  UpravitUdajeUzivatele,
   UpravitUzivateleRequest,
   UpravitUzivateleResponse,
   SmazatUzivateleResponse,
@@ -317,3 +318,5 @@ export {
   ALBA_PATH,
   albumFotkaSouborPath,
 } from "./api-typy/alba";
+export type { NahledOdkazu, NahledOdkazuResponse } from "./api-typy/odkazy";
+export { NAHLED_ODKAZU_PATH, jeNahledOdkazuOdpoved } from "./api-typy/odkazy";

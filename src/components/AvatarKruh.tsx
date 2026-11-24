@@ -6,7 +6,7 @@ interface AvatarKruhProps {
   jmeno: string;
   /** Veřejná https URL. Prázdné nebo rozbitý obrázek spadne na iniciály. */
   url?: string | null;
-  /** `moje` = tmavý kruh (vlastní zpráva), `cizi` = světlý. */
+  /** `moje` = olivová mlha (já), `cizi` = neutrální, `barevny` = plná barva podle jména. */
   ton?: "moje" | "cizi" | "barevny";
   /** Průměr v px (výchozí 36). */
   velikost?: number;
@@ -15,9 +15,10 @@ interface AvatarKruhProps {
 /** Barevné kruhy z ExApp.pen (olivová, okr, šedozelená, terakota), stabilně podle jména. */
 const BAREVNE = ["bg-smrk", "bg-okr", "bg-mech", "bg-akcent"] as const;
 export function barvaAvataru(jmeno: string): string {
-  let soucet = 0;
-  for (let i = 0; i < jmeno.length; i += 1) soucet = (soucet * 31 + jmeno.charCodeAt(i)) >>> 0;
-  return BAREVNE[soucet % BAREVNE.length] ?? "bg-smrk";
+  // FNV-1a, aby se podobná jména rozešla do všech čtyř barev.
+  let otisk = 2166136261;
+  for (let i = 0; i < jmeno.length; i += 1) otisk = Math.imul(otisk ^ jmeno.charCodeAt(i), 16777619);
+  return BAREVNE[(((otisk >>> 13) ^ otisk) >>> 0) % BAREVNE.length] ?? "bg-smrk";
 }
 
 /**
@@ -37,11 +38,11 @@ export default function AvatarKruh({
   const ukazFoto: boolean = cisty.length > 0 && !rozbity;
   const barva: string =
     ton === "moje"
-      ? "bg-inkoust text-papir"
+      ? "bg-mlha text-smrk"
       : ton === "barevny"
-        ? `${barvaAvataru(jmeno)} border-transparent text-papir`
-        : "bg-linka/70 text-inkoust";
-  const rozmer = { width: velikost, height: velikost, flexBasis: velikost, fontSize: Math.round(velikost * 0.34) };
+        ? `${barvaAvataru(jmeno)} text-povrch`
+        : "bg-povrch-2 text-mech";
+  const rozmer = { width: velikost, height: velikost, flexBasis: velikost, fontSize: Math.round(velikost * 0.68) / 2 };
 
   if (ukazFoto) {
     return (
@@ -62,7 +63,7 @@ export default function AvatarKruh({
       aria-hidden="true"
       title={jmeno}
       style={velikost === 36 ? undefined : rozmer}
-      className={`avatar-kruh flex h-9 w-9 shrink-0 grow-0 basis-9 select-none items-center justify-center rounded-full border border-linka text-[13px] ${ton === "barevny" ? "font-semibold" : "font-bold"} ${barva}`}
+      className={`avatar-kruh flex h-9 w-9 shrink-0 grow-0 basis-9 select-none items-center justify-center rounded-full text-[12.5px] font-semibold ${barva}`}
     >
       {inicialyProAvatar(jmeno)}
     </span>

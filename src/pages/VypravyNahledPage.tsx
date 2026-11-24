@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -14,12 +13,13 @@ import SchuzkaForm from "../components/kalendar/SchuzkaForm";
 import UdalostModal from "../components/kalendar/UdalostModal";
 import SpodniSheet from "../components/shell/SpodniSheet";
 import NahledHlavicka from "../components/vypravy-nahled/NahledHlavicka";
-import NahledHistorieStranky from "../components/vypravy-nahled/NahledHistorieStranky";
-import NahledKalendar from "../components/vypravy-nahled/NahledKalendar";
+import KalendarMesicMrizka from "../components/kalendar/KalendarMesic";
+import NabidkaDne from "../components/kalendar/NabidkaDne";
 import NahledPrazdne from "../components/vypravy-nahled/NahledPrazdne";
-import VypravaKarta from "../components/vypravy-nahled/VypravaKarta";
 import VypravaRadek from "../components/vypravy-nahled/VypravaRadek";
 import VypravaSekce from "../components/vypravy-nahled/VypravaSekce";
+import PosuvnikVyprav, { VYPRAV_V_KATEGORII } from "../components/vypravy-nahled/PosuvnikVyprav";
+import VypravyOkno from "../components/vypravy-nahled/VypravyOkno";
 import VypravaHero from "../components/vypravy-nahled/VypravaHero";
 import AgendaBrzy from "../components/vypravy-nahled/AgendaBrzy";
 import RailNeuzavrene from "../components/vypravy-nahled/RailNeuzavrene";
@@ -37,11 +37,10 @@ import {
   type RazeniVyprav,
 } from "../lib/expedice-filtr";
 import { dnesniDatumYmd, formatCelyDatum } from "../lib/expedition-utils";
+import { apiBase } from "../lib/api-base";
 import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
-import { nazevMesice, tydenMrizka, udalostiProMesic, udalostiProTyden } from "../lib/kalendar";
-import Ikona from "../components/Ikona";
+import { nazevMesice, udalostiProMesic } from "../lib/kalendar";
 import KalendarOvladani from "../components/kalendar/KalendarOvladani";
-import { nazevTydne } from "../components/kalendar/KalendarTyden";
 import {
   getSchuzky,
   smazSchuzku,
@@ -51,7 +50,6 @@ import {
 } from "../lib/schuzky-api";
 import type { Expedition } from "../lib/mock-expeditions";
 import { VYPRAVA_PARAM, parseVypravaId } from "../lib/vyprava-deep-link";
-import { rozdelViditelne } from "../lib/sbaleny-seznam";
 import { nastavZadateleZastupnych, zajistiBazenZastupnych } from "../lib/zastupne-fotky";
 import type {
   ApiExpedice,
@@ -60,13 +58,22 @@ import type {
   UpravitSchuzkuRequest,
   VytvoritSchuzkuRequest,
 } from "../shared/api-types";
+import { useNabeh } from "../lib/pohyb";
+import KostraVyprav from "../components/vypravy-nahled/KostraVyprav";
 
 type Zobrazeni = "seznam" | "kalendar";
-type RezimKalendare = "mesic" | "tyden";
 type FiltrVyprav = "vse" | "nejblizsi" | "neuzavrene";
+/** Kategorie otevřená v okně „Zobrazit vše“. */
+type KategorieOkna = "probihajici" | "nadchazejici" | "neuzavrene" | "probehle";
 
 /** Page size of the history archive (`GET /api/expeditions?stav=proběhlá`). */
-const HISTORIE_PAGE_SIZE = 6;
+const HISTORIE_PAGE_SIZE = 12;
+
+/** Jak dlouho se čeká na živý seznam, než se ukáže ten zabalený při buildu. */
+const CEKANI_NA_SERVER_MS = 4000;
+
+/** Poslední seznam ze serveru. Návrat na stránku jím začne a nepřeblikne přes starý. */
+let posledniZivySeznam: Expedition[] | null = null;
 
 function parseZobrazeni(hodnota: string | null): Zobrazeni {
   return hodnota === "kalendar" ? "kalendar" : "seznam";
@@ -98,18 +105,6 @@ function posunMesic(
   if (novy < 1) return { rok: rok - 1, mesic: 12 };
   if (novy > 12) return { rok: rok + 1, mesic: 1 };
   return { rok, mesic: novy };
-}
-
-/** Shift the week anchor by ±7 days (YMD to YMD, unchanged on bad input). */
-function posunKotvu(kotva: string, smer: -1 | 1): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(kotva)) return kotva;
-  const dt = new Date(`${kotva}T12:00:00`);
-  if (Number.isNaN(dt.getTime())) return kotva;
-  dt.setDate(dt.getDate() + smer * 7);
-  const rok = dt.getFullYear();
-  const mesic = String(dt.getMonth() + 1).padStart(2, "0");
-  const den = String(dt.getDate()).padStart(2, "0");
-  return `${rok}-${mesic}-${den}`;
 }
 
 function prevedApiExpedici(api: ApiExpedice): Expedition {
@@ -164,87 +159,26 @@ function sloucSeZivymi(
   return vysledek.sort((a, b) => a.datum.localeCompare(b.datum));
 }
 
-const ZAVRENI_FORMULARE_MS = 220;
-
-/** Pointer close replays the dialog enter. Escape skips it. */
-function useZavreniFormulare(
-  otevreno: boolean,
-  zavrit: () => void,
-): { zavira: boolean; zavri: (hned?: boolean) => void } {
-  const [zavira, setZavira] = useState(false);
-  const bezi = useRef(false);
-  const casovac = useRef<number | null>(null);
-  const zavritRef = useRef(zavrit);
-  zavritRef.current = zavrit;
-
-  const zavri = useCallback((hned = false) => {
-    const snizitPohyb =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (hned || snizitPohyb) {
-      if (casovac.current !== null) {
-        window.clearTimeout(casovac.current);
-        casovac.current = null;
-      }
-      bezi.current = false;
-      setZavira(false);
-      zavritRef.current();
-      return;
-    }
-    if (bezi.current) return;
-    bezi.current = true;
-    setZavira(true);
-    casovac.current = window.setTimeout(() => {
-      casovac.current = null;
-      bezi.current = false;
-      setZavira(false);
-      zavritRef.current();
-    }, ZAVRENI_FORMULARE_MS);
-  }, []);
-
-  useEffect(() => {
-    if (!otevreno) {
-      bezi.current = false;
-      setZavira(false);
-      return;
-    }
-    function naEscape(udalost: KeyboardEvent): void {
-      if (udalost.key !== "Escape") return;
-      udalost.preventDefault();
-      udalost.stopPropagation();
-      zavri(true);
-    }
-    window.addEventListener("keydown", naEscape);
-    return () => window.removeEventListener("keydown", naEscape);
-  }, [otevreno, zavri]);
-
-  useEffect(
-    () => () => {
-      if (casovac.current !== null) window.clearTimeout(casovac.current);
-    },
-    [],
-  );
-
-  return { zavira, zavri };
-}
-
 function SeznamRadku({
   polozky,
+  limit,
   neprectene,
   onDetail,
 }: {
   polozky: Expedition[];
+  /** V přehledu jen první výpravy, zbytek je v okně „Zobrazit vše“. */
+  limit?: number;
   neprectene: ReadonlyMap<string, boolean>;
   onDetail: (expedice: Expedition) => void;
 }): JSX.Element {
   const { viditelne, cislo, pocet, nastav } = useStrankovani(
-    polozky,
+    limit === undefined ? polozky : polozky.slice(0, limit),
     RADKU_NA_STRANKU,
     String(polozky.length),
   );
   return (
     <>
-      <ul className="m-0 list-none divide-y divide-linka overflow-hidden rounded-2xl border border-linka bg-povrch p-0 shadow-jemny min-[90rem]:shadow-denik">
+      <ul className="m-0 list-none divide-y divide-linka overflow-hidden rounded-2xl border border-linka bg-povrch p-0 shadow-karta ">
         {viditelne.map((polozka) => (
           <li key={polozka.id} className="min-w-0">
             <VypravaRadek
@@ -260,80 +194,6 @@ function SeznamRadku({
   );
 }
 
-/**
- * Collapsed archive fills the grid without a short row.
- * Phone is one column, so two rows are two cards. Tablet is two
- * columns, so two rows are four. From `lg` one row is three, from
- * `2xl` one row is four. Breakpoints match the card grid below.
- */
-function limitHistorie(sirka: number): number {
-  // Návrh: na počítači jedna řada 4 karet, na telefonu vodorovný posuvník se vším.
-  if (sirka >= 1440) return 4;
-  return Number.POSITIVE_INFINITY;
-}
-
-function useLimitHistorie(): number {
-  const [limit, setLimit] = useState(() =>
-    typeof window === "undefined" ? 3 : limitHistorie(window.innerWidth),
-  );
-  useEffect(() => {
-    const uplatni = (): void => setLimit(limitHistorie(window.innerWidth));
-    uplatni();
-    window.addEventListener("resize", uplatni);
-    return () => window.removeEventListener("resize", uplatni);
-  }, []);
-  return limit;
-}
-
-function HistorieKarty({
-  polozky,
-  vysunuto,
-  onPrepnout,
-  neprectene,
-  onDetail,
-}: {
-  polozky: Expedition[];
-  vysunuto: boolean;
-  onPrepnout: () => void;
-  neprectene: ReadonlyMap<string, boolean>;
-  onDetail: (expedice: Expedition) => void;
-}): JSX.Element {
-  const limit = useLimitHistorie();
-  const rozdelene = rozdelViditelne(polozky, limit);
-  const karty = vysunuto ? polozky : rozdelene.viditelne;
-  return (
-    <>
-      <ul className="-mx-5 m-0 flex list-none snap-x scroll-px-5 gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none] min-[90rem]:mx-0 min-[90rem]:grid min-[90rem]:grid-cols-4 min-[90rem]:gap-3.5 min-[90rem]:overflow-visible min-[90rem]:px-0">
-        {karty.map((polozka) => (
-          <li key={polozka.id} className="w-[310px] max-w-[85vw] shrink-0 snap-start min-[90rem]:w-auto min-[90rem]:max-w-none">
-            <VypravaKarta
-              expedice={polozka}
-              neprecteno={neprectene.get(polozka.id) === true}
-              onDetail={onDetail}
-            />
-          </li>
-        ))}
-      </ul>
-      {rozdelene.skryte.length > 0 ? (
-        <button
-          type="button"
-          data-historie-vysunout
-          aria-expanded={vysunuto}
-          onClick={onPrepnout}
-          className="nahled-press mt-4 inline-flex min-h-11 touch-manipulation select-none items-center gap-2 rounded-xl border border-linka bg-povrch px-4 text-sm font-semibold text-mech hover:bg-mlha/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`h-4 w-4 ${vysunuto ? "rotate-180" : ""}`}>
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-          {vysunuto
-            ? "Zasunout"
-            : `Vysunout další (${rozdelene.skryte.length})`}
-        </button>
-      ) : null}
-    </>
-  );
-}
-
 export default function VypravyNahledPage(): JSX.Element {
   const { muzeSpravovatVypravy } = useAuth();
   const navigate = useNavigate();
@@ -341,8 +201,11 @@ export default function VypravyNahledPage(): JSX.Element {
   const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
   const surovyParamVyprava: string | null = searchParams.get(VYPRAVA_PARAM);
   const vypravaIdZUrl: string | null = parseVypravaId(surovyParamVyprava);
+  const [nacita, setNacita] = useState<boolean>(
+    () => posledniZivySeznam === null && apiBase().length > 0,
+  );
   const [expedice, setExpedice] = useState<Expedition[]>(
-    () => getExpeditionsSync().data,
+    () => posledniZivySeznam ?? (apiBase().length > 0 ? [] : getExpeditionsSync().data),
   );
   const zmeneneRef = useRef<Set<string>>(new Set());
   const smazaneRef = useRef<Set<string>>(new Set());
@@ -352,10 +215,6 @@ export default function VypravyNahledPage(): JSX.Element {
   );
   const [kalendarMesic, setKalendarMesic] = useState<number>(
     () => aktualniMesic().mesic,
-  );
-  const [rezimKalendare, setRezimKalendare] = useState<RezimKalendare>("mesic");
-  const [kalendarKotva, setKalendarKotva] = useState<string>(() =>
-    dnesniDatumYmd(),
   );
   const [denDetail, setDenDetail] = useState<string | null>(null);
   const [schuzkaDetail, setSchuzkaDetail] = useState<{
@@ -372,20 +231,19 @@ export default function VypravyNahledPage(): JSX.Element {
   const [schuzkaChybyPoli, setSchuzkaChybyPoli] = useState<ChybySchuzky>({});
   const [mazeSeSchuzka, setMazeSeSchuzka] = useState<string | null>(null);
   const [schuzkaOznameni, setSchuzkaOznameni] = useState<string | null>(null);
-  const schuzkaZavreni = useZavreniFormulare(schuzkaForm !== null, () => {
-    setSchuzkaForm(null);
-  });
   const [historie, setHistorie] = useState<Expedition[] | null>(null);
   const [historieStranka, setHistorieStranka] = useState<number>(1);
   const [historieCelkem, setHistorieCelkem] = useState<number | null>(null);
   const [historieStranek, setHistorieStranek] = useState<number>(1);
-  const [historieVysunuta, setHistorieVysunuta] = useState<boolean>(false);
   const historieRef = useRef<Expedition[] | null>(null);
   const historieCelkemRef = useRef<number | null>(null);
   const hledaniId: string = useId();
+  const denRef = useNabeh<HTMLDivElement>(denDetail ?? "", "x");
   const [dotaz, setDotaz] = useState<string>("");
   const [filtrVyprav, setFiltrVyprav] = useState<FiltrVyprav>("vse");
+  const [okno, setOkno] = useState<KategorieOkna | null>(null);
   const [razeni, setRazeni] = useState<RazeniVyprav>("datum");
+  const obsahRef = useNabeh<HTMLDivElement>(`${zobrazeni}-${filtrVyprav}-${razeni}`);
   const [debouncedDotaz, setDebouncedDotaz] = useState<string>("");
 
   useEffect(() => {
@@ -406,16 +264,32 @@ export default function VypravyNahledPage(): JSX.Element {
 
   useEffect(() => {
     let zruseno = false;
+    // Pomalý nebo nedostupný server: ukáže se seznam zabalený při buildu.
+    const zabaleny = (): void => {
+      if (posledniZivySeznam === null) {
+        setExpedice((prev) => (prev.length > 0 ? prev : getExpeditionsSync().data));
+      }
+      setNacita(false);
+    };
+    const casovac = window.setTimeout(zabaleny, CEKANI_NA_SERVER_MS);
     void (async (): Promise<void> => {
       const zive = await getExpeditions();
-      if (zruseno || zive.source !== "db") return;
-      setExpedice((prev) =>
-        sloucSeZivymi(prev, zive.data, zmeneneRef.current, smazaneRef.current),
-      );
-
+      if (zruseno) return;
+      window.clearTimeout(casovac);
+      if (zive.source !== "db") {
+        zabaleny();
+        return;
+      }
+      setExpedice((prev) => {
+        const dalsi = sloucSeZivymi(prev, zive.data, zmeneneRef.current, smazaneRef.current);
+        posledniZivySeznam = dalsi;
+        return dalsi;
+      });
+      setNacita(false);
     })();
     return () => {
       zruseno = true;
+      window.clearTimeout(casovac);
     };
   }, []);
 
@@ -432,11 +306,14 @@ export default function VypravyNahledPage(): JSX.Element {
         setHistorie(null);
         return;
       }
-      setHistorie(
-        ziva.data
-          .filter((e) => !smazaneRef.current.has(e.id))
-          .map((e) => prevedApiExpedici(e)),
-      );
+      const nove = ziva.data
+        .filter((e) => !smazaneRef.current.has(e.id))
+        .map((e) => prevedApiExpedici(e));
+      setHistorie((pred) => {
+        if (historieStranka === 1 || pred === null) return nove;
+        const maId = new Set(pred.map((e) => e.id));
+        return [...pred, ...nove.filter((e) => !maId.has(e.id))];
+      });
       if (ziva.pagination !== undefined) {
         setHistorieCelkem(ziva.pagination.totalItems);
         setHistorieStranek(ziva.pagination.totalPages);
@@ -464,7 +341,7 @@ export default function VypravyNahledPage(): JSX.Element {
     [expedice],
   );
   const probihajici: Expedition[] = useMemo(
-    () => [...rozdelene.probihajici].sort((a, b) => a.datum.localeCompare(b.datum)),
+    () => [...rozdelene.probihajici].sort((a, b) => b.datum.localeCompare(a.datum)),
     [rozdelene],
   );
   const nadchazejici: Expedition[] = useMemo(
@@ -475,8 +352,8 @@ export default function VypravyNahledPage(): JSX.Element {
     () =>
       [...rozdelene.cekaNaUzavreni].sort(
         (a, b) =>
-          a.datum.localeCompare(b.datum) ||
-          (a.datumDo ?? a.datum).localeCompare(b.datumDo ?? b.datum),
+          b.datum.localeCompare(a.datum) ||
+          (b.datumDo ?? b.datum).localeCompare(a.datumDo ?? a.datum),
       ),
     [rozdelene],
   );
@@ -500,9 +377,11 @@ export default function VypravyNahledPage(): JSX.Element {
   }, [historie, expedice]);
   const historieZeServeru = historie !== null;
   useEffect(() => {
+    if (nacita) return;
     nastavZadateleZastupnych([...probihajici, ...nadchazejici].map((vyprava) => vyprava.id));
-  }, [probihajici, nadchazejici]);
+  }, [nacita, probihajici, nadchazejici]);
   useEffect(() => {
+    if (nacita) return;
     let zruseno = false;
     void (async () => {
       // Wider than the archive page, so each current trip can borrow a different photo.
@@ -519,11 +398,8 @@ export default function VypravyNahledPage(): JSX.Element {
     return () => {
       zruseno = true;
     };
-  }, [probehle]);
+  }, [nacita, probehle]);
   const hledaSe: boolean = normalizujProVyhledavani(debouncedDotaz).length > 0;
-  useEffect(() => {
-    setHistorieVysunuta(false);
-  }, [historieStranka, hledaSe]);
   const neuzavreneFiltrovane: Expedition[] = useMemo(
     () =>
       muzeSpravovatVypravy
@@ -550,13 +426,18 @@ export default function VypravyNahledPage(): JSX.Element {
     probehleFiltrovane.length;
   const { neprecteneVypravy } = useKonverzacePrehled();
   const neprecteneMapa: ReadonlyMap<string, boolean> = neprecteneVypravy;
+  // Hledání v hlavičce zúží i kalendář.
   const kalendarUdalosti = useMemo(
-    () => udalostiProMesic({ expedice, schuzky }, kalendarRok, kalendarMesic),
-    [expedice, schuzky, kalendarRok, kalendarMesic],
-  );
-  const kalendarUdalostiTyden = useMemo(
-    () => udalostiProTyden({ expedice, schuzky }, kalendarKotva),
-    [expedice, schuzky, kalendarKotva],
+    () =>
+      udalostiProMesic(
+        {
+          expedice: filtrujExpedicePodleJmena(expedice, debouncedDotaz),
+          schuzky: filtrujExpedicePodleJmena(schuzky, debouncedDotaz),
+        },
+        kalendarRok,
+        kalendarMesic,
+      ),
+    [expedice, schuzky, debouncedDotaz, kalendarRok, kalendarMesic],
   );
   const expedicePodleId = useMemo(
     () => new Map(expedice.map((e) => [e.id, e])),
@@ -590,18 +471,10 @@ export default function VypravyNahledPage(): JSX.Element {
     return () => window.clearInterval(id);
   }, []);
   const orezanyDotaz = debouncedDotaz.trim();
-  /** Nejbližší výprava pro velký náhled: probíhající, jinak první nadcházející. */
-  const heroVyprava: Expedition | undefined = hledaSe
-    ? undefined
-    : (probihajici[0] ?? nadchazejici[0]);
-  const heroProbiha: boolean =
-    heroVyprava !== undefined && probihajici[0]?.id === heroVyprava.id;
+  /** Velký náhled je nejbližší nadcházející výprava, probíhající má vlastní sekci. */
+  const heroVyprava: Expedition | undefined = hledaSe ? undefined : nadchazejici[0];
   const agenda = useMemo(
     () => nejblizsiAgenda({ expedice, schuzky }, dnesYmd, 14, 6, tedHm),
-    [expedice, schuzky, dnesYmd, tedHm],
-  );
-  const agendaKalendare = useMemo(
-    () => nejblizsiAgenda({ expedice, schuzky }, dnesYmd, 45, 12, tedHm),
     [expedice, schuzky, dnesYmd, tedHm],
   );
   const bezHero = (seznam: Expedition[]): Expedition[] =>
@@ -630,13 +503,11 @@ export default function VypravyNahledPage(): JSX.Element {
     setDenDetail(dnesYmd);
   }
 
-  function naPosunTyden(smer: -1 | 1): void {
-    setKalendarKotva((prev) => posunKotvu(prev, smer));
-  }
-
-  function naDnesniTyden(): void {
-    setKalendarKotva(dnesYmd);
-    setDenDetail(dnesYmd);
+  function otevriNovouSchuzku(): void {
+    setSchuzkaDetail(null);
+    setSchuzkaChyba(null);
+    setSchuzkaChybyPoli({});
+    setSchuzkaForm({ rezim: "nova", datum: denDetail ?? dnesYmd });
   }
 
   function zrusHledani(): void {
@@ -831,16 +702,6 @@ export default function VypravyNahledPage(): JSX.Element {
     setDenDetail(datumVyskytu);
   }
 
-  function otevriSchuzkuDen(datum: string): void {
-    setDenDetail(datum);
-    const mapa =
-      rezimKalendare === "mesic" ? kalendarUdalosti : kalendarUdalostiTyden;
-    const schuzkaUdalost = (mapa.get(datum) ?? []).find((u) => u.typ === "schuzka");
-    if (schuzkaUdalost === undefined) return;
-    const schuzka = schuzkyPodleId.get(schuzkaUdalost.id);
-    if (schuzka !== undefined) otevriSchuzkuDetail(schuzka, datum);
-  }
-
   useEffect(() => {
     if (zobrazeni !== "kalendar") return;
     setDenDetail((pred) => pred ?? dnesYmd);
@@ -876,10 +737,41 @@ export default function VypravyNahledPage(): JSX.Element {
   const ukazNeuzavrene = filtrVyprav !== "nejblizsi" && neuzavreneFiltrovane.length > 0;
   const ukazHistorii = filtrVyprav === "vse" && (!hledaSe || probehleFiltrovane.length > 0);
   const ukazAgendu = !hledaSe;
+  // Filtr i hledání ukazují celý výsledek, přehled jen začátek každé kategorie.
+  const limitKategorie = filtrVyprav === "vse" && !hledaSe ? VYPRAV_V_KATEGORII : undefined;
+  const zobrazitVse = (
+    kategorie: KategorieOkna,
+    pocet: number,
+  ): { popisek: string; onClick: () => void } | undefined =>
+    limitKategorie !== undefined && pocet > limitKategorie
+      ? { popisek: "Zobrazit vše", onClick: () => setOkno(kategorie) }
+      : undefined;
+  const probehleCelkem = Math.max(
+    probehleFiltrovane.length,
+    historieZeServeru && !hledaSe ? (historieCelkem ?? 0) : 0,
+  );
+  const obsahOkna: Record<KategorieOkna, { titulek: string; polozky: Expedition[]; celkem: number }> = {
+    probihajici: {
+      titulek: "Probíhající výpravy",
+      polozky: probihajiciFiltrovane,
+      celkem: probihajiciFiltrovane.length,
+    },
+    nadchazejici: {
+      titulek: "Nadcházející výpravy",
+      polozky: nadchazejiciFiltrovane,
+      celkem: nadchazejiciFiltrovane.length,
+    },
+    neuzavrene: {
+      titulek: "Čeká na uzavření",
+      polozky: neuzavreneFiltrovane,
+      celkem: neuzavreneFiltrovane.length,
+    },
+    probehle: { titulek: "Proběhlé výpravy", polozky: probehleFiltrovane, celkem: probehleCelkem },
+  };
 
   return (
     <>
-      <main className="w-full min-w-0 max-w-full px-5 pb-24 pt-4 sm:px-6 sm:pt-8 lg:px-10 min-[90rem]:pb-14 min-[90rem]:pt-10">
+      <main className="mx-auto w-full min-w-0 max-w-[46rem] px-5 pb-6 pt-4 sm:px-6 sm:pt-8 lg:max-w-full lg:px-8 min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-10">
             <NahledHlavicka
               zobrazeni={zobrazeni}
               onZobrazeni={zmenZobrazeni}
@@ -891,32 +783,17 @@ export default function VypravyNahledPage(): JSX.Element {
               onFiltr={setFiltrVyprav}
               razeni={razeni}
               onRazeni={setRazeni}
+              mesicKalendare={nazevMesice(kalendarRok, kalendarMesic)}
               kalendarOvladani={
                 <KalendarOvladani
-                  nadpis={
-                    rezimKalendare === "mesic"
-                      ? nazevMesice(kalendarRok, kalendarMesic)
-                      : nazevTydne(tydenMrizka(kalendarKotva))
-                  }
-                  rezim={rezimKalendare}
-                  onRezim={setRezimKalendare}
-                  posun={
-                    rezimKalendare === "mesic"
-                      ? {
-                          predchozi: "Předchozí měsíc",
-                          dalsi: "Další měsíc",
-                          onPredchozi: () => naPosunMesic(-1),
-                          onDalsi: () => naPosunMesic(1),
-                          onDnes: naDnesniMesic,
-                        }
-                      : {
-                          predchozi: "Předchozí týden",
-                          dalsi: "Další týden",
-                          onPredchozi: () => naPosunTyden(-1),
-                          onDalsi: () => naPosunTyden(1),
-                          onDnes: naDnesniTyden,
-                        }
-                  }
+                  nadpis={nazevMesice(kalendarRok, kalendarMesic)}
+                  posun={{
+                    predchozi: "Předchozí měsíc",
+                    dalsi: "Další měsíc",
+                    onPredchozi: () => naPosunMesic(-1),
+                    onDalsi: () => naPosunMesic(1),
+                    onDnes: naDnesniMesic,
+                  }}
                 />
               }
               novaVyprava={
@@ -925,10 +802,12 @@ export default function VypravyNahledPage(): JSX.Element {
                   : undefined
               }
             />
-            <div className={`nahled-pane pt-[22px] ${zobrazeni === "kalendar" ? "min-[90rem]:pt-8" : "min-[90rem]:pt-10"}`}>
+            <div ref={obsahRef} className={`nahled-pane pt-[22px] ${zobrazeni === "kalendar" ? "min-[90rem]:pt-8" : "min-[90rem]:pt-10"}`}>
               {zobrazeni === "seznam" ? (
                 <>
-                {hledaSe && pocetVysledku === 0 ? (
+                {nacita ? (
+                  <KostraVyprav />
+                ) : hledaSe && pocetVysledku === 0 ? (
                   <NahledPrazdne
                     nadpis="Nic jsme nenašli"
                     text={`Pro „${orezanyDotaz}“ tu není žádná výprava.`}
@@ -939,7 +818,7 @@ export default function VypravyNahledPage(): JSX.Element {
                     <div
                       className={`grid min-w-0 gap-[22px] min-[90rem]:gap-y-10 ${
                         ukazAgendu
-                          ? "min-[90rem]:grid-cols-[minmax(0,1fr)_324px] min-[90rem]:gap-x-10"
+                          ? "lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-x-6 min-[90rem]:grid-cols-[minmax(0,1fr)_324px] min-[90rem]:gap-x-10"
                           : ""
                       }`}
                     >
@@ -948,14 +827,13 @@ export default function VypravyNahledPage(): JSX.Element {
                           <VypravaHero
                             expedice={heroVyprava}
                             dnes={dnesYmd}
-                            probiha={heroProbiha}
                             neprecteno={neprecteneMapa.get(heroVyprava.id) === true}
                             onDetail={otevriVypravu}
                           />
                         </div>
                       ) : null}
                       {ukazAgendu ? (
-                        <aside className="hidden min-w-0 space-y-5 min-[90rem]:sticky min-[90rem]:top-24 min-[90rem]:col-start-2 min-[90rem]:row-span-2 min-[90rem]:row-start-1 min-[90rem]:block min-[90rem]:self-start">
+                        <aside className="hidden min-w-0 space-y-5 lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block lg:self-start min-[90rem]:top-24">
                           <AgendaBrzy
                             polozky={agenda}
                             dnes={dnesYmd}
@@ -971,7 +849,7 @@ export default function VypravyNahledPage(): JSX.Element {
                             <RailNeuzavrene
                               polozky={neuzavreneFiltrovane}
                               onDetail={otevriVypravu}
-                              onVse={() => setFiltrVyprav("neuzavrene")}
+                              onVse={() => setOkno("neuzavrene")}
                             />
                           ) : null}
                         </aside>
@@ -986,10 +864,11 @@ export default function VypravyNahledPage(): JSX.Element {
                             nadpis="Probíhající"
                             nadpisId="nahled-probiha"
                             pocet={probihajiciBezHero.length}
-                            akce={{ popisek: "Zobrazit vše", onClick: () => setFiltrVyprav("vse") }}
+                            akce={zobrazitVse("probihajici", probihajiciBezHero.length)}
                           >
                             <SeznamRadku
                               polozky={probihajiciBezHero}
+                              limit={limitKategorie}
                               neprectene={neprecteneMapa}
                               onDetail={otevriVypravu}
                             />
@@ -1000,7 +879,7 @@ export default function VypravyNahledPage(): JSX.Element {
                             nadpis="Nadcházející"
                             nadpisId="nahled-nadchazejici"
                             pocet={nadchazejiciBezHero.length}
-                            akce={{ popisek: "Zobrazit vše", onClick: () => setFiltrVyprav("nejblizsi") }}
+                            akce={zobrazitVse("nadchazejici", nadchazejiciBezHero.length)}
                           >
                             {nadchazejiciBezHero.length === 0 ? (
                               <NahledPrazdne
@@ -1010,6 +889,7 @@ export default function VypravyNahledPage(): JSX.Element {
                             ) : (
                               <SeznamRadku
                                 polozky={nadchazejiciBezHero}
+                                limit={limitKategorie}
                                 neprectene={neprecteneMapa}
                                 onDetail={otevriVypravu}
                               />
@@ -1017,59 +897,49 @@ export default function VypravyNahledPage(): JSX.Element {
                           </VypravaSekce>
                         ) : null}
                         {ukazNeuzavrene ? (
-                          <div className={ukazAgendu && filtrVyprav !== "neuzavrene" ? "min-[90rem]:hidden" : undefined}>
+                          <div className={ukazAgendu && filtrVyprav !== "neuzavrene" ? "lg:hidden" : undefined}>
                           <VypravaSekce
                             nadpis="Čeká na uzavření"
                             nadpisId="nahled-neuzavrene"
                             pocet={neuzavreneFiltrovane.length}
-                            akce={{ popisek: "Zobrazit vše", onClick: () => setFiltrVyprav("neuzavrene") }}
+                            akce={zobrazitVse("neuzavrene", neuzavreneFiltrovane.length)}
                           >
                             <SeznamRadku
                               polozky={neuzavreneFiltrovane}
+                              limit={limitKategorie}
                               neprectene={neprecteneMapa}
                               onDetail={otevriVypravu}
                             />
                           </VypravaSekce>
                           </div>
                         ) : null}
+                        {ukazHistorii ? (
+                          <VypravaSekce
+                            nadpis="Proběhlo"
+                            nadpisId="nahled-historie"
+                            pocet={probehleCelkem}
+                            akce={
+                              probehleCelkem > VYPRAV_V_KATEGORII
+                                ? { popisek: "Zobrazit vše", onClick: () => setOkno("probehle") }
+                                : undefined
+                            }
+                          >
+                            {probehleFiltrovane.length === 0 ? (
+                              <NahledPrazdne
+                                nadpis="Archiv je prázdný"
+                                text="Proběhlé výpravy se sem propíšou po uzavření."
+                              />
+                            ) : (
+                              <PosuvnikVyprav
+                                polozky={probehleFiltrovane}
+                                neprectene={neprecteneMapa}
+                                onDetail={otevriVypravu}
+                              />
+                            )}
+                          </VypravaSekce>
+                        ) : null}
                       </div>
                     </div>
-                    {ukazHistorii ? (
-                      <VypravaSekce
-                        nadpis="Proběhlo"
-                        nadpisId="nahled-historie"
-                        akce={{ popisek: "Všechny fotky", onClick: () => navigate("/fotky") }}
-                      >
-                        {probehleFiltrovane.length === 0 ? (
-                          <NahledPrazdne
-                            nadpis="Archiv je prázdný"
-                            text="Proběhlé výpravy se sem propíšou po uzavření."
-                          />
-                        ) : (
-                          <HistorieKarty
-                            polozky={probehleFiltrovane}
-                            vysunuto={historieVysunuta}
-                            onPrepnout={() => setHistorieVysunuta((pred) => !pred)}
-                            neprectene={neprecteneMapa}
-                            onDetail={otevriVypravu}
-                          />
-                        )}
-                        {!hledaSe && historieZeServeru && historieStranek > 1 ? (
-                          <NahledHistorieStranky
-                            stranka={historieStranka}
-                            stranek={historieStranek}
-                            onPredchozi={() =>
-                              setHistorieStranka((prev) => Math.max(1, prev - 1))
-                            }
-                            onDalsi={() =>
-                              setHistorieStranka((prev) =>
-                                Math.min(historieStranek, prev + 1),
-                              )
-                            }
-                          />
-                        ) : null}
-                      </VypravaSekce>
-                    ) : null}
                   </div>
                 )}
                 </>
@@ -1080,59 +950,27 @@ export default function VypravyNahledPage(): JSX.Element {
                       {schuzkaOznameni}
                     </p>
                   ) : null}
-                  <div className="min-[90rem]:grid min-[90rem]:grid-cols-[minmax(0,1fr)_348px] min-[90rem]:items-start min-[90rem]:gap-9">
+                  <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-7 min-[90rem]:grid-cols-[minmax(0,1fr)_348px] min-[90rem]:gap-9">
                     <div className="min-w-0">
-                      <NahledKalendar
-                        rezim={rezimKalendare}
-                        onRezim={setRezimKalendare}
-                        mesic={{
-                          rok: kalendarRok,
-                          mesic: kalendarMesic,
-                          udalosti: kalendarUdalosti,
-                          vybraneDatum: denDetail,
-                          dnes: dnesYmd,
-                          onDen: setDenDetail,
-                          onMesic: naPosunMesic,
-                          onDnes: naDnesniMesic,
-                        }}
-                        tyden={{
-                          kotva: kalendarKotva,
-                          udalosti: kalendarUdalostiTyden,
-                          vybraneDatum: denDetail,
-                          dnes: dnesYmd,
-                          onDen: setDenDetail,
-                          onTyden: naPosunTyden,
-                          onDnes: naDnesniTyden,
-                        }}
+                      <KalendarMesicMrizka
+                        rok={kalendarRok}
+                        mesic={kalendarMesic}
+                        udalosti={kalendarUdalosti}
+                        vybraneDatum={denDetail}
+                        dnes={dnesYmd}
+                        onDen={setDenDetail}
+                        onMesic={naPosunMesic}
+                        onDnes={naDnesniMesic}
                         datumVypravy={(id) => vypravaPodleId.get(id)?.datum ?? dnesYmd}
                       />
-                      {muzeSpravovatVypravy ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSchuzkaDetail(null);
-                            setSchuzkaChyba(null);
-                            setSchuzkaChybyPoli({});
-                            setSchuzkaForm({
-                              rezim: "nova",
-                              datum: denDetail ?? dnesYmd,
-                            });
-                          }}
-                          aria-label="Nová schůzka"
-                          className="nahled-press mt-5 inline-flex h-11 items-center gap-2 rounded-xl border border-linka bg-povrch px-4 text-[13.5px] font-semibold text-mech shadow-jemny hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-                        >
-                          <Ikona nazev="plus" className="size-4" />
-                          Nová schůzka
-                        </button>
-                      ) : null}
                       {denDetail !== null ? (
-                        <div className="min-[90rem]:hidden">
+                        <div ref={denRef} className="lg:hidden">
                           <KalendarDenSeznam
                             datum={denDetail}
-                            udalosti={
-                              kalendarUdalosti.get(denDetail) ??
-                              kalendarUdalostiTyden.get(denDetail) ??
-                              []
+                            udalosti={kalendarUdalosti.get(denDetail) ?? []}
+                            dalsiVypravy={nadchazejici}
+                            akce={
+                              muzeSpravovatVypravy ? <NabidkaDne onNovaSchuzka={otevriNovouSchuzku} /> : undefined
                             }
                             expedicePodleId={expedicePodleId}
                             schuzkyPodleId={schuzkyPodleId}
@@ -1145,21 +983,19 @@ export default function VypravyNahledPage(): JSX.Element {
                         </div>
                       ) : null}
                     </div>
-                    <div className="hidden min-[90rem]:block">
+                    <div className="hidden lg:block">
                       <KalendarPostranni
                         datum={denDetail}
-                        udalosti={
-                          rezimKalendare === "mesic"
-                            ? kalendarUdalosti
-                            : kalendarUdalostiTyden
+                        udalosti={kalendarUdalosti}
+                        akce={
+                          muzeSpravovatVypravy ? <NabidkaDne onNovaSchuzka={otevriNovouSchuzku} /> : undefined
                         }
                         expedicePodleId={expedicePodleId}
                         schuzkyPodleId={schuzkyPodleId}
-                        agenda={agendaKalendare}
+                        nadchazejici={nadchazejici}
                         dnes={dnesYmd}
                         onVyprava={otevriVypravu}
                         onPrihlaseni={prihlasitNaVypravu}
-                        onSchuzka={otevriSchuzkuDen}
                         onSchuzkaDetail={otevriSchuzkuDetail}
                         onSeznam={() => zmenZobrazeni("seznam")}
                       />
@@ -1169,6 +1005,20 @@ export default function VypravyNahledPage(): JSX.Element {
               )}
             </div>
       </main>
+      {okno !== null ? (
+        <VypravyOkno
+          {...obsahOkna[okno]}
+          karty={okno === "probehle"}
+          neprectene={neprecteneMapa}
+          onDetail={otevriVypravu}
+          onDalsi={
+            okno === "probehle" && !hledaSe && historieZeServeru && historieStranka < historieStranek
+              ? () => setHistorieStranka((pred) => Math.min(historieStranek, pred + 1))
+              : undefined
+          }
+          onZavrit={() => setOkno(null)}
+        />
+      ) : null}
       {schuzkaDetail !== null ? (
         <UdalostModal
           schuzka={
@@ -1200,11 +1050,12 @@ export default function VypravyNahledPage(): JSX.Element {
         titulek={
           schuzkaForm?.rezim === "uprava" ? "Upravit schůzku" : "Nová schůzka"
         }
-        onZavrit={() => schuzkaZavreni.zavri()}
+        onZavrit={() => setSchuzkaForm(null)}
       >
         {schuzkaForm !== null ? (
           <SchuzkaForm
             bezNadpisu
+            bezPopisu={schuzkaForm.rezim === "nova"}
             nadpis={
               schuzkaForm.rezim === "nova" ? "Nová schůzka" : "Upravit schůzku"
             }
@@ -1241,7 +1092,7 @@ export default function VypravyNahledPage(): JSX.Element {
             serverChyba={schuzkaChyba}
             serverChybyPoli={schuzkaChybyPoli}
             onSubmit={naOdeslatSchuzku}
-            onZrusit={() => schuzkaZavreni.zavri()}
+            onZrusit={() => setSchuzkaForm(null)}
           />
         ) : null}
       </SpodniSheet>

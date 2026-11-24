@@ -4,7 +4,7 @@
 
 import {
   and,
-  asc,
+  desc,
   eq,
   gte,
   lt,
@@ -94,7 +94,7 @@ export function registrujStatistiky(app: Express): void {
                       eq(participants.status, "ucastnil_se"),
                     ),
                   )
-              .orderBy(asc(expeditions.datum));
+              .orderBy(desc(expeditions.datum));
               const vstup: StatistikaRadek[] = radky.map((radek) => ({
                 expeditionId: radek.expeditionId,
                 status:
@@ -197,6 +197,7 @@ export function registrujStatistiky(app: Express): void {
           discord_raw: unknown;
           vypravy: unknown;
           km: unknown;
+          clen_od: unknown;
         };
         let suroveRadky: ZebrickyRadka[];
         if (obdobi === "celkem") {
@@ -205,13 +206,14 @@ export function registrujStatistiky(app: Express): void {
               TRIM(BOTH ' ' FROM COALESCE(u.jmeno, '') || ' ' || COALESCE(u.prijmeni, '')) AS jmeno_raw,
               NULLIF(TRIM(COALESCE(u.discord_nick, '')), '') AS discord_raw,
               SUM(CASE WHEN p.user_id = e.organizator_id THEN 2 ELSE 1 END)::int AS vypravy,
-              (ROUND(COALESCE(SUM(e.km), 0)::numeric, 1))::float8 AS km
+              (ROUND(COALESCE(SUM(e.km), 0)::numeric, 1))::float8 AS km,
+              EXTRACT(YEAR FROM u.created_at)::int AS clen_od
             FROM participants p
             JOIN users u ON u.id = p.user_id
             JOIN expeditions e ON e.id = p.expedition_id
             WHERE p.status = 'ucastnil_se' AND p.user_id IS NOT NULL
               AND e.stav = 'proběhlá'
-            GROUP BY u.id, u.jmeno, u.prijmeni, u.discord_nick
+            GROUP BY u.id, u.jmeno, u.prijmeni, u.discord_nick, u.created_at
             ORDER BY vypravy DESC, km DESC, jmeno_raw ASC
             LIMIT 50
           `);
@@ -224,14 +226,15 @@ export function registrujStatistiky(app: Express): void {
               TRIM(BOTH ' ' FROM COALESCE(u.jmeno, '') || ' ' || COALESCE(u.prijmeni, '')) AS jmeno_raw,
               NULLIF(TRIM(COALESCE(u.discord_nick, '')), '') AS discord_raw,
               SUM(CASE WHEN p.user_id = e.organizator_id THEN 2 ELSE 1 END)::int AS vypravy,
-              (ROUND(COALESCE(SUM(e.km), 0)::numeric, 1))::float8 AS km
+              (ROUND(COALESCE(SUM(e.km), 0)::numeric, 1))::float8 AS km,
+              EXTRACT(YEAR FROM u.created_at)::int AS clen_od
             FROM participants p
             JOIN users u ON u.id = p.user_id
             JOIN expeditions e ON e.id = p.expedition_id
             WHERE p.status = 'ucastnil_se' AND p.user_id IS NOT NULL
               AND e.stav = 'proběhlá'
               AND e.datum >= ${od} AND e.datum < ${doDne}
-            GROUP BY u.id, u.jmeno, u.prijmeni, u.discord_nick
+            GROUP BY u.id, u.jmeno, u.prijmeni, u.discord_nick, u.created_at
             ORDER BY vypravy DESC, km DESC, jmeno_raw ASC
             LIMIT 50
           `);
@@ -269,6 +272,7 @@ export function registrujStatistiky(app: Express): void {
             jmeno,
             vypravy: radek.vypravy,
             km: radek.km,
+            ...(typeof radek.clen_od === "number" ? { clenOd: radek.clen_od } : {}),
           });
         }
         const telo: import("../../src/shared/api-types").ZebrickyResponse = {
@@ -337,7 +341,7 @@ export function registrujStatistiky(app: Express): void {
           })
           .from(expeditions)
           .where(and(...podminky))
-          .orderBy(asc(expeditions.datum));
+          .orderBy(desc(expeditions.datum));
 
         const trasy: import("../../src/shared/api-types").ZebrickyTrasa[] = [];
         for (const radek of radky) {

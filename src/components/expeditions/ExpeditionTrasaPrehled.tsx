@@ -1,8 +1,6 @@
 import { apiBase } from "../../lib/api-base";
 import { formatKmNaDesetinu } from "../../lib/format-cisla";
-import { useEffect, useRef, useState, type JSX } from "react";
-import { sestavPodkladTrasy } from "../../lib/podklad-trasy";
-import { dekodujPolyline, type Souradnice } from "../../lib/polyline";
+import { useEffect, useState, type JSX } from "react";
 import { getMojeStatistiky } from "../../lib/statistiky-api";
 import {
   expediceDetailPath,
@@ -20,8 +18,6 @@ export interface ExpeditionTrasaPrehledProps {
 interface UsleData {
   km: number | null;
   prevyseniM: number | null;
-  /** Zakódovaná trasa výpravy (veřejná, expedition-level). */
-  polyline: string | null;
   /** Stav mojí docházky; null = na výpravě nejsem. */
   mujStav: ApiAktivita["status"] | null;
 }
@@ -36,7 +32,6 @@ async function nactiUsle(expeditionId: string): Promise<UsleData> {
   const vysledek: UsleData = {
     km: null,
     prevyseniM: null,
-    polyline: null,
     mujStav: null,
   };
   const zaklad = apiBase();
@@ -58,11 +53,6 @@ async function nactiUsle(expeditionId: string): Promise<UsleData> {
         vysledek.km = typeof detail.km === "number" ? detail.km : null;
         vysledek.prevyseniM =
           typeof detail.prevyseniM === "number" ? detail.prevyseniM : null;
-        vysledek.polyline =
-          typeof detail.trasaPolyline === "string" &&
-          detail.trasaPolyline.length > 0
-            ? detail.trasaPolyline
-            : null;
       }
     }
   } catch {
@@ -81,94 +71,11 @@ async function nactiUsle(expeditionId: string): Promise<UsleData> {
 }
 
 /**
- * Quiet map under the walked line. Tiles and the stroke share Web Mercator,
- * so a north-south kilometre stays as long as an east-west one.
- */
-function MapaTrasy({ body }: { body: readonly Souradnice[] }): JSX.Element {
-  const ramRef = useRef<HTMLDivElement>(null);
-  const [rozmer, setRozmer] = useState({ sirka: 0, vyska: 0 });
-
-  useEffect(() => {
-    const el = ramRef.current;
-    if (el === null) return;
-    const mer = (): void => {
-      const ramec = el.getBoundingClientRect();
-      setRozmer({ sirka: Math.round(ramec.width), vyska: Math.round(ramec.height) });
-    };
-    mer();
-    const pozorovac = new ResizeObserver(mer);
-    pozorovac.observe(el);
-    return () => pozorovac.disconnect();
-  }, []);
-
-  const podklad =
-    rozmer.sirka > 0 && rozmer.vyska > 0
-      ? sestavPodkladTrasy(body, rozmer.sirka, rozmer.vyska)
-      : null;
-
-  return (
-    <div
-      ref={ramRef}
-      role="img"
-      aria-label="Trasová čára ušlé trasy"
-      className="relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl border border-pole bg-mlha"
-    >
-      {podklad?.dlazdice.map((dlazdice) => (
-        <img
-          key={dlazdice.src}
-          src={dlazdice.src}
-          alt=""
-          width={256}
-          height={256}
-          draggable={false}
-          className="absolute max-w-none"
-          style={{ left: dlazdice.left, top: dlazdice.top }}
-        />
-      ))}
-      {podklad !== null && (
-        <svg
-          viewBox={`0 0 ${String(podklad.sirka)} ${String(podklad.vyska)}`}
-          className="absolute inset-0 h-full w-full"
-          aria-hidden="true"
-        >
-          <polyline
-            points={podklad.body}
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          <polyline
-            points={podklad.body}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            className="text-smrk"
-          />
-        </svg>
-      )}
-      <a
-        href="https://www.openstreetmap.org/copyright"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute right-1 bottom-1 rounded bg-papir/85 px-1 text-[10px] leading-4 text-mech"
-      >
-        © OpenStreetMap
-      </a>
-    </div>
-  );
-}
-
-/**
  * Read-only přehled o tom, co se ušlo (Krok 14, detail modal).
  * Krok 17: viditelný JEN pro proběhlou (stavová brána dle kontraktu
  * volno/skoro plno/proběhlá) — u neproběhlé vrací null (vůbec
  * nerenderuje, ani „nezapsány"). Žádné editační pairing — jen název
- * sekce, km, převýšení, počet účastníků a miniaturní trasová čára
- * (čisté SVG bez mapové knihovny a bez reloadu stránky).
+ * sekce, km a převýšení v jedné kartě podle ExApp.pen (mapu návrh nemá).
  * Krok 20: kilometry jsou expedition-level, takže je vidí i ten, kdo na
  * výpravě nebyl — proto se berou z veřejného `GET /api/expeditions/:id`
  * (nikoli z osobních statistik). Vlastní stav docházky se doplňuje ze
@@ -182,7 +89,6 @@ export default function ExpeditionTrasaPrehled({
   const [data, setData] = useState<UsleData>({
     km: null,
     prevyseniM: null,
-    polyline: null,
     mujStav: null,
   });
   const [hotovo, setHotovo] = useState<boolean>(false);
@@ -211,60 +117,32 @@ export default function ExpeditionTrasaPrehled({
 
   const km: number | null = data.km;
   const prevyseni: number | null = data.prevyseniM;
-  const polyline: string | null = data.polyline;
-  const bodyTrasy: Souradnice[] =
-    polyline !== null && polyline.length > 0 ? dekodujPolyline(polyline) : [];
+
+  if (!hotovo) {
+    return (
+      <p role="status" className="sr-only">
+        Načítám kilometry…
+      </p>
+    );
+  }
+  if (km === null && prevyseni === null) return null;
 
   return (
     <section
       aria-label="Ušlé na výpravě"
-      className="mt-5 flex h-full flex-col rounded-2xl border border-pole bg-papir p-4"
+      className="flex flex-col gap-1 rounded-[14px] border border-linka bg-povrch p-3 min-[90rem]:gap-1.5 min-[90rem]:rounded-2xl min-[90rem]:p-5 min-[90rem]:shadow-denik"
     >
-      <h3 className="font-display text-xl font-bold text-inkoust">
-        Ušlé na výpravě
-      </h3>
-      {!hotovo && (
-        <p role="status" className="mt-2 text-sm text-inkoust/70">
-          Načítám přehled…
+      <p className="font-display text-[22px] font-bold text-inkoust">
+        {km !== null ? formatKmNaDesetinu(km) : "–"}
+        <span className="sr-only"> ušlé kilometry</span>
+      </p>
+      {prevyseni !== null ? (
+        <p className="text-[12.5px] text-mech">
+          <span className="sr-only">Převýšení: </span>
+          <span aria-hidden="true">převýšení </span>
+          {String(prevyseni)} m
         </p>
-      )}
-      {hotovo && (km !== null || prevyseni !== null) && (
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-xl bg-mlha px-2 py-3">
-            <dt className="text-sm font-semibold text-mech">
-              Km
-            </dt>
-            <dd className="mt-0.5 text-lg font-bold tabular-nums">
-              {km !== null ? formatKmNaDesetinu(km) : "–"}
-            </dd>
-          </div>
-          <div className="rounded-xl bg-mlha px-2 py-3">
-            <dt className="text-sm font-semibold text-mech">
-              Převýšení
-            </dt>
-            <dd className="mt-0.5 text-lg font-bold tabular-nums">
-              {prevyseni !== null ? `+${String(prevyseni)} m` : "–"}
-            </dd>
-          </div>
-        </dl>
-      )}
-      {hotovo && km === null && (
-        <p role="status" className="mt-3 text-base text-mech">
-          Kilometry zatím nejsou zapsané.
-        </p>
-      )}
-      {hotovo && data.mujStav !== null && (
-        <p role="status" className="mt-3 text-base font-semibold text-inkoust">
-          {data.mujStav === "ucastnil_se"
-            ? "Trasa"
-            : data.mujStav === "prihlasen"
-              ? "Přihlášen"
-              : data.mujStav === "omluven"
-                ? "Omluven"
-                : ""}
-        </p>
-      )}
-      {hotovo && bodyTrasy.length > 1 && <MapaTrasy body={bodyTrasy} />}
+      ) : null}
     </section>
   );
 }

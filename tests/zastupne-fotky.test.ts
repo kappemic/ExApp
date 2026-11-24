@@ -41,4 +41,15 @@ describe("zastupne fotky", () => {
     expect(new Set(fotky).size).toBe(2);
     expect(priradZastupne(["prvni", "druha"], bazen)).toEqual(prirazeni);
   });
+
+  it("vyprave necha fotku i po zmene seznamu a bazenu", () => {
+    const bazen = ["a", "b", "c"].map((fotkaId) => ({ idVypravy: "minula", fotkaId }));
+    const prvni = priradZastupne(["hero"], bazen);
+    const vetsi = [...bazen, { idVypravy: "jina", fotkaId: "d" }, { idVypravy: "jina", fotkaId: "e" }];
+    const potom = priradZastupne(["aaa", "hero", "zzz"], vetsi, prvni);
+    expect(potom.get("hero")).toEqual(prvni.get("hero"));
+    expect(new Set([...potom.values()].map((fotka) => fotka.fotkaId)).size).toBe(3);
+    const bezPuvodni = vetsi.filter((fotka) => fotka.fotkaId !== prvni.get("hero")?.fotkaId);
+    expect(priradZastupne(["hero"], bezPuvodni, prvni).get("hero")).not.toEqual(prvni.get("hero"));
+  });
 });

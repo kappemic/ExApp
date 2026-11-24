@@ -20,7 +20,7 @@ export default function Strankovani({
 }): JSX.Element | null {
   if (pocet <= 1) return null;
   return (
-    <nav aria-label={popisek} className={`flex flex-wrap items-center justify-center gap-1.5 ${className}`}>
+    <nav aria-label={popisek} className={`flex flex-wrap items-center justify-center gap-1.5 min-[90rem]:justify-end ${className}`}>
       {cislaStranek(cislo, pocet).map((polozka, i) =>
         polozka === "…" ? (
           <span key={`mezera-${i}`} aria-hidden="true" className="px-1 text-sm text-ink-3">
@@ -33,10 +33,10 @@ export default function Strankovani({
             onClick={() => onZmena(polozka)}
             aria-current={polozka === cislo ? "page" : undefined}
             aria-label={`Stránka ${polozka}`}
-            className={`bez-prejeti inline-flex size-11 items-center justify-center rounded-xl border text-sm font-semibold tabular-nums [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk ${
+            className={`bez-prejeti inline-flex size-11 items-center justify-center rounded-xl border text-sm font-semibold min-[90rem]:size-7 min-[90rem]:rounded-lg min-[90rem]:text-xs [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk ${
               polozka === cislo
                 ? "border-inkoust bg-inkoust text-papir"
-                : "border-linka bg-transparent text-ink-2 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60"
+                : "border-linka bg-transparent text-mech [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60"
             }`}
           >
             {polozka}
@@ -62,9 +62,9 @@ export function NacistDalsi({
     <button
       type="button"
       onClick={onClick}
-      className={`nahled-press inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-linka bg-povrch px-4 text-sm font-semibold text-ink-2 [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60 ${className}`}
+      className={`nahled-press inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-linka bg-povrch px-4 text-[13px] font-semibold text-mech [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/60 ${className}`}
     >
-      Načíst další<span className="ml-1.5 font-normal text-ink-3">· zbývá {zbyva}</span>
+      Načíst další
     </button>
   );
 }

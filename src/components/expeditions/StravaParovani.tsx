@@ -431,7 +431,7 @@ export default function StravaParovani({
         účastníkům.
         {celkem !== null && ` Celkem mých aktivit: ${String(celkem)}.`}
       </p>
-      <p role="status" className="mt-2 text-sm font-semibold tabular-nums">
+      <p role="status" className="mt-2 text-sm font-semibold">
         Stav trasy: {stavTrasyText}
       </p>
 
@@ -544,7 +544,7 @@ export default function StravaParovani({
                     {jePripojena ? "připojeno" : "nepřipojeno"}
                   </span>
                 </div>
-                <p className="mt-1 text-sm tabular-nums text-inkoust/75">
+                <p className="mt-1 text-sm text-inkoust/75">
                   {formatKmNaDesetinu(navrh.km)} · +{String(navrh.prevyseniM)} m ·{" "}
                   {formatDatum(navrh.datum)}
                 </p>

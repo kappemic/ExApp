@@ -5,6 +5,8 @@ import {
 } from "../lib/fotky-operace-stav";
 import {
   idsFotekKeStazeni,
+  prepniIdVeVyberu,
+  prepniVyberVsech,
   type RozsahStahovaniFotek,
 } from "../lib/fotky-stahovani";
 import {
@@ -15,6 +17,7 @@ import {
   stahniFotkyDoGalerie,
   stahniFotkyDoSlozky,
   stahniFotkyJakoZip,
+  stahniFotkuZeUrl,
   vyberSlozkuKUlozeni,
 } from "../lib/stahni-fotku";
 
@@ -35,6 +38,8 @@ export interface UseFotkyStahovaniVysledek {
   zacniStahovani: () => void;
   zrusStahovani: () => void;
   prepniVyber: (fotkaId: string) => void;
+  /** Marks every photo, or clears the marks when all are marked already. */
+  prepniVyberVse: () => void;
   provedStahovani: (rozsah: RozsahStahovaniFotek) => Promise<void>;
   resetStahovani: () => void;
 }
@@ -77,14 +82,27 @@ export function useFotkyStahovani(
     resetStahovani();
   }, [resetStahovani, stahujeSe]);
 
-  const prepniVyber = useCallback((fotkaId: string): void => {
-    setVybrane((prev) => {
-      const dalsi = new Set(prev);
-      if (dalsi.has(fotkaId)) dalsi.delete(fotkaId);
-      else dalsi.add(fotkaId);
-      return dalsi;
-    });
+  /** Prepared files belong to the old selection. */
+  const zahodPripravene = useCallback((): void => {
+    setGaleriePripravena(false);
+    setStahovatChyba(null);
+    souboryGalerie.current = [];
   }, []);
+
+  const prepniVyber = useCallback(
+    (fotkaId: string): void => {
+      if (stahujeSe) return;
+      zahodPripravene();
+      setVybrane((prev) => prepniIdVeVyberu(prev, fotkaId));
+    },
+    [stahujeSe, zahodPripravene],
+  );
+
+  const prepniVyberVse = useCallback((): void => {
+    if (stahujeSe) return;
+    zahodPripravene();
+    setVybrane((prev) => prepniVyberVsech(fotky, prev));
+  }, [fotky, stahujeSe, zahodPripravene]);
 
   const dokonciUspesne = useCallback((): void => {
     setGaleriePripravena(false);
@@ -109,7 +127,7 @@ export function useFotkyStahovani(
     }
     setStahujeSe(false);
     if (vysledek === "zruseno") return;
-    setStahovatChyba("Fotky se nepodařilo uložit do galerie. Zkus to znovu.");
+    setStahovatChyba("Fotky se nepodařilo uložit do galerie. Zkus jich vybrat méně.");
   }, [dokonciUspesne]);
 
   const provedStahovani = useCallback(
@@ -123,6 +141,20 @@ export function useFotkyStahovani(
         lzeSdiletSoubory(navigator),
         polozky.length,
       );
+      const jedina = polozky.length === 1 ? polozky[0] : undefined;
+      if (!doGalerie && jedina !== undefined) {
+        // One photo is saved as a file. Without `canShare` a computer does not open its share sheet.
+        setStahovatChyba(null);
+        setStahujeSe(true);
+        const vysledek = await stahniFotkuZeUrl(jedina.url, jedina.nazevSouboru, {
+          onLine: navigator.onLine,
+        } as Navigator);
+        setStahujeSe(false);
+        if (!vysledek.ok) setStahovatChyba(vysledek.chyba);
+        else if (vysledek.metoda !== "zruseno") dokonciUspesne();
+        return;
+      }
+
       const slozka = doGalerie ? null : await vyberSlozkuKUlozeni();
       if (slozka === "zruseno") return;
 
@@ -165,11 +197,14 @@ export function useFotkyStahovani(
         const vysledek = await stahniFotkyDoGalerie(polozky, hlasPrubeh);
         if (vysledek.ok && vysledek.zruseno === true) {
           setStahujeSe(false);
+          setOperacePolozky([]);
           return;
         }
         if (!vysledek.ok && vysledek.soubory !== undefined && vysledek.soubory.length > 0) {
           souboryGalerie.current = vysledek.soubory;
           setGaleriePripravena(true);
+          setStahovaciRezim(true);
+          setOperacePolozky([]);
           setStahujeSe(false);
           setStahovatChyba(null);
           return;
@@ -212,6 +247,7 @@ export function useFotkyStahovani(
     zacniStahovani,
     zrusStahovani,
     prepniVyber,
+    prepniVyberVse,
     provedStahovani,
     resetStahovani,
   };

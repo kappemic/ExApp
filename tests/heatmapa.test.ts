@@ -113,10 +113,10 @@ describe("kontrakt souborů Kroku 4 (statický, bez DOM)", () => {
     expect(obsah).toContain("role=\"application\"");
   });
 
-  it("Heatmapa.tsx: deníkové barvy smrk + jantar, žádný secret", () => {
+  it("Heatmapa.tsx: barvy tras z návrhu (terakota + šalvějová), žádný secret", () => {
     const obsah = cti("src/components/profil/Heatmapa.tsx");
-    expect(obsah).toContain("#2d6a4f");
-    expect(obsah).toContain("#ff7a1a");
+    expect(obsah).toContain("#a8461c");
+    expect(obsah).toContain("#7e9370");
     expect(obsah.toLowerCase()).not.toContain("access_token");
     expect(obsah.toLowerCase()).not.toContain("client_secret");
   });
@@ -131,12 +131,11 @@ describe("kontrakt souborů Kroku 4 (statický, bez DOM)", () => {
     expect(obsah).toContain("44px");
   });
 
-  it("ProfilPage: tab heatmapa líně montuje Heatmapu (PWA split)", () => {
-    const obsah = cti("src/pages/ProfilPage.tsx");
-    expect(obsah).toContain("../components/profil/Heatmapa");
+  it("StatistikyKlub: líně montuje Heatmapu (PWA split)", () => {
+    const obsah = cti("src/components/statistiky/StatistikyKlub.tsx");
+    expect(obsah).toContain("../profil/Heatmapa");
     expect(obsah).toContain("lazy");
     expect(obsah).toContain("Suspense");
-    expect(obsah).toContain('aktivniTab === "heatmapa"');
   });
 
   it("package.json: leaflet runtime + typy, žádný react-leaflet", () => {

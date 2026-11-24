@@ -31,12 +31,14 @@ function klicFotky(fotka: ZdrojZastupneFotky): string {
 }
 
 /**
- * One foreign photo per trip. The same trip keeps its picture, and two trips
- * do not share one while the pool still has an unused photo.
+ * One foreign photo per trip. A trip keeps the photo it already had (`drivejsi`)
+ * while that photo is in the pool, so a change of the list does not swap pictures.
+ * Two trips do not share one while the pool still has an unused photo.
  */
 export function priradZastupne(
   idVyprav: readonly string[],
   bazen: readonly ZdrojZastupneFotky[],
+  drivejsi: ReadonlyMap<string, ZdrojZastupneFotky> = new Map(),
 ): ReadonlyMap<string, ZdrojZastupneFotky> {
   const poradi = [...new Set(idVyprav)].filter((id) => id.length > 0).sort();
   const serazeny = [...bazen].sort(
@@ -45,6 +47,13 @@ export function priradZastupne(
   const volne = new Set(serazeny.map(klicFotky));
   const prirazeni = new Map<string, ZdrojZastupneFotky>();
   for (const id of poradi) {
+    const puvodni = drivejsi.get(id);
+    if (puvodni === undefined || puvodni.idVypravy === id || !volne.has(klicFotky(puvodni))) continue;
+    volne.delete(klicFotky(puvodni));
+    prirazeni.set(id, puvodni);
+  }
+  for (const id of poradi) {
+    if (prirazeni.has(id)) continue;
     const mozne = serazeny.filter(
       (fotka) => fotka.idVypravy !== id && volne.has(klicFotky(fotka)),
     );
@@ -68,6 +77,8 @@ const posluchaci = new Set<() => void>();
 let bazen: readonly ZdrojZastupneFotky[] = [];
 let zadatele: readonly string[] = [];
 let prirazeni: ReadonlyMap<string, ZdrojZastupneFotky> = new Map();
+/** Co už která výprava ukázala. Přežije i odchod ze stránky. */
+const ukazane = new Map<string, ZdrojZastupneFotky>();
 let snimek = { prirazeni };
 let klic = "";
 
@@ -77,7 +88,8 @@ function oznam(): void {
 }
 
 function prepocti(): void {
-  prirazeni = priradZastupne(zadatele, bazen);
+  prirazeni = priradZastupne(zadatele, bazen, ukazane);
+  for (const [id, zdroj] of prirazeni) ukazane.set(id, zdroj);
 }
 
 function prihlas(posluchac: () => void): () => void {
@@ -96,8 +108,12 @@ export function zajistiBazenZastupnych(idVyprav: readonly string[]): void {
   void Promise.all(dalsi.map((id) => nactiFotky(id))).then((vysledky) => {
     if (klic !== novyKlic) return;
     const sesbirane: ZdrojZastupneFotky[] = [];
-    for (const vysledek of vysledky) {
-      if (!vysledek.ok) continue;
+    for (const [index, vysledek] of vysledky.entries()) {
+      if (!vysledek.ok) {
+        // Výpadek jednoho alba nesmí přeházet fotky, které už jsou vidět.
+        sesbirane.push(...bazen.filter((fotka) => fotka.idVypravy === dalsi[index]));
+        continue;
+      }
       for (const fotka of fotkyMimoNahled(vysledek.data.fotky)) {
         sesbirane.push({ idVypravy: fotka.expeditionId, fotkaId: fotka.id });
       }

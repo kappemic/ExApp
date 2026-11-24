@@ -5,12 +5,16 @@ import ConfirmDialog from "../components/kalendar/ConfirmDialog";
 import ConversationList, {
   prevedNaPolozky,
   seradKonverzace,
+  viditelneSegmenty,
   zalozkaProKanal,
   type PolozkaSeznamu,
   type SegmentChatu,
 } from "../components/chat/ConversationList";
 import KonverzaceDetail from "../components/chat/KonverzaceDetail";
+import NovyChatSheet from "../components/chat/NovyChatSheet";
+import PrehledOpravneni from "../components/chat/PrehledOpravneni";
 import SkupinaForm from "../components/chat/SkupinaForm";
+import SpodniSheet from "../components/shell/SpodniSheet";
 import { useAuth } from "../hooks/useAuth";
 import { useKonverzacePrehled } from "../hooks/useKonverzacePrehled";
 import { klicSoukromehoChatu, partnerSoukromeho } from "../shared/soukromy-klic";
@@ -220,6 +224,11 @@ export function vytvorWorstCaseNazvy(): Map<string, string> {
   ]);
 }
 
+/** Obsah panelu se vyměnil na místě, focus musí zůstat uvnitř. */
+function zaostriObsah(prvek: HTMLElement | null): void {
+  prvek?.focus({ preventScroll: true });
+}
+
 /**
  * Nástěnka konverzací (Step 3) — seznam + detail threadu.
  *
@@ -257,8 +266,11 @@ export default function ChatPage(): JSX.Element {
   const [katalogSkupin, setKatalogSkupin] = useState<ApiChatSkupina[]>([]);
   const [formular, setFormular] = useState<
     | null
-    | { id: string | null; nazev: string; prava: PravoSkupiny[] }
+    | { id: string; nazev: string; prava: PravoSkupiny[] }
   >(null);
+  /** Přehled oprávnění skupin (admin). Formulář otevřený z něj se vrací sem. */
+  const [prehledOpravneni, setPrehledOpravneni] = useState<boolean>(false);
+  const [novyChat, setNovyChat] = useState<boolean>(false);
   const [ukladaSkupinu, setUkladaSkupinu] = useState<boolean>(false);
   const [chybaSkupiny, setChybaSkupiny] = useState<string | null>(null);
   const [keSmazaniSkupiny, setKeSmazaniSkupiny] = useState<{
@@ -363,6 +375,7 @@ export default function ChatPage(): JSX.Element {
     if (currentUserId === null) return;
     const klic = klicSoukromehoChatu(currentUserId, clen.id);
     if (klic === null) return;
+    setNovyChat(false);
     setVybranyPartner({ id: clen.id, jmeno: clen.jmeno });
     vyberKonverzaci(klic);
   }
@@ -375,34 +388,34 @@ export default function ChatPage(): JSX.Element {
     });
   }
 
-  async function ulozFormularSkupiny(nazev: string, prava: PravoSkupiny[]): Promise<void> {
-    if (formular === null) return;
+  async function ulozFormularSkupiny(id: string | null, nazev: string, prava: PravoSkupiny[]): Promise<void> {
     setUkladaSkupinu(true);
     setChybaSkupiny(null);
-    const vysledek = await ulozSkupinu(formular.id, nazev, prava);
+    const vysledek = await ulozSkupinu(id, nazev, prava);
     setUkladaSkupinu(false);
     if (!vysledek.ok) {
       setChybaSkupiny(vysledek.chyba);
       return;
     }
     setFormular(null);
+    setNovyChat(false);
     await nactiSkupiny();
     await obnov();
+    // Nová skupina se rovnou otevře.
+    if (id === null) vyberKonverzaci(klicSkupiny(vysledek.data.id));
+  }
+
+  function otevriFormularSkupiny(skupina: ApiChatSkupina): void {
+    setChybaSkupiny(null);
+    setFormular({ id: skupina.id, nazev: skupina.nazev, prava: skupina.prava });
   }
 
   function otevriUpravuSkupiny(key: string): void {
     const id = idZeKliceSkupiny(key);
     if (id === null) return;
-    if (formular?.id === id) {
-      setFormular(null);
-      setChybaSkupiny(null);
-      return;
-    }
     const skupina = katalogSkupin.find((polozka) => polozka.id === id);
     if (skupina === undefined) return;
-    setChybaSkupiny(null);
-    setFormular({ id, nazev: skupina.nazev, prava: skupina.prava });
-    setSegment((pred) => (pred === "vse" ? pred : "globalni"));
+    otevriFormularSkupiny(skupina);
   }
 
   function otevriSmazaniSkupiny(spoustec: HTMLElement): void {
@@ -451,7 +464,7 @@ export default function ChatPage(): JSX.Element {
   useEffect(() => {
     if (vybranyKey === null) return;
     setSegment((pred) => {
-      if (pred === "vse") return pred;
+      if (pred === "vse" || pred === "neprectene") return pred;
       if (vybranyKey.startsWith("expedice:")) return "vypravy";
       if (vybranyKey.startsWith("soukrome:")) return "soukrome";
       return "globalni";
@@ -474,6 +487,16 @@ export default function ChatPage(): JSX.Element {
             vybrana.expeditionId ||
             vybrana.key;
 
+  const partneri = useMemo(
+    () =>
+      new Set(
+        polozky
+          .filter((polozka) => polozka.channel === "soukrome")
+          .map((polozka) => (polozka.partnerId ?? "").toLowerCase())
+          .filter((id) => id.length > 0),
+      ),
+    [polozky],
+  );
   const souhrn = spocitejSouhrnChatu(polozky);
   const vlaknoOtevrene: boolean = vybranyKey !== null;
 
@@ -481,58 +504,83 @@ export default function ChatPage(): JSX.Element {
     <main
       className={
         vlaknoOtevrene
-          ? "nocturne mx-auto flex h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-4rem-env(safe-area-inset-top,0px)-4rem-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 max-w-2xl flex-col overflow-hidden px-5 pb-2 pt-2 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:max-w-none lg:px-8 lg:pb-2 lg:pt-4 min-[90rem]:h-[calc(100dvh-76px)] min-[90rem]:max-h-[calc(100dvh-76px)] min-[90rem]:px-10 min-[90rem]:pb-10 min-[90rem]:pt-11"
-          : "nocturne mx-auto w-full min-w-0 max-w-2xl px-5 pb-16 pt-4 sm:px-6 sm:pt-8 lg:max-w-none lg:px-8 min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11"
+          ? "nocturne mx-auto flex h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 max-w-[46rem] flex-col overflow-hidden px-5 pb-3 pt-3 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:max-w-none lg:px-8 lg:pb-2 lg:pt-4 min-[90rem]:h-[calc(100dvh-76px)] min-[90rem]:max-h-[calc(100dvh-76px)] min-[90rem]:px-10 min-[90rem]:pb-10 min-[90rem]:pt-11"
+          : "nocturne mx-auto w-full min-w-0 max-w-[46rem] px-5 pb-6 pt-4 sm:px-6 sm:pt-8 lg:max-w-none lg:px-8 min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11"
       }
     >
       <header className={`${vlaknoOtevrene ? " hidden lg:block" : ""} mb-4 min-[90rem]:mb-0`}>
         <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:items-end">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+            <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
               Chat
             </h1>
             <p className="text-xs text-ink-3 min-[90rem]:hidden">
               {popisekSouhrnuChatu(souhrn.skupiny, souhrn.soukrome)}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2 min-[90rem]:gap-2.5">
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPrehledOpravneni(true);
+                void nactiSkupiny();
+              }}
+              aria-label="Oprávnění skupin"
+              className="nahled-press inline-flex size-11 items-center justify-center gap-2 rounded-xl border border-linka bg-povrch text-sm font-semibold text-inkoust hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-[46px] min-[90rem]:w-auto min-[90rem]:px-[18px]"
+            >
+              <Ikona nazev="lock" className="size-[18px] min-[90rem]:size-4" />
+              <span className="hidden min-[90rem]:inline">Oprávnění</span>
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => setSegment("soukrome")}
+            onClick={() => {
+              setChybaSkupiny(null);
+              setNovyChat(true);
+            }}
             className="nahled-press inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-smrk px-3.5 text-[13.5px] font-semibold text-papir hover:opacity-90 min-[90rem]:h-[46px] min-[90rem]:gap-2 min-[90rem]:px-[18px] min-[90rem]:text-sm"
           >
-            <Ikona nazev="pen-line" className="size-4" />
+            <Ikona nazev="square-pen" className="size-4 min-[90rem]:hidden" />
+            <Ikona nazev="pen-line" className="hidden size-4 min-[90rem]:block" />
             Napsat
           </button>
+          </div>
+        </div>
+        <div className="mt-8 hidden items-center justify-between border-b border-linka pb-5 pt-1 min-[90rem]:flex">
+          <div role="group" aria-label="Druh konverzací" className="flex items-center gap-2.5">
+            {viditelneSegmenty(polozky, segment).map((polozka) => (
+              <button
+                key={polozka.id}
+                type="button"
+                aria-pressed={segment === polozka.id}
+                onClick={() => setSegment(polozka.id)}
+                className={`nahled-press inline-flex items-center rounded-full border px-3.5 py-2 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk ${
+                  segment === polozka.id
+                    ? "border-transparent bg-inkoust font-semibold text-povrch"
+                    : "border-linka font-medium text-mech hover:bg-povrch-2"
+                }`}
+              >
+                {polozka.nazev}
+              </button>
+            ))}
+          </div>
+          <p className="text-[13px] font-medium text-ink-3">{popisekSouhrnuChatu(souhrn.skupiny, souhrn.soukrome)}</p>
         </div>
       </header>
 
       <div
         className={
           vlaknoOtevrene
-            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6 min-[90rem]:grid-cols-[360px_minmax(0,1fr)] min-[90rem]:gap-7 min-[90rem]:pt-8"
+            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6 min-[90rem]:grid-cols-[360px_minmax(0,1fr)] min-[90rem]:gap-7 min-[90rem]:pt-8"
             : "min-w-0 pt-2 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pt-6 min-[90rem]:grid-cols-[360px_minmax(0,1fr)] min-[90rem]:gap-7 min-[90rem]:pt-8"
         }
       >
         {/* Mobil: seznam NEBO detail. Desktop: vždy vedle sebe. */}
-        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block lg:min-h-0 lg:overflow-y-auto" : "block"} min-[90rem]:posuvnik min-[90rem]:self-stretch min-[90rem]:overflow-y-auto min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:px-4 min-[90rem]:pb-4 min-[90rem]:shadow-denik`}>
-          <div className="hidden items-center justify-between pb-2 pt-4 min-[90rem]:flex">
-            <h2 className="text-base font-bold text-inkoust">Konverzace</h2>
-            {muzeSpravovatSkupiny ? (
-              <button
-                type="button"
-                aria-label="Nová skupina"
-                onClick={() => {
-                  setChybaSkupiny(null);
-                  setFormular({ id: null, nazev: "", prava: [] });
-                  setSegment("globalni");
-                }}
-                className="nahled-press flex size-7 items-center justify-center rounded-lg bg-povrch-2 text-mech hover:bg-linka"
-              >
-                <Ikona nazev="plus" className="size-[15px]" />
-              </button>
-            ) : null}
-          </div>
-          <h2 className="sr-only min-[90rem]:hidden">Konverzace</h2>
+        <div className={`min-w-0 ${vybranyKey !== null ? "hidden lg:block lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto" : "block"} posuvnik min-[90rem]:self-start min-[90rem]:overflow-y-auto min-[90rem]:max-h-full min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:shadow-denik`}>
+          <h2 className="sr-only px-4 pb-2 pt-4 font-display text-base font-bold tracking-[-0.2px] text-inkoust min-[90rem]:not-sr-only min-[90rem]:!px-5 min-[90rem]:!pb-3 min-[90rem]:!pt-4">
+            Konverzace
+          </h2>
           <ConversationList
             polozky={polozky}
             vybranyKey={vybranyKey}
@@ -545,49 +593,6 @@ export default function ChatPage(): JSX.Element {
             onZacitSClenem={zacitSClenem}
             segment={segment}
             onSegment={setSegment}
-            muzeSpravovatSkupiny={muzeSpravovatSkupiny}
-            onNovaSkupina={() => {
-              setChybaSkupiny(null);
-              setFormular({ id: null, nazev: "", prava: [] });
-              setSegment("globalni");
-            }}
-            novaSkupina={
-              formular !== null && formular.id === null ? (
-                <SkupinaForm
-                  key="nova"
-                  nazev={formular.nazev}
-                  prava={formular.prava}
-                  ukladaSe={ukladaSkupinu}
-                  chyba={chybaSkupiny}
-                  onZrusit={() => {
-                    setFormular(null);
-                    setChybaSkupiny(null);
-                  }}
-                  onUlozit={(nazev, prava) => {
-                    void ulozFormularSkupiny(nazev, prava);
-                  }}
-                />
-              ) : null
-            }
-            onUpravitSkupinu={isAdmin ? otevriUpravuSkupiny : undefined}
-            upravaSkupiny={
-              formular !== null && formular.id !== null
-                ? {
-                    key: klicSkupiny(formular.id),
-                    nazev: formular.nazev,
-                    prava: formular.prava,
-                    ukladaSe: ukladaSkupinu,
-                    chyba: chybaSkupiny,
-                    onZrusit: () => {
-                      setFormular(null);
-                      setChybaSkupiny(null);
-                    },
-                    onUlozit: (nazev, prava) => {
-                      void ulozFormularSkupiny(nazev, prava);
-                    },
-                  }
-                : null
-            }
           />
         </div>
 
@@ -608,13 +613,11 @@ export default function ChatPage(): JSX.Element {
                 Vyber konverzaci
               </p>
               <p className="mx-auto max-w-sm min-w-0 break-words text-[13px] leading-snug text-ink-3">
-                Vlevo je seznam vláken s náhledem poslední zprávy. Klikni na
-                řádek a thread se otevře tady — se seskupenými bublinami po
-                autorovi a dni.
+                Vlevo jsou všechny chaty, nahoře nový založíš přes Napsat.
               </p>
             </div>
           ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-linka bg-povrch shadow-denik lg:h-full">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:h-full lg:rounded-2xl lg:border lg:border-linka lg:bg-povrch lg:shadow-denik">
               <KonverzaceDetail
                 key={vybrana.key}
                 konverzace={vybrana}
@@ -632,6 +635,13 @@ export default function ChatPage(): JSX.Element {
                   void obnov();
                 }}
                 onNahled={(zprava) => nastavNahled(vybrana.key, zprava)}
+                onUpravitSkupinu={
+                  isAdmin && vybrana.channel === "skupina"
+                    ? () => {
+                        otevriUpravuSkupiny(vybrana.key);
+                      }
+                    : undefined
+                }
                 onSmazatSkupinu={
                   muzeSpravovatSkupiny && vybrana.channel === "skupina"
                     ? otevriSmazaniSkupiny
@@ -642,6 +652,59 @@ export default function ChatPage(): JSX.Element {
           )}
         </div>
       </div>
+      <NovyChatSheet
+        otevreno={novyChat}
+        clenove={clenove}
+        jaId={currentUserId}
+        partneri={partneri}
+        muzeSkupinu={muzeSpravovatSkupiny}
+        ukladaSe={ukladaSkupinu}
+        chyba={chybaSkupiny}
+        onZavrit={() => {
+          setNovyChat(false);
+          setChybaSkupiny(null);
+        }}
+        onClen={zacitSClenem}
+        onVytvoritSkupinu={(nazev, prava) => {
+          void ulozFormularSkupiny(null, nazev, prava);
+        }}
+      />
+      <SpodniSheet
+        otevreno={formular !== null || prehledOpravneni}
+        titulek={formular !== null ? "Upravit skupinu" : "Oprávnění skupin"}
+        podtitul={formular !== null ? formular.nazev : "Kdo smí skupiny číst a kdo do nich psát."}
+        sirka={480}
+        onZavrit={() => {
+          setFormular(null);
+          setPrehledOpravneni(false);
+          setChybaSkupiny(null);
+        }}
+      >
+        {formular !== null ? (
+          <div key={formular.id} ref={prehledOpravneni ? zaostriObsah : undefined} tabIndex={-1} style={{ outline: "none" }}>
+          <SkupinaForm
+            zrusit={prehledOpravneni ? "Zpět" : "Zrušit"}
+            nazev={formular.nazev}
+            prava={formular.prava}
+            ukladaSe={ukladaSkupinu}
+            chyba={chybaSkupiny}
+            onZrusit={() => {
+              setFormular(null);
+              setChybaSkupiny(null);
+            }}
+            onUlozit={(nazev, prava) => {
+              void ulozFormularSkupiny(formular.id, nazev, prava);
+            }}
+          />
+          </div>
+        ) : prehledOpravneni ? (
+          <PrehledOpravneni
+            skupiny={katalogSkupin}
+            onVybrat={otevriFormularSkupiny}
+            onZavrit={() => setPrehledOpravneni(false)}
+          />
+        ) : null}
+      </SpodniSheet>
       {keSmazaniSkupiny !== null && (
         <ConfirmDialog
           otevreno

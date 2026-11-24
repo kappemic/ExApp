@@ -1,13 +1,11 @@
 import type { JSX } from "react";
 import Ikona from "../Ikona";
 import { Link } from "react-router-dom";
-import {
-  mapujRoliNaProfil,
-  type ClenskyProfil,
-} from "../../config/roles";
-import { OBLIBENE_BARVY, jeOblibenaBarva, type UserListItem } from "../../shared/api-types";
-import { popisekClena } from "../../lib/clen-popisek";
+import type { ClenskyProfil } from "../../config/roles";
+import type { UserListItem } from "../../shared/api-types";
+import { popisekClena, profilClena } from "../../lib/clen-popisek";
 import AvatarKruh from "../AvatarKruh";
+import { useAuth } from "../../hooks/useAuth";
 import { SEZNAM_KARTA_TRIDA, SeznamSipka } from "../SeznamKarta";
 import PrazdnyStav from "../PrazdnyStav";
 import Strankovani from "../Strankovani";
@@ -19,57 +17,30 @@ interface ClenoveTableProps {
   clenove: ReadonlyArray<UserListItem>;
   /** Id právě otevřeného člena — zvýrazní řádek, jehož detail je v dialogu. */
   vybranyId?: string | null;
-  /** Klik / Enter na řádek — stránka otevře ClenDetailModal. */
-  onVyber: (clen: UserListItem) => void;
+  /** Otevře Správu člena. Bez ní (není hlavní admin) vede poslední sloupec na profil. */
+  onSpravovat?: (clen: UserListItem) => void;
   popisek?: string;
   /** Počet výprav podle id člena (ze žebříčku). */
   vypravyClena?: ReadonlyMap<string, number>;
 }
-
-/** 3D profil člena s fallbackem ze starého `role` (trio je optional). */
-function profilClena(clen: UserListItem): ClenskyProfil {
-  const profil: ClenskyProfil = mapujRoliNaProfil(clen.role);
-  return {
-    clenstvi: clen.clenstvi ?? profil.clenstvi,
-    funkce: clen.funkce ?? profil.funkce,
-    isAdmin: clen.isAdmin ?? profil.isAdmin,
-  };
-}
-
-
-/** Color dot beside a member name. The Czech name stays for screen readers. */
-function KoleckoBarvy({ nazev }: { nazev: string }): JSX.Element | null {
-  if (!jeOblibenaBarva(nazev)) return null;
-  const hex = OBLIBENE_BARVY.find((barva) => barva.nazev === nazev)?.hex;
-  const popisek = nazev.charAt(0).toLocaleUpperCase("cs-CZ") + nazev.slice(1);
-  return (
-    <span title={popisek} className="inline-flex shrink-0">
-      <span
-        aria-hidden="true"
-        className="h-3.5 w-3.5 rounded-full border border-linka"
-        style={{ backgroundColor: hex }}
-      />
-      <span className="sr-only">{popisek}</span>
-    </span>
-  );
-}
-
 
 /**
  * Jedna znovupoužitelná tabulka pro všechny 4 taby.
  * Pod 1440 px seznam řádků (avatar, jméno, zařazení, ›) podle návrhu, žádný
  * vodorovný scroll. Od 1440 px tabulka se všemi sloupci.
  * Nativní <table> = role=table zdarma, prázdný stav má role=status.
- * Řádek je klikací tlačítko (min-h 44px, aria-haspopup="dialog") —
- * klik / Enter otevře ClenDetailModal (stav drží AdminClenovePage).
+ * Jméno vede na profil člena, „…" v posledním sloupci otevře Správu člena
+ * (stav drží AdminClenovePage).
  */
 export default function ClenoveTable({
   clenove,
   vybranyId,
-  onVyber,
+  onSpravovat,
   popisek,
   vypravyClena,
 }: ClenoveTableProps): JSX.Element {
+  const { user } = useAuth();
+  const mojeId = user?.id ?? null;
   const strankovani = useStrankovani(clenove, RADKU_NA_STRANKU, `${popisek ?? ""}:${clenove.length}`);
   if (clenove.length === 0) {
     return (
@@ -91,44 +62,23 @@ export default function ClenoveTable({
         const profil: ClenskyProfil = profilClena(clen);
         const vybran: boolean = vybranyId === clen.id;
         return (
-          <li
-            key={clen.id}
-            className={`flex min-w-0 items-center ${vybran ? "bg-mlha/60" : ""}`}
-          >
+          <li key={clen.id} className={`min-w-0 ${vybran ? "bg-mlha/60" : ""}`}>
             <Link
               to={`/cleny/${clen.id}`}
-              className="bez-prejeti flex min-h-[64px] min-w-0 flex-1 items-center gap-3 py-2.5 pl-3.5 pr-1 [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
+              className="nahled-press bez-prejeti flex min-h-[64px] min-w-0 items-center gap-3 px-3.5 py-3 [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
             >
-              <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} />
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-[15px] font-semibold text-inkoust">
-                    {clen.jmeno}
-                  </span>
-                  <KoleckoBarvy nazev={clen.oblibenaBarva ?? ""} />
-                </span>
-                <span className="block truncate text-[13px] text-ink-3">
-                  {popisekClena(profil, clen.isSuperadmin === true)}
-                </span>
+              <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} ton="barevny" velikost={40} />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="min-w-0 truncate text-[14.5px] font-semibold text-inkoust">{clen.jmeno}</span>
+                <span className="block truncate text-xs text-ink-3">{popisekClena(profil, clen.isSuperadmin === true)}</span>
               </span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => onVyber(clen)}
-              aria-haspopup="dialog"
-              aria-label={`${clen.jmeno}, správa člena`}
-              className="bez-prejeti inline-flex min-h-11 shrink-0 items-center rounded-lg px-2.5 text-xs font-bold text-mech [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-smrk"
-            >
-              Správa
-            </button>
-            <span className="pr-3.5">
               <SeznamSipka />
-            </span>
+            </Link>
           </li>
         );
       })}
     </ul>
-    <div className="hidden overflow-hidden rounded-2xl border border-linka bg-povrch shadow-jemny min-[90rem]:block">
+    <div className="hidden overflow-hidden rounded-2xl border border-linka bg-povrch shadow-karta min-[90rem]:block">
       <table className="w-full table-fixed border-collapse text-left">
         <caption className="sr-only">
           {popisek ?? "Seznam členů — jméno, e-mail, členství, funkce, admin a výpravy"}
@@ -143,7 +93,7 @@ export default function ClenoveTable({
           <col className="w-[46px]" />
         </colgroup>
         <thead>
-          <tr className="h-11 border-b border-linka bg-[#fbf8ef] text-[10.5px] font-bold uppercase tracking-[0.8px] text-ink-3">
+          <tr className="h-11 border-b border-linka bg-zahlavi text-[10.5px] font-bold uppercase tracking-[1.1px] text-ink-3">
             <th scope="col" className="pl-5 font-bold">Člen</th>
             <th scope="col" className="pl-4 font-bold">E-mail</th>
             <th scope="col" className="pl-4 font-bold">Základna</th>
@@ -157,67 +107,95 @@ export default function ClenoveTable({
           {strankovani.viditelne.map((clen) => {
             const vybran: boolean = vybranyId === clen.id;
             const profil: ClenskyProfil = profilClena(clen);
-            const funkce = profil.funkce === "vedeni" ? "Vedení" : profil.funkce === "rada" ? "Rada" : null;
+            const funkce = profil.funkce === "vedeni" ? "Vedení" : profil.funkce === "rada" ? "Člen rady" : null;
             const admin = clen.isSuperadmin ? "Hlavní admin" : profil.isAdmin ? "Admin" : null;
             return (
               <tr
                 key={clen.id}
-                className={`h-[68px] border-b border-linka align-middle last:border-b-0 motion-safe:transition-colors hover:bg-povrch-2/60 ${vybran ? "bg-[#fbf8ef]" : ""}`}
+                className={`h-[68px] border-b border-linka align-middle last:border-b-0 motion-safe:transition-colors hover:bg-povrch-2/60 ${vybran ? "bg-zahlavi" : ""}`}
               >
                 <th scope="row" className="pl-5 font-normal">
                   <Link
                     to={`/cleny/${clen.id}`}
                     className="bez-prejeti flex min-w-0 items-center gap-[11px] rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
                   >
-                    <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} ton="barevny" velikost={34} />
+                    <AvatarKruh jmeno={clen.jmeno} url={clen.avatarUrl} ton={clen.id === mojeId ? "moje" : "cizi"} velikost={34} />
                     <span className="min-w-0 truncate text-sm font-semibold text-inkoust">{clen.jmeno}</span>
-                    <KoleckoBarvy nazev={clen.oblibenaBarva ?? ""} />
                   </Link>
                 </th>
                 <td className="truncate pl-4 text-[11.5px] text-ink-3">{clen.email}</td>
-                <td className="pl-4 text-[12.5px] font-semibold text-inkoust">
+                <td className={`pl-4 text-[12.5px] ${profil.clenstvi === "aktivni_clen" ? "font-semibold text-inkoust" : "text-mech"}`}>
                   {profil.clenstvi === "aktivni_clen" ? "Aktivní člen" : "Člen"}
                 </td>
                 <td className="pl-4">
                   {funkce !== null ? (
-                    <span className="rounded-full bg-povrch-2 px-2 py-[3px] text-[10.5px] font-semibold text-mech">{funkce}</span>
+                    <span className="inline-flex rounded-full bg-povrch-2 px-2 py-[3px] text-[10.5px] font-semibold text-mech">{funkce}</span>
                   ) : (
-                    <span className="text-[12.5px] text-ink-3">—</span>
+                    <span className="text-[12.5px] text-[#c3c7b6]">—</span>
                   )}
                 </td>
                 <td className="pl-4">
                   {admin !== null ? (
-                    <span className="rounded-full bg-mlha px-2 py-[3px] text-[10.5px] font-semibold text-smrk">{admin}</span>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-[3px] text-[10.5px] font-semibold ${
+                        clen.isSuperadmin ? "bg-okr-100 text-okr" : "bg-mlha text-smrk"
+                      }`}
+                    >
+                      {admin}
+                    </span>
                   ) : (
-                    <span className="text-[12.5px] text-ink-3">—</span>
+                    <span className="text-[12.5px] text-[#c3c7b6]">—</span>
                   )}
                 </td>
-                <td className="pl-4 font-display text-[15px] font-bold tabular-nums text-inkoust">
+                <td className="pl-4 font-display text-[15px] font-bold text-inkoust">
                   {vypravyClena?.get(clen.id) ?? 0}
                 </td>
                 <td className="pr-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onVyber(clen)}
-                    aria-haspopup="dialog"
-                    aria-label={`${clen.jmeno}, správa člena`}
-                    className="bez-prejeti inline-flex size-9 items-center justify-center rounded-lg text-ink-3 hover:bg-povrch-2 hover:text-inkoust focus-visible:outline-2 focus-visible:outline-smrk"
-                  >
-                    <Ikona nazev="chevron-right" className="size-4" />
-                  </button>
+                  {onSpravovat !== undefined ? (
+                    <button
+                      type="button"
+                      onClick={() => onSpravovat(clen)}
+                      aria-haspopup="dialog"
+                      aria-label={`${clen.jmeno}, správa člena`}
+                      className="bez-prejeti inline-flex size-9 items-center justify-center rounded-lg text-ink-3 hover:bg-povrch-2 hover:text-inkoust focus-visible:outline-2 focus-visible:outline-smrk"
+                    >
+                      <Ikona nazev="ellipsis" className="size-[15px]" />
+                    </button>
+                  ) : (
+                    <Link
+                      to={`/cleny/${clen.id}`}
+                      aria-label={`${clen.jmeno}, profil člena`}
+                      className="bez-prejeti inline-flex size-9 items-center justify-center rounded-lg text-ink-3 hover:bg-povrch-2 hover:text-inkoust focus-visible:outline-2 focus-visible:outline-smrk"
+                    >
+                      <Ikona nazev="chevron-right" className="size-[15px]" />
+                    </Link>
+                  )}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {strankovani.pocet > 1 ? (
+        <div className="flex h-[52px] items-center justify-between border-t border-linka bg-zahlavi px-5">
+          <p className="text-xs text-ink-3">
+            {strankovani.viditelne.length} z {clenove.length} členů
+          </p>
+          <Strankovani
+            cislo={strankovani.cislo}
+            pocet={strankovani.pocet}
+            onZmena={strankovani.nastav}
+            popisek="Stránky tabulky členů"
+          />
+        </div>
+      ) : null}
     </div>
     <Strankovani
       cislo={strankovani.cislo}
       pocet={strankovani.pocet}
       onZmena={strankovani.nastav}
       popisek="Stránky seznamu členů"
-      className="mt-4"
+      className="mt-4 min-[90rem]:hidden"
     />
     </>
   );

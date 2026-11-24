@@ -1,5 +1,5 @@
 import { apiBase } from "../lib/api-base";
-import { OBECNA_CHYBA, ctiJsonTelo, jeRecord } from "../lib/api-odpoved";
+import { OBECNA_CHYBA, chybyPoliZTela, ctiJsonTelo, jeRecord } from "../lib/api-odpoved";
 /**
  * useProfile — fetch + mutate vlastního profilu (Fáze 4, Step 4).
  *
@@ -43,17 +43,6 @@ function jeApiUser(hodnota: unknown): hodnota is ApiUser {
 function jeUpravitOdpoved(hodnota: unknown): hodnota is UpravitProfilResponse {
   if (!jeRecord(hodnota)) return false;
   return jeApiUser(hodnota["user"]);
-}
-
-function chybyPoliZTela(telo: unknown): Record<string, string> | undefined {
-  if (!jeApiChyba(telo)) return undefined;
-  const detaily: Record<string, string[]> = telo.error.details ?? {};
-  const vysledek: Record<string, string> = {};
-  for (const [pole, seznam] of Object.entries(detaily)) {
-    const prvni: string | undefined = seznam[0];
-    if (typeof prvni === "string" && prvni.length > 0) vysledek[pole] = prvni;
-  }
-  return Object.keys(vysledek).length > 0 ? vysledek : undefined;
 }
 
 /** Načte vlastní profil (`GET /api/me`). */

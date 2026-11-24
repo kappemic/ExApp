@@ -5,7 +5,9 @@
 import {
   and,
   asc,
+  count,
   eq,
+  isNotNull,
   ne,
   sql,
 } from "drizzle-orm";
@@ -69,8 +71,38 @@ import {
   users,
 } from "../../drizzle/schema/users";
 import {
+  photos,
+} from "../../drizzle/schema/photos";
+import {
+  albaFotky,
+} from "../../drizzle/schema/alba";
+import {
   verejnyAvatarUrl,
 } from "./diskuze";
+
+/** Uploads from expedition photos plus album photos. Missing author is skipped. */
+async function poctyNahranychFotek(db: Db): Promise<Map<string, number>> {
+  const mapa = new Map<string, number>();
+  const pridej = (id: string | null, hodnota: unknown): void => {
+    if (id === null) return;
+    const cislo = typeof hodnota === "number" ? hodnota : Number(hodnota);
+    if (!Number.isFinite(cislo)) return;
+    mapa.set(id, (mapa.get(id) ?? 0) + cislo);
+  };
+  const zVyprav = await db
+    .select({ id: photos.uploadedBy, n: count() })
+    .from(photos)
+    .where(isNotNull(photos.uploadedBy))
+    .groupBy(photos.uploadedBy);
+  for (const radek of zVyprav) pridej(radek.id, radek.n);
+  const zAlb = await db
+    .select({ id: albaFotky.uploadedBy, n: count() })
+    .from(albaFotky)
+    .where(isNotNull(albaFotky.uploadedBy))
+    .groupBy(albaFotky.uploadedBy);
+  for (const radek of zAlb) pridej(radek.id, radek.n);
+  return mapa;
+}
 
 export function registrujCleny(app: Express): void {
   /** Postgres check_violation (23514), including the Neon HTTP driver wrapper. */
@@ -242,10 +274,13 @@ export function registrujCleny(app: Express): void {
         try {
           const db = getDb();
           const radky = await db.select().from(users).orderBy(asc(users.email));
+          const pocty = await poctyNahranychFotek(db);
           const divak = (req as AutentizovanyRequest).uzivatel;
           const vidiTelefon = vidiTelefonyClenu(divak);
           const telo: UsersListResponse = {
-            users: radky.map((radek) => toUserListItem(radek, vidiTelefon)),
+            users: radky.map((radek) =>
+              toUserListItem(radek, vidiTelefon, pocty.get(radek.id) ?? 0),
+            ),
           };
           res.json(telo);
         } catch {
@@ -259,8 +294,12 @@ export function registrujCleny(app: Express): void {
 
   type UserRow = typeof users.$inferSelect;
 
-  /** DB row → UserListItem. Plain members get telefon: null. */
-  function toUserListItem(radek: UserRow, vidiTelefon = true): UserListItem {
+  /** DB row → UserListItem. Plain members get telefon and birth date as null. */
+  function toUserListItem(
+    radek: UserRow,
+    vidiTelefon = true,
+    pocetFotek = 0,
+  ): UserListItem {
     const cele = `${radek.jmeno} ${radek.prijmeni}`.trim().replace(/\s+/g, " ");
     const role: Role = isKnownRole(radek.role) ? radek.role : "clen";
     const clenstvi: Clenstvi =
@@ -272,6 +311,8 @@ export function registrujCleny(app: Express): void {
     return {
       id: radek.id as UserId,
       jmeno: cele.length > 0 ? cele : radek.email,
+      krestniJmeno: radek.jmeno,
+      prijmeni: radek.prijmeni,
       email: radek.email,
       role,
       clenstvi,
@@ -286,12 +327,17 @@ export function registrujCleny(app: Express): void {
       avatarUrl: verejnyAvatarUrl(radek.avatarUrl),
       oblibenaBarva:
         typeof radek.oblibenaBarva === "string" ? radek.oblibenaBarva : "",
+      narozeniny:
+        vidiTelefon && typeof radek.narozeniny === "string" && radek.narozeniny.length > 0
+          ? radek.narozeniny
+          : null,
+      pocetFotek,
     };
   }
 
   /* ------------------------------------------------------------------ */
-  /* PATCH /api/users/:id — úprava 3D tria / školy / třídy (jen ADMIN).    */
-  /* Tělo je parciální trio (`clenstvi?/funkce?/isAdmin?/skola?/trida?`)    */
+  /* PATCH /api/users/:id — úprava 3D tria a osobních údajů (superadmin).  */
+  /* Tělo je parciální trio a `UpravitUdajeUzivatele` (bez e-mailu a hesla) */
   /* NEBO samotné staré `{ role }` (mapujRoliNaProfil → trio) — obojí      */
   /* najednou → 422 (validujUpravuUzivatele). Efektivní trio (merge s DB)   */
   /* hlídá chybaKombinace3D (`clen` + funkce → 422 s details.funkce).       */
@@ -339,6 +385,11 @@ export function registrujCleny(app: Express): void {
             funkce?: Funkce;
             isAdmin?: boolean;
             isSuperadmin?: boolean;
+            jmeno?: string;
+            prijmeni?: string;
+            telefon?: string | null;
+            discordNick?: string | null;
+            narozeniny?: string | null;
             skola?: string;
             trida?: string;
             updatedAt: Date;
@@ -391,11 +442,22 @@ export function registrujCleny(app: Express): void {
               vstup.isSuperadmin !== undefined ||
               prava.isAdmin !== stavajiciPrava.isAdmin ||
               prava.isSuperadmin !== stavajiciPrava.isSuperadmin;
-            const meniSkolu =
-              vstup.skola !== undefined || vstup.trida !== undefined;
-            if (!meniTrio && !meniSkolu) {
+            const udaje = {
+              ...(vstup.jmeno !== undefined ? { jmeno: vstup.jmeno } : {}),
+              ...(vstup.prijmeni !== undefined ? { prijmeni: vstup.prijmeni } : {}),
+              ...(vstup.telefon !== undefined ? { telefon: vstup.telefon } : {}),
+              ...(vstup.discordNick !== undefined ? { discordNick: vstup.discordNick } : {}),
+              ...(vstup.narozeniny !== undefined ? { narozeniny: vstup.narozeniny } : {}),
+              ...(vstup.skola !== undefined ? { skola: vstup.skola } : {}),
+              ...(vstup.trida !== undefined ? { trida: vstup.trida } : {}),
+            };
+            if (!meniTrio && Object.keys(udaje).length === 0) {
               const telo: UpravitUzivateleResponse = {
-                user: toUserListItem(stavajici),
+                user: toUserListItem(
+                  stavajici,
+                  true,
+                  (await poctyNahranychFotek(db)).get(stavajici.id) ?? 0,
+                ),
               };
               res.json(telo);
               return;
@@ -415,9 +477,8 @@ export function registrujCleny(app: Express): void {
             ) {
               zmeny.isSuperadmin = prava.isSuperadmin;
             }
-            if (vstup.skola !== undefined) zmeny.skola = vstup.skola;
-            if (vstup.trida !== undefined) zmeny.trida = vstup.trida;
-            // Dual-write mirror — jen když se trio mění (škola/třída roli nese).
+            Object.assign(zmeny, udaje);
+            // Dual-write mirror — jen když se trio mění (osobní údaje roli nenesou).
             if (meniTrio) zmeny.role = trioNaRoli(efektProfil);
           }
 
@@ -448,7 +509,11 @@ export function registrujCleny(app: Express): void {
             return;
           }
           const telo: UpravitUzivateleResponse = {
-            user: toUserListItem(radek),
+            user: toUserListItem(
+              radek,
+              true,
+              (await poctyNahranychFotek(db)).get(radek.id) ?? 0,
+            ),
           };
           res.json(telo);
         } catch (chyba) {

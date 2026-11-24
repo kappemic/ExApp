@@ -1,6 +1,6 @@
 import { useState, type JSX } from "react";
 import { useNavigate } from "react-router-dom";
-import HlavickaZpet, { AkceHlavicky } from "../components/HlavickaZpet";
+import HlavickaZpet, { AkceHlavicky, ZpetPocitac } from "../components/HlavickaZpet";
 import Ikona from "../components/Ikona";
 import ExpeditionForm, {
   type ChybyExpedice,
@@ -28,17 +28,17 @@ function KontrolniSeznam({ kontrola }: { kontrola: KontrolaVypravy }): JSX.Eleme
   return (
     <section
       aria-labelledby="kontrolni-seznam"
-      className="flex flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-jemny"
+      className="flex flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-karta"
     >
       <div className="flex items-center justify-between">
         <h2 id="kontrolni-seznam" className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">
           Kontrolní seznam
         </h2>
-        <span className="text-[11.5px] font-semibold tabular-nums text-ink-3">
+        <span className="text-[11.5px] font-semibold text-ink-3">
           {hotovo} / {POLOZKY_KONTROLY.length}
         </span>
       </div>
-      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+      <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
         {POLOZKY_KONTROLY.map((polozka) => {
           const splneno = kontrola[polozka.klic];
           return (
@@ -101,7 +101,7 @@ export default function NovaVypravaPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 pb-16 pt-4 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+    <main className="mx-auto w-full max-w-[46rem] px-5 pb-6 pt-4 sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <HlavickaZpet
         zpet="/vypravy"
         zpetPopisek="Zpět na výpravy"
@@ -109,8 +109,9 @@ export default function NovaVypravaPage(): JSX.Element {
         akce={<AkceHlavicky onClick={() => navigate("/vypravy")}>Zrušit</AkceHlavicky>}
         className="mb-5 min-[90rem]:hidden"
       />
+      <ZpetPocitac zpet="/vypravy" popisek="Zpět na výpravy" />
       <div className="mb-5 flex items-end justify-between gap-4 min-[90rem]:mb-8">
-        <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+        <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
           Nová výprava
         </h1>
         <div className="hidden items-center gap-2.5 min-[90rem]:flex">

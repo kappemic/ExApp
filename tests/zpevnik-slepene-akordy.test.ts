@@ -73,9 +73,10 @@ describe("slepené akordy z PDF", () => {
     expect(akordy(prvniRadek(textZTela(ULOZENA)))).toEqual(["F", "Am", "G", "Am", "G"]);
   });
 
-  it("akordy za koncem textu se vykreslí červeně a nepřekryjí se", () => {
+  it("akordy za koncem textu se vykreslí každý zvlášť a nepřekryjí se", () => {
     const html = renderToStaticMarkup(createElement(TeloPisnePohled, { telo: opravRozpadleAkordy(ULOZENA) }));
-    expect(html).toContain('<div class="font-bold text-red-700">  F  Am G Am G</div>');
+    const vykreslene = [...html.matchAll(/text-okr[^>]*>([^<]*)</g)].map((m) => (m[1] ?? "").trim()).filter((a) => a.length > 0);
+    expect(vykreslene).toEqual(["F", "Am", "G", "Am", "G"]);
     expect(html).not.toContain("AmGAmG");
   });
 });

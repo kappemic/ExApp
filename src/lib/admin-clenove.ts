@@ -1,5 +1,5 @@
 import { apiBase } from "./api-base";
-import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
+import { chybaZApiTela, chybyPoliZTela, ctiJsonTelo } from "./api-odpoved";
 /**
  * src/lib/admin-clenove.ts — klient správy členů nad živými users.
  *
@@ -25,13 +25,20 @@ import {
   type UserListItem,
   type UsersListResponse,
   type SmazatUzivateleResponse,
+  type UpravitUdajeUzivatele,
   type UpravitUzivateleResponse,
 } from "../shared/api-types";
 
 /** Sjednocený výsledek — úspěch nese data, chyba českou hlášku. */
 export type ClenoveVysledek<T> =
   | { ok: true; data: T }
-  | { ok: false; chyba: string; kod?: ApiErrorCode };
+  | {
+      ok: false;
+      chyba: string;
+      kod?: ApiErrorCode;
+      /** Chyby jednotlivých polí z 422 (první hláška každého pole). */
+      chybyPoli?: Record<string, string>;
+    };
 
 function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
   if (typeof hodnota !== "object" || hodnota === null) return false;
@@ -52,6 +59,12 @@ function jeUserListItem(hodnota: unknown): hodnota is UserListItem {
     typeof kandidat["trida"] !== "string"
   ) {
     return false;
+  }
+  // Křestní jméno a příjmení zvlášť jsou v kontraktu aditivně optional.
+  for (const klic of ["krestniJmeno", "prijmeni"]) {
+    if (kandidat[klic] !== undefined && typeof kandidat[klic] !== "string") {
+      return false;
+    }
   }
   // Discord nick nese server vždy (DB `discord_nick` nullable → string | null).
   // Platný string i null projdou, chybějící / jiný tvar odpověď odmítne.
@@ -151,19 +164,16 @@ export async function nactiCleny(): Promise<ClenoveVysledek<UserListItem[]>> {
 }
 
 /**
- * Vstup nového profilového PATCH (jen ADMIN, PATCH /api/users/:id).
- * Parciální — `JSON.stringify` nedefinovaná pole vynechá, server mění
- * jen poslaná (`Object.hasOwn`). `skola`/`trida` se posílají jen
- * vyplněné (prázdná by mazala).
+ * Vstup úpravy člena (jen hlavní admin, PATCH /api/users/:id).
+ * Parciální — server mění jen poslaná pole. Prázdná hodnota nepovinné
+ * pole smaže, takže se posílají jen skutečně změněná pole.
  */
-export interface UlozitProfilVstup {
+export interface UlozitProfilVstup extends UpravitUdajeUzivatele {
   clenstvi?: Clenstvi;
   funkce?: Funkce;
   isAdmin?: boolean;
   /** Hlavní admin. `true` v payloadu vynutí i `isAdmin: true`. */
   isSuperadmin?: boolean;
-  skola?: string;
-  trida?: string;
 }
 
 async function patchUzivatele(
@@ -188,15 +198,19 @@ async function patchUzivatele(
     if (odpoved.status === 200 && jeUpravitUzivateleResponse(odpovedTelo)) {
       return { ok: true, data: odpovedTelo.user };
     }
-    return chybaZApiTela(odpovedTelo);
+    const chybyPoli = chybyPoliZTela(odpovedTelo);
+    return {
+      ...chybaZApiTela(odpovedTelo),
+      ...(chybyPoli === undefined ? {} : { chybyPoli }),
+    };
   } catch {
     return { ok: false, chyba: "Bez připojení uložit nejde. Zkus to později." };
   }
 }
 
 /**
- * Uložení 3D profilu člena (jen ADMIN, PATCH /api/users/:id).
- * Parciální trio `clenstvi?/funkce?/isAdmin?/isSuperadmin?` + `skola?/trida?`;
+ * Uložení člena (jen hlavní admin, PATCH /api/users/:id).
+ * Parciální trio `clenstvi?/funkce?/isAdmin?/isSuperadmin?` a osobní údaje;
  * kombinaci `clen` + funkce odmítne server (422, `chybaKombinace3D`).
  * Zapnutý hlavní admin vždy pošle i `isAdmin: true`.
  */
@@ -204,16 +218,8 @@ export async function ulozProfilClena(
   id: string,
   vstup: UlozitProfilVstup,
 ): Promise<ClenoveVysledek<UserListItem>> {
-  const telo: Record<string, unknown> = {};
-  if (vstup.clenstvi !== undefined) telo["clenstvi"] = vstup.clenstvi;
-  if (vstup.funkce !== undefined) telo["funkce"] = vstup.funkce;
-  if (vstup.isAdmin !== undefined) telo["isAdmin"] = vstup.isAdmin;
-  if (vstup.isSuperadmin !== undefined) {
-    telo["isSuperadmin"] = vstup.isSuperadmin;
-  }
+  const telo: Record<string, unknown> = { ...vstup };
   if (vstup.isSuperadmin === true) telo["isAdmin"] = true;
-  if (vstup.skola !== undefined) telo["skola"] = vstup.skola;
-  if (vstup.trida !== undefined) telo["trida"] = vstup.trida;
   return patchUzivatele(id, telo);
 }
 

@@ -1,5 +1,5 @@
-import type { JSX } from "react";
-import { isoCasNaEvropsky } from "../../lib/evropsky-cas";
+import type { JSX, ReactNode } from "react";
+import { casKZobrazeni } from "../../lib/evropsky-cas";
 import { jeBezOmezeni } from "../../lib/expedition-utils";
 import { barvaVypravy, TRIDY_BARVY, type BarvaUdalosti } from "../../lib/kalendar-barvy";
 import { schuzkyDne, vypravyDne, type KalendarniUdalost } from "../../lib/kalendar";
@@ -38,13 +38,16 @@ export function kapacitaText(expedice: Expedition): string {
 }
 
 /** Horní řádek karty výpravy: „9:30 · výprava“, u vícedenní rozsah dnů v její barvě. */
-export function kdyVyprava(expedice: Expedition): { text: string; barva: BarvaUdalosti | null } {
+export function kdyVyprava(expedice: Expedition, sDatem = false): { text: string; barva: BarvaUdalosti | null } {
   const dni = pocetDni(expedice.datum, expedice.datumDo);
   if (dni > 1 && expedice.datumDo !== null) {
     return {
-      text: `${rozsahDnu(expedice.datum, expedice.datumDo)} · ${dni} ${sklonuj(dni, "den", "dny", "dní")}`,
+      text: `${rozsahDnu(expedice.datum, expedice.datumDo).toLocaleUpperCase("cs")} · ${dni} ${sklonuj(dni, "den", "dny", "dní")}`,
       barva: barvaVypravy(expedice.id),
     };
+  }
+  if (sDatem) {
+    return { text: rozsahDnu(expedice.datum, null).toLocaleUpperCase("cs"), barva: barvaVypravy(expedice.id) };
   }
   const { cas } = rozlozSraz(expedice.sraz);
   return { text: cas !== null ? `${cas} · výprava` : "výprava", barva: null };
@@ -67,6 +70,7 @@ export function KartaUdalosti({
   nazev,
   meta,
   znacka,
+  sipka = true,
   onClick,
 }: {
   kdy: string;
@@ -74,6 +78,8 @@ export function KartaUdalosti({
   nazev: string;
   meta: string;
   znacka?: BarvaUdalosti;
+  /** Šipka vpravo nahoře, karty dalších výprav ji nemají. */
+  sipka?: boolean;
   onClick: () => void;
 }): JSX.Element {
   return (
@@ -88,18 +94,53 @@ export function KartaUdalosti({
             <span aria-hidden="true" className={`block size-2 shrink-0 rounded-sm ${TRIDY_BARVY[znacka].znacka}`} />
           ) : null}
           <span
-            className={`truncate text-[11px] font-bold uppercase tracking-[0.3px] min-[90rem]:text-[11.5px] min-[90rem]:font-semibold min-[90rem]:normal-case min-[90rem]:tracking-normal ${
+            className={`truncate text-[11px] font-bold tracking-[0.3px] min-[90rem]:text-[11.5px] min-[90rem]:font-semibold min-[90rem]:tracking-normal ${
               barvaKdy !== undefined && barvaKdy !== null ? TRIDY_BARVY[barvaKdy].text : "text-mech"
             }`}
           >
             {kdy}
           </span>
         </span>
-        <Ikona nazev="chevron-right" className="size-4 text-ink-3" />
+        {sipka ? <Ikona nazev="chevron-right" className="size-4 text-ink-3" /> : null}
       </span>
-      <span className="font-display text-base font-bold leading-tight text-inkoust">{nazev}</span>
+      <span className="font-display text-base font-bold text-inkoust">{nazev}</span>
       {meta.length > 0 ? <span className="text-[13px] text-mech min-[90rem]:text-[12.5px]">{meta}</span> : null}
     </button>
+  );
+}
+
+/** Velká karta výpravy s tlačítkem Přihlásit se („Event · Hlavní“). */
+function VelkaKarta({
+  expedice,
+  onVyprava,
+  onPrihlaseni,
+}: {
+  expedice: Expedition;
+  onVyprava: (expedice: Expedition) => void;
+  onPrihlaseni: (expedice: Expedition) => void;
+}): JSX.Element {
+  const kdy = kdyVyprava(expedice);
+  return (
+    <article className="flex flex-col gap-2.5 rounded-2xl border border-linka bg-povrch p-4 shadow-jemny">
+      <p className={`text-[11px] font-bold tracking-[0.4px] ${kdy.barva !== null ? TRIDY_BARVY[kdy.barva].text : "text-mech"}`}>
+        {kdy.text}
+      </p>
+      <button
+        type="button"
+        onClick={() => onVyprava(expedice)}
+        className={`bez-prejeti text-left font-display text-lg font-bold text-inkoust ${FOKUS}`}
+      >
+        {expedice.nazev}
+      </button>
+      <p className="text-[13px] text-mech">{metaVyprava(expedice)}</p>
+      <button
+        type="button"
+        onClick={() => onPrihlaseni(expedice)}
+        className={`nahled-press inline-flex h-11 w-full items-center justify-center rounded-xl bg-smrk px-4 text-sm font-semibold text-povrch ${FOKUS}`}
+      >
+        Přihlásit se
+      </button>
+    </article>
   );
 }
 
@@ -112,7 +153,13 @@ export default function KalendarDenSeznam({
   onVyprava,
   onSchuzka,
   onPrihlaseni,
+  dalsiVypravy = [],
+  akce,
 }: {
+  /** Výpravy po vybraném dni, pod jeho událostmi (nejvýš tři). */
+  dalsiVypravy?: readonly Expedition[];
+  /** Tři tečky vedle nadpisu dne. */
+  akce?: ReactNode;
   datum: string;
   udalosti: KalendarniUdalost[];
   expedicePodleId: Map<string, Expedition>;
@@ -128,44 +175,25 @@ export default function KalendarDenSeznam({
     .map((u) => schuzkyPodleId.get(u.id))
     .filter((s): s is ApiSchuzka => s !== undefined);
   const [hlavni, ...dalsi] = vypravy;
+  const vDni = new Set(vypravy.map((v) => v.id));
+  const nasledujici = dalsiVypravy.filter((v) => v.datum > datum && !vDni.has(v.id)).slice(0, 3);
 
   return (
     <section aria-labelledby="kalendar-den-seznam" className="mt-5 flex min-w-0 flex-col gap-2.5">
-      <h2 id="kalendar-den-seznam" className="text-[11px] font-bold uppercase tracking-[0.4px] text-okr">
-        {nadpisDne(datum)}
-        {vypravy.length + schuzky.length > 0 ? ` · ${pocetAkciDne(vypravy.length, schuzky.length)}` : ""}
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="kalendar-den-seznam" className="text-[11px] font-bold tracking-[0.4px] text-okr">
+          <span className="uppercase">{nadpisDne(datum)}</span>
+          {vypravy.length + schuzky.length > 0 ? ` · ${pocetAkciDne(vypravy.length, schuzky.length)}` : ""}
+        </h2>
+        {akce}
+      </div>
       {hlavni === undefined && schuzky.length === 0 ? (
         <p className="rounded-2xl border border-linka bg-povrch px-4 py-5 text-center text-[13px] text-ink-3">
           V tenhle den není nic naplánovaného.
         </p>
       ) : null}
       {hlavni !== undefined ? (
-        <article className="flex flex-col gap-2.5 rounded-2xl border border-linka bg-povrch p-4 shadow-jemny">
-          {(() => {
-            const kdy = kdyVyprava(hlavni);
-            return (
-              <p className={`text-[11px] font-bold uppercase tracking-[0.4px] ${kdy.barva !== null ? TRIDY_BARVY[kdy.barva].text : "text-mech"}`}>
-                {kdy.text}
-              </p>
-            );
-          })()}
-          <button
-            type="button"
-            onClick={() => onVyprava(hlavni)}
-            className={`bez-prejeti text-left font-display text-lg font-bold leading-tight text-inkoust ${FOKUS}`}
-          >
-            {hlavni.nazev}
-          </button>
-          <p className="text-[13px] text-mech">{metaVyprava(hlavni)}</p>
-          <button
-            type="button"
-            onClick={() => onPrihlaseni(hlavni)}
-            className={`nahled-press inline-flex h-11 w-full items-center justify-center rounded-xl bg-smrk px-4 text-sm font-semibold text-papir ${FOKUS}`}
-          >
-            Přihlásit se
-          </button>
-        </article>
+        <VelkaKarta expedice={hlavni} onVyprava={onVyprava} onPrihlaseni={onPrihlaseni} />
       ) : null}
       {dalsi.map((expedice) => {
         const kdy = kdyVyprava(expedice);
@@ -181,7 +209,7 @@ export default function KalendarDenSeznam({
         );
       })}
       {schuzky.map((schuzka) => {
-        const cas = schuzka.cas !== null && schuzka.cas !== undefined ? isoCasNaEvropsky(schuzka.cas) : "";
+        const cas = schuzka.cas !== null && schuzka.cas !== undefined ? casKZobrazeni(schuzka.cas) : "";
         return (
           <KartaUdalosti
             key={`s-${schuzka.id}-${datum}`}
@@ -193,6 +221,25 @@ export default function KalendarDenSeznam({
           />
         );
       })}
+      {nasledujici.length > 0 ? (
+        <div className="mt-2.5 flex flex-col gap-5">
+          {nasledujici.map((expedice, i) =>
+            i === 0 ? (
+              <VelkaKarta key={expedice.id} expedice={expedice} onVyprava={onVyprava} onPrihlaseni={onPrihlaseni} />
+            ) : (
+              <KartaUdalosti
+                key={expedice.id}
+                kdy={kdyVyprava(expedice, true).text}
+                barvaKdy={barvaVypravy(expedice.id)}
+                nazev={expedice.nazev}
+                meta={metaVyprava(expedice)}
+                sipka={false}
+                onClick={() => onVyprava(expedice)}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

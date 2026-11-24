@@ -1,9 +1,12 @@
 import Ikona from "../Ikona";
-import { useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from "react";
 import { pridejPrilohy } from "../../lib/prilohy-zpravy";
+import { prizpusobVyskuPole } from "../../lib/vyska-pole";
 import { VALIDACE } from "../../shared/api-types";
 import { nabidkyZminky, rozpracovanaZminka, vlozZminku, type NabidkaZminky } from "../../shared/zminky";
-import { ChipyPriloh, TlacitkoPrilohy } from "./VyberPriloh";
+import { najdiOdkazy } from "../../shared/odkazy";
+import { NahledPredOdeslanim } from "./NahledOdkazu";
+import { TacekPriloh, TlacitkoPrilohy } from "./VyberPriloh";
 
 export interface ComposerProps {
   /** Popisek nad polem (např. „Napsat do Generalu"). */
@@ -22,6 +25,8 @@ export interface ComposerProps {
   /** Global chats can mention a person or a role. */
   zminky?: boolean;
   clenove?: readonly { id: string; jmeno: string }[];
+  /** Soubory přetažené do vlákna. */
+  pretazene?: { token: number; soubory: readonly File[] } | null;
 }
 
 const MAX_DELKA: number = VALIDACE.zpravaTextMaxDelka;
@@ -74,6 +79,7 @@ export default function Composer({
   navratTextu = null,
   zminky = false,
   clenove = [],
+  pretazene = null,
 }: ComposerProps): JSX.Element {
   const [text, setText] = useState<string>("");
   const [caret, setCaret] = useState(0);
@@ -95,6 +101,19 @@ export default function Composer({
     setText(navratTextu.text);
     if (navratTextu.soubory !== undefined) setSoubory([...navratTextu.soubory]);
   }, [navratTextu]);
+
+  useLayoutEffect(() => {
+    if (poleRef.current !== null) prizpusobVyskuPole(poleRef.current);
+  }, [text]);
+
+  // Otočení telefonu nebo změna okna přeskládá řádky.
+  useEffect(() => {
+    const naZmenu = (): void => {
+      if (poleRef.current !== null) prizpusobVyskuPole(poleRef.current);
+    };
+    window.addEventListener("resize", naZmenu);
+    return () => window.removeEventListener("resize", naZmenu);
+  }, []);
 
   const zbyva: number = spocitejZbyvajiciZnakyComposeru(text);
   const muze: boolean = muzeOdeslatComposer(text, odesilaSe, soubory.length);
@@ -144,6 +163,12 @@ export default function Composer({
     setChybaSouboru(vysledek.chyba);
   }
 
+  const naVyberRef = useRef(naVyberSouboru);
+  naVyberRef.current = naVyberSouboru;
+  useEffect(() => {
+    if (pretazene !== null) naVyberRef.current([...pretazene.soubory]);
+  }, [pretazene]);
+
   function naOdebratSoubor(index: number): void {
     setSoubory((prev) => prev.filter((_, i) => i !== index));
     setChybaSouboru(null);
@@ -159,6 +184,19 @@ export default function Composer({
     setChybaSouboru(null);
   }
 
+  // Náhled počká, až člověk odkaz dopíše.
+  const [odkaz, setOdkaz] = useState<string | null>(null);
+  const [zavrenyNahled, setZavrenyNahled] = useState<string | null>(null);
+  useEffect(() => {
+    const prvni = najdiOdkazy(text)[0] ?? null;
+    if (prvni === null) {
+      setOdkaz(null);
+      return;
+    }
+    const casovac = window.setTimeout(() => setOdkaz(prvni), 400);
+    return () => window.clearTimeout(casovac);
+  }, [text]);
+
   const ukazPocitadlo: boolean = zbyva <= 80;
 
   return (
@@ -170,26 +208,11 @@ export default function Composer({
       <label htmlFor={poleId} className="sr-only">
         {popisek}
       </label>
-      {zminky && (
-        <div className="mb-1 flex justify-end px-1">
-          <button
-            type="button"
-            onClick={() => {
-              setOtevreno((pred) => !pred);
-              setVybrany(0);
-              poleRef.current?.focus();
-            }}
-            className="inline-flex min-h-9 items-center rounded-lg px-2.5 text-[12.5px] font-semibold text-mech hover:bg-povrch-2 [touch-action:manipulation]"
-          >
-            Označit
-          </button>
-        </div>
-      )}
       {nabidky.length > 0 && (
         <ul
           role="listbox"
           aria-label="Koho označit"
-          className="posuvnik mb-2 max-h-56 overflow-y-auto rounded-xl border border-linka bg-povrch p-1.5 shadow-modal"
+          className="nabeh-nahoru posuvnik mb-2 max-h-56 origin-bottom overflow-y-auto rounded-xl border border-linka bg-povrch p-1.5 shadow-modal"
         >
           {nabidky.map((nabidka, index) => (
             <li key={nabidka.token}>
@@ -209,7 +232,11 @@ export default function Composer({
           ))}
         </ul>
       )}
-      <div className="flex min-w-0 items-end gap-2">
+      {odkaz !== null && odkaz !== zavrenyNahled ? (
+        <NahledPredOdeslanim key={odkaz} url={odkaz} onZavrit={() => setZavrenyNahled(odkaz)} />
+      ) : null}
+      <TacekPriloh soubory={soubory} disabled={odesilaSe} onOdebrat={naOdebratSoubor} />
+      <div className="flex min-w-0 items-end gap-1 rounded-3xl border border-linka bg-povrch py-[1px] pl-1 pr-1.5 transition-colors has-[textarea:focus]:border-pole motion-reduce:transition-none min-[90rem]:gap-2 min-[90rem]:rounded-none min-[90rem]:border-0 min-[90rem]:bg-transparent min-[90rem]:p-0">
         <TlacitkoPrilohy disabled={odesilaSe} onVyber={naVyberSouboru} />
         <textarea
           id={poleId}
@@ -223,6 +250,12 @@ export default function Composer({
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={naKlavesu}
+          onPaste={(e) => {
+            const vlozene = [...e.clipboardData.files];
+            if (vlozene.length === 0) return;
+            e.preventDefault();
+            naVyberSouboru(vlozene);
+          }}
           rows={1}
           maxLength={MAX_DELKA + 50}
           placeholder={placeholder}
@@ -230,25 +263,24 @@ export default function Composer({
           enterKeyHint="send"
           autoFocus={autoFocus}
           aria-describedby={ukazPocitadlo ? pocitadloId : undefined}
-          className="block max-h-24 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto rounded-[10px] border border-transparent bg-povrch-2 px-[13px] py-[11px] text-base leading-snug text-inkoust placeholder:text-ink-3 focus:border-pole focus:outline-none min-[90rem]:text-[13px]"
+          className="posuvnik block min-h-[44px] min-w-0 flex-1 resize-none overflow-y-hidden border-0 border-transparent bg-transparent px-1.5 py-[11px] text-base leading-[22px] text-inkoust caret-smrk placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-ink-4 min-[90rem]:border min-[90rem]:min-h-10 min-[90rem]:rounded-[10px] min-[90rem]:bg-povrch-2 min-[90rem]:px-[13px] min-[90rem]:py-[9px] min-[90rem]:text-[13px] min-[90rem]:leading-5 min-[90rem]:placeholder:text-ink-3 focus:outline-none"
         />
         <button
           type="submit"
           disabled={!muze}
           title={odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu"}
           aria-label={odesilaSe ? "Odesílání probíhá…" : "Poslat zprávu"}
-          className="nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-smrk text-papir transition-opacity min-[90rem]:bg-akcent [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-50"
+          className="nahled-press relative my-[4px] inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-smrk text-povrch before:absolute before:-inset-1 before:content-[''] transition-opacity min-[90rem]:my-0 min-[90rem]:size-10 min-[90rem]:bg-akcent [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Ikona nazev="arrow-up" className="size-4" />
           <span className="sr-only">{odesilaSe ? "Posílám…" : "Poslat"}</span>
         </button>
       </div>
-      <ChipyPriloh soubory={soubory} disabled={odesilaSe} onOdebrat={naOdebratSoubor} />
       {ukazPocitadlo && (
         <span
           id={pocitadloId}
           role="status"
-          className={`mt-1 block min-w-0 truncate px-1 text-[12px] font-semibold tabular-nums ${
+          className={`mt-1 block min-w-0 truncate px-1 text-[12px] font-semibold ${
             zbyva < 0 ? "text-red-800" : "text-inkoust/60"
           }`}
           style={{ overflowWrap: "anywhere" }}
@@ -259,12 +291,12 @@ export default function Composer({
         </span>
       )}
       {chybaSouboru !== null && (
-        <p role="alert" className="mt-1 min-w-0 break-words px-1 text-sm font-semibold text-red-800">
+        <p role="alert" className="mt-1 min-w-0 break-words px-1 text-[13px] font-semibold text-akcent">
           {chybaSouboru}
         </p>
       )}
       {chyba !== null && (
-        <p role="alert" className="mt-1 min-w-0 break-words px-1 text-sm font-semibold text-red-800">
+        <p role="alert" className="mt-1 min-w-0 break-words px-1 text-[13px] font-semibold text-akcent">
           {chyba}
         </p>
       )}

@@ -6,14 +6,10 @@ function cti(rel: string): string {
 }
 
 describe("Fotky master–detail layout", () => {
-  it("propojí Složky seznam s FotkyPage a označením Složky", () => {
+  it("FotkyPage drží přehled alb a detail bez postranních složek (návrh je nemá)", () => {
     const page = cti("src/pages/FotkyPage.tsx");
-    expect(page).toContain("SlozkySeznam");
+    expect(page).not.toContain("SlozkySeznam");
     expect(page).toContain("data-fotky-master-detail");
-
-    const slozky = cti("src/components/fotky/SlozkySeznam.tsx");
-    expect(slozky).toContain("Složky");
-    expect(slozky).toContain('aria-label="Složky"');
   });
 
   it("výběr alba v nahrávání drží zvolenou hodnotu a nenechává transform", () => {
@@ -23,7 +19,7 @@ describe("Fotky master–detail layout", () => {
     const css = cti("src/index.css");
     expect(css).toContain("fotky-disclosure-enter 160ms ease-out backwards");
     expect(css).not.toContain("fotky-disclosure-enter 160ms ease-out both");
-    expect(cti("src/components/fotky/NahratFotky.tsx")).toContain("fotky-album-vyber");
+    expect(cti("src/components/fotky/NahratFotky.tsx")).toContain("value={vybraneId}");
   });
 
   it("AlbumFotky má horní lištu s mazáním a stahováním", () => {
@@ -36,7 +32,7 @@ describe("Fotky master–detail layout", () => {
     expect(album).toContain("FotkyStahovaciHlavicka");
 
     const ui = cti("src/components/fotky/fotky-ui.ts");
-    expect(ui).toMatch(/fotkyAlbumToolbarZaklad[\s\S]*top-16/);
+    expect(ui).toMatch(/fotkyAlbumToolbarZaklad[\s\S]*top-\[84px\]/);
   });
 
   it("AlbumFotky používá zelenou vrstvu pro stahování", () => {
@@ -86,8 +82,10 @@ describe("Fotky master–detail layout", () => {
     expect(page).toContain("data-fotky-rozbal-nahravani");
     expect(page).toContain("aria-expanded");
     expect(panel).toContain("Nahrát fotky");
-    expect(page).toContain("data-fotky-rozbal-nove-album");
-    expect(page).toContain("Přidat album");
+    // Nové album se zakládá z nahrávacího okna, i na počítači.
+    expect(page).not.toContain("data-fotky-rozbal-nove-album");
+    expect(panel).toContain("onNoveAlbum");
+    expect(panel).toContain('titulek="Přidat album"');
     expect(page).toContain("fotkyTlacitkoPrimarni");
     expect(panel).toContain("SpodniSheet");
     expect(panel).toContain('titulek="Nahrát fotky"');
@@ -109,9 +107,6 @@ describe("Fotky master–detail layout", () => {
     expect(page).toContain("albumKeSmazani");
     expect(page).toContain('potvrditPopisek="Ano, smazat album"');
     expect(page).toContain("navratElement");
-
-    const slozky = cti("src/components/fotky/SlozkySeznam.tsx");
-    expect(slozky).not.toContain("data-smazat-album");
 
     const albumFotky = cti("src/components/fotky/AlbumFotky.tsx");
     expect(albumFotky).not.toContain("Smazat album");

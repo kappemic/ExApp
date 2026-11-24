@@ -2,41 +2,26 @@ import { useEffect, useMemo, useState, type JSX } from "react";
 import Ikona from "../components/Ikona";
 import { getZebricek } from "../lib/zebricky-api";
 import { Link } from "react-router-dom";
-import {
-  mapujRoliNaProfil,
-  type ClenskyProfil,
-} from "../config/roles";
-import ClenDetailModal from "../components/Admin/ClenDetailModal";
+import type { ClenskyProfil } from "../config/roles";
+import SpravaClena from "../components/Admin/SpravaClena";
 import ClenoveTable from "../components/Admin/ClenoveTable";
-import {
-  nactiCleny,
-  smazClena,
-  ulozProfilClena,
-  type UlozitProfilVstup,
-} from "../lib/admin-clenove";
+import { nactiCleny } from "../lib/admin-clenove";
+import { profilClena } from "../lib/clen-popisek";
 import { KostraRadky } from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
 import type { UserListItem } from "../shared/api-types";
 
-type FiltrChip = "vsichni" | "aktivni" | "rada";
+type FiltrChip = "vsichni" | "aktivni" | "rada" | "admini";
 
-const CHIPY: ReadonlyArray<{ id: FiltrChip; popisek: string }> = [
+/** Telefon má jen „Rada“, počítač „Rada a vedení“ a navíc „Admini“ (ExApp.pen). */
+const CHIPY: ReadonlyArray<{ id: FiltrChip; popisek: string; siroky?: string; jenPocitac?: boolean }> = [
   { id: "vsichni", popisek: "Všichni" },
   { id: "aktivni", popisek: "Aktivní" },
-  { id: "rada", popisek: "Rada" },
+  { id: "rada", popisek: "Rada", siroky: "Rada a vedení" },
+  { id: "admini", popisek: "Admini", jenPocitac: true },
 ];
 
 type StavNacteni = "nacteni" | "hotovo" | "chyba";
-
-/** 3D profil člena s fallbackem ze starého `role` (trio je optional). */
-function profilClena(clen: UserListItem): ClenskyProfil {
-  const profil: ClenskyProfil = mapujRoliNaProfil(clen.role);
-  return {
-    clenstvi: clen.clenstvi ?? profil.clenstvi,
-    funkce: clen.funkce ?? profil.funkce,
-    isAdmin: clen.isAdmin ?? profil.isAdmin,
-  };
-}
 
 /** Aktivní členství (brána správy výprav) — čte jen `clenstvi`. */
 function jeAktivni(profil: ClenskyProfil): boolean {
@@ -51,8 +36,7 @@ function jeAktivni(profil: ClenskyProfil): boolean {
  *
  * Zdroj: GET /api/users (jen ADMIN) — DB `clenove` je prázdná,
  * zdrojem je `users` (3D trio + mirror `role`, jedna hodnota).
- * Editace profilu ukládá PATCH /api/users/:id přes `ulozProfilClena`.
- * Smazání účtu jde přes DELETE /api/users/:id (`smazClena`).
+ * Úpravy a smazání účtu řeší `SpravaClena` (PATCH a DELETE /api/users/:id).
  *
  * Rozhodnutí o 5. tabu „Členové": ponechány Všichni / Aktivní / Rada / Vedení
  * a tab Členové (= základní bez aktivní účasti) pro symetrii — jinak by
@@ -89,34 +73,6 @@ export default function AdminClenovePage(): JSX.Element {
     void nacist();
   }, []);
 
-  async function naUlozitProfil(
-    id: string,
-    vstup: UlozitProfilVstup,
-  ): Promise<string | null> {
-    const vysledek = await ulozProfilClena(id, vstup);
-    if (!vysledek.ok) {
-      return vysledek.chyba;
-    }
-    setClenove((predchozi: UserListItem[]) =>
-      predchozi.map((clen: UserListItem) =>
-        clen.id === vysledek.data.id ? vysledek.data : clen,
-      ),
-    );
-    return null;
-  }
-
-  async function naOdstranit(id: string): Promise<string | null> {
-    const vysledek = await smazClena(id);
-    if (!vysledek.ok) {
-      return vysledek.chyba;
-    }
-    setClenove((predchozi: UserListItem[]) =>
-      predchozi.filter((clen: UserListItem) => clen.id !== id),
-    );
-    setVybranyId(null);
-    return null;
-  }
-
   const filtrovani = useMemo(() => {
     const dotaz = hledani.trim().toLowerCase();
   const podleChipu = ((): UserListItem[] => {
@@ -124,7 +80,9 @@ export default function AdminClenovePage(): JSX.Element {
         case "aktivni":
           return clenove.filter((c) => jeAktivni(profilClena(c)));
         case "rada":
-          return clenove.filter((c) => profilClena(c).funkce === "rada");
+          return clenove.filter((c) => profilClena(c).funkce !== null);
+        case "admini":
+          return clenove.filter((c) => c.isSuperadmin === true || profilClena(c).isAdmin);
         case "vsichni":
         default:
           return clenove;
@@ -156,11 +114,11 @@ export default function AdminClenovePage(): JSX.Element {
   }, []);
 
   return (
-    <main className="mx-auto w-full max-w-lg px-5 pb-16 pt-4 sm:px-6 sm:pt-8 lg:max-w-2xl min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
+    <main className="mx-auto w-full max-w-lg px-5 pb-6 pt-4 sm:max-w-[46rem] sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <header className="flex flex-col gap-5 min-[90rem]:gap-8">
         <div className="flex items-center justify-between gap-3 min-[90rem]:items-end">
           <div className="flex flex-col gap-0.5">
-            <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+            <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
               Členové
             </h1>
             <p className="text-xs text-ink-3 min-[90rem]:hidden">
@@ -181,7 +139,7 @@ export default function AdminClenovePage(): JSX.Element {
               value={hledani}
               onChange={(e) => setHledani(e.target.value)}
               placeholder="Hledat člena"
-              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-[#9aa189] focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
+              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-ink-4 min-[90rem]:placeholder:text-ink-3 focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
             />
           </div>
             {isAdmin ? (
@@ -208,7 +166,7 @@ export default function AdminClenovePage(): JSX.Element {
               value={hledani}
               onChange={(e) => setHledani(e.target.value)}
               placeholder="Hledat člena"
-              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-[#9aa189] focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
+              className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust placeholder:text-ink-4 min-[90rem]:placeholder:text-ink-3 focus:border-pole min-[90rem]:h-[46px] min-[90rem]:text-sm min-[90rem]:placeholder:text-ink-3"
             />
           </div>
         <div className="flex items-center justify-between gap-3 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4">
@@ -223,13 +181,20 @@ export default function AdminClenovePage(): JSX.Element {
                   id={`clenove-chip-${chip.id}`}
                   aria-selected={aktivni}
                   onClick={() => setAktivniTab(chip.id)}
-                  className={`inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors min-[90rem]:h-auto min-[90rem]:px-3.5 min-[90rem]:py-2 ${
+                  className={`${chip.jenPocitac === true ? "hidden min-[90rem]:inline-flex" : "inline-flex"} h-8 items-center rounded-full border px-3 text-[13px] transition-colors min-[90rem]:h-auto min-[90rem]:px-3.5 min-[90rem]:py-2 ${
                     aktivni
                       ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
                       : "border-linka bg-povrch font-medium text-mech hover:bg-povrch-2 min-[90rem]:bg-transparent"
                   }`}
                 >
-                  {chip.popisek}
+                  {chip.siroky !== undefined ? (
+                    <>
+                      <span className="min-[90rem]:hidden">{chip.popisek}</span>
+                      <span className="hidden min-[90rem]:inline">{chip.siroky}</span>
+                    </>
+                  ) : (
+                    chip.popisek
+                  )}
                 </button>
               );
             })}
@@ -248,7 +213,7 @@ export default function AdminClenovePage(): JSX.Element {
         {stav === "chyba" && (
           <div
             role="alert"
-            className="rounded-2xl border border-linka bg-povrch px-5 py-8 text-center shadow-jemny"
+            className="rounded-2xl border border-linka bg-povrch px-5 py-8 text-center shadow-karta"
           >
             <p className="text-base font-bold">Seznam se nepodařilo načíst</p>
             <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-inkoust/70">
@@ -275,7 +240,7 @@ export default function AdminClenovePage(): JSX.Element {
                 vypravyClena={vypravyClena}
                 clenove={[...filtrovani]}
                 vybranyId={vybranyId}
-                onVyber={(clen) => setVybranyId(clen.id)}
+                onSpravovat={isSuperadmin ? (clen) => setVybranyId(clen.id) : undefined}
                 popisek={`Seznam členů — ${CHIPY.find((c) => c.id === aktivniTab)?.popisek ?? "Všichni"}`}
               />
             </div>
@@ -283,11 +248,16 @@ export default function AdminClenovePage(): JSX.Element {
         )}
       </div>
 
-      <ClenDetailModal
-        clen={vybrany}
+      <SpravaClena
+        clen={isSuperadmin ? vybrany : null}
         onZavrit={() => setVybranyId(null)}
-        onUlozitProfil={isSuperadmin ? naUlozitProfil : undefined}
-        onOdstranit={isSuperadmin ? naOdstranit : undefined}
+        onUlozeno={(ulozeny) =>
+          setClenove((predchozi) => predchozi.map((clen) => (clen.id === ulozeny.id ? ulozeny : clen)))
+        }
+        onSmazano={(id) => {
+          setVybranyId(null);
+          setClenove((predchozi) => predchozi.filter((clen) => clen.id !== id));
+        }}
       />
     </main>
   );

@@ -114,7 +114,7 @@ function spocitej(fotky: readonly AlbumFotkaZdroj[]): Map<string, number> {
 
 /**
  * Completed expeditions first (`stav === "proběhlá"`; volno and skoro plno are omitted),
- * ordered by date then Czech name, then extra albums by createdAt.
+ * newest date first then Czech name, then extra albums, newest first.
  * Cover is the flagged photo, otherwise the oldest one. Missing photos → null.
  */
 export function sestavSeznamAlb(
@@ -145,14 +145,14 @@ export function sestavSeznamAlbZeShrnuti(
   const vypravySerazene = vypravy
     .filter((vyprava) => jeVypravaSViditelnymAlbem(vyprava.stav))
     .sort((a, b) => {
-      const datum = a.datum.localeCompare(b.datum);
+      const datum = b.datum.localeCompare(a.datum);
       if (datum !== 0) return datum;
       const nazev = a.nazev.localeCompare(b.nazev, "cs");
       if (nazev !== 0) return nazev;
       return a.id.localeCompare(b.id);
     });
   const vlastniSerazene = [...vlastni].sort((a, b) => {
-    const cas = a.createdAt.getTime() - b.createdAt.getTime();
+    const cas = b.createdAt.getTime() - a.createdAt.getTime();
     if (cas !== 0) return cas;
     return a.id.localeCompare(b.id);
   });

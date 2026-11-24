@@ -37,6 +37,10 @@ export interface UserListItem {
   id: UserId;
   /** Složené „Jméno Příjmení" z DB (fallback prázdné → email). */
   jmeno: string;
+  /** Křestní jméno zvlášť (DB `users.jmeno`) pro úpravu člena. Aditivně optional. */
+  krestniJmeno?: string;
+  /** Příjmení zvlášť (DB `users.prijmeni`), "" = nevyplněno. Aditivně optional. */
+  prijmeni?: string;
   email: string;
   /** Primární DB role — jediná hodnota z `Role` (users.role CHECK). */
   role: Role;
@@ -94,11 +98,29 @@ export function userDetailPath(id: string): `/api/users/${string}` {
 
 /** Vstup editace role — právě jedna primární role.
  * @deprecated Starý tvar `{ role }` — ponechán pro zpětnou kompatibilitu.
- * Nové trio `clenstvi` / `funkce` / `isAdmin` (+ `skola` / `trida`)
- * validuje `validujUpravuUzivatele` (server/src/validace.ts).
+ * Nové trio `clenstvi` / `funkce` / `isAdmin` a osobní údaje
+ * (`UpravitUdajeUzivatele`) validuje `validujUpravuUzivatele`.
  */
 export interface UpravitUzivateleRequest {
   role: Role;
+}
+
+/**
+ * Osobní údaje, které hlavní admin smí změnit cizímu účtu (PATCH /api/users/:id).
+ * Parciální, jen poslaná pole. `null` nebo "" nepovinné pole smaže,
+ * prázdné příjmení se ignoruje (smazat nejde). E-mail a heslo tu nejsou,
+ * mění si je člen sám přes PATCH /api/me se současným heslem.
+ */
+export interface UpravitUdajeUzivatele {
+  /** Křestní jméno (DB `users.jmeno`), ne složené jméno ze seznamu. */
+  jmeno?: string;
+  prijmeni?: string;
+  telefon?: string | null;
+  discordNick?: string | null;
+  /** YYYY-MM-DD, 1900-01-01 až dnes. */
+  narozeniny?: string | null;
+  skola?: string;
+  trida?: string;
 }
 
 export interface UpravitUzivateleResponse {

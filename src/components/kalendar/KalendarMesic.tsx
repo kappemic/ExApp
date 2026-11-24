@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 import { KalendarHlavicka, KalendarPlocha } from "./KalendarPosun";
 import { DenKalendare, HlavickaDnu } from "./DenKalendare";
 import {
@@ -7,8 +7,10 @@ import {
   popisekDne,
   poradiVypravy,
   poziceVPasu,
+  pruhyVyprav,
   type KalendarniUdalost,
 } from "../../lib/kalendar";
+import { useNabeh } from "../../lib/pohyb";
 
 interface KalendarMesicProps {
   rok: number;
@@ -23,8 +25,6 @@ interface KalendarMesicProps {
   onDnes: () => void;
   /** Datum začátku výpravy pro barvu pásu (paleta podle ročního období). */
   datumVypravy?: (id: string) => string;
-  /** Přepínač měsíc/týden do hlavičky mřížky. */
-  prepinac?: ReactNode;
 }
 
 /**
@@ -45,11 +45,13 @@ export default function KalendarMesic(props: KalendarMesicProps): JSX.Element {
     return `${rok}-${String(mesic).padStart(2, "0")}-01`;
   });
 
+  const mrizkaRef = useNabeh<HTMLDivElement>(rok * 12 + mesic, "x");
+  const pruhy = pruhyVyprav(mrizkaYmd, udalosti, datumVypravy);
+
   return (
     <div aria-label={`Kalendář – ${nazevMesice(rok, mesic)}`} className="w-full min-w-0 max-w-full min-[90rem]:overflow-hidden min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:shadow-denik">
       <KalendarHlavicka
         nadpis={nazevMesice(rok, mesic)}
-        prepinac={props.prepinac}
         velkePismeno
         posun={{
           predchozi: "Předchozí měsíc",
@@ -62,7 +64,7 @@ export default function KalendarMesic(props: KalendarMesicProps): JSX.Element {
 
       <KalendarPlocha ariaLabel="Dny měsíce" onPosun={onMesic}>
         <HlavickaDnu />
-        <div className="grid w-full min-w-0 grid-cols-7 gap-y-0.5 min-[90rem]:gap-px min-[90rem]:bg-linka">
+        <div ref={mrizkaRef} className="grid w-full min-w-0 grid-cols-7 items-start gap-y-5 pt-5 min-[90rem]:items-stretch min-[90rem]:gap-px min-[90rem]:pt-0 min-[90rem]:bg-linka">
           {bunky.map(({ ymd: den, mimoMesic }, index) => {
             const denni = udalosti.get(den) ?? [];
             const zakladLabel = popisekDne(den, denni, { mrizka: mrizkaYmd, mapa: udalosti });
@@ -78,7 +80,7 @@ export default function KalendarMesic(props: KalendarMesicProps): JSX.Element {
                 zacatekRadku={index % 7 === 0}
                 label={mimoMesic ? `${zakladLabel}, mimo měsíc` : zakladLabel}
                 onDen={onDen}
-                datumVypravy={datumVypravy}
+                pruhy={pruhy.get(den) ?? new Map<string, number>()}
                 delkaVypravy={(id) => poradiVypravy(id, den, udalosti)?.celkem ?? 1}
               />
             );

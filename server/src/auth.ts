@@ -424,15 +424,21 @@ export function vyzadujSpravceVyprav(
   })();
 }
 
-/** Nastaví httpOnly session cookie (JWT). */
-export function nastavSessionCookie(res: Response, token: string): void {
+/** `zustat` keeps the 7-day cookie. Otherwise the cookie dies with the browser session. */
+export function volbySessionCookie(zustat: boolean): { maxAge?: number } {
+  if (!zustat) return {};
+  return { maxAge: SESSION_MAX_AGE_MS };
+}
+
+/** Nastaví httpOnly session cookie (JWT). Výchozí `zustat` drží dnešních 7 dní. */
+export function nastavSessionCookie(res: Response, token: string, zustat = true): void {
   const produkce = jeProdukce();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: produkce,
     path: "/",
-    maxAge: SESSION_MAX_AGE_MS,
+    ...volbySessionCookie(zustat),
   });
 }
 

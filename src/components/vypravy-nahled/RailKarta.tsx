@@ -24,7 +24,7 @@ export function RailKarta({
   return (
     <section
       aria-labelledby={id}
-      className="flex min-w-0 flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-denik"
+      className="flex min-w-0 flex-col gap-3.5 rounded-2xl border border-linka bg-povrch p-5 shadow-karta"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">
@@ -33,7 +33,7 @@ export function RailKarta({
         <button
           type="button"
           onClick={odkaz.onClick}
-          className={`bez-prejeti -mr-1 inline-flex min-h-11 items-center gap-[5px] px-1 text-[12.5px] font-semibold text-mech ${FOKUS}`}
+          className={`bez-prejeti -my-3 -mr-1 inline-flex min-h-11 items-center gap-[5px] px-1 text-[12.5px] font-semibold text-mech ${FOKUS}`}
         >
           {odkaz.popisek}
           <Ikona nazev="arrow-right" className="size-[13px] text-ink-3" />
@@ -44,9 +44,10 @@ export function RailKarta({
         <button
           type="button"
           onClick={onVse}
-          className={`bez-prejeti -mt-1 inline-flex min-h-11 w-full items-center justify-center rounded-xl text-[13px] font-semibold text-mech hover:bg-mlha/60 ${FOKUS}`}
+          className={`bez-prejeti -mb-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-linka text-[12.5px] font-semibold text-mech ${FOKUS}`}
         >
           Zobrazit všech {zbyva}
+          <Ikona nazev="arrow-right" className="size-[13px] text-ink-3" />
         </button>
       ) : null}
     </section>
@@ -67,8 +68,8 @@ export function RailRadek({
   popisekDne: string;
   nazev: string;
   podtitul: string;
-  /** Výprava má okénko v olivové mlze, schůzka v šedé. */
-  zvyraznit?: boolean;
+  /** Výprava má okénko v olivové mlze, schůzka v šedé, vybraný den kalendáře v terakotě. */
+  zvyraznit?: boolean | "akcent";
   ikona?: ReactNode;
   onClick: () => void;
 }): JSX.Element {
@@ -81,18 +82,18 @@ export function RailRadek({
       >
         <span
           className={`flex h-[46px] w-[42px] shrink-0 flex-col items-center justify-center rounded-[11px] ${
-            zvyraznit ? "bg-mlha text-smrk" : "bg-povrch-2 text-inkoust"
+            zvyraznit === "akcent" ? "bg-akcent-100 text-akcent" : zvyraznit ? "bg-mlha text-smrk" : "bg-povrch-2 text-inkoust"
           }`}
         >
-          <span className="font-display text-[17px] font-bold leading-[1.05]">{den}</span>
+          <span className="font-display text-[17px] font-bold leading-[18px]">{den}</span>
           <span
-            className={`text-[9.5px] font-semibold uppercase tracking-[0.6px] ${zvyraznit ? "text-smrk" : "text-ink-3"}`}
+            className={`text-[9.5px] font-semibold uppercase tracking-[0.6px] ${zvyraznit === "akcent" ? "text-akcent" : zvyraznit ? "text-smrk" : "text-ink-3"}`}
           >
             {popisekDne}
           </span>
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-[13.5px] font-semibold leading-[1.3] text-inkoust">{nazev}</span>
+          <span className="text-[13.5px] font-semibold leading-[18px] text-inkoust">{nazev}</span>
           <span className="truncate text-xs text-ink-3">{podtitul}</span>
         </span>
         {ikona}

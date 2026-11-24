@@ -13,7 +13,7 @@ import ConfirmDialog from "../kalendar/ConfirmDialog";
 import { KostraFotky } from "../StrankaKostra";
 import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
 import MazaniVyberVrstva from "../fotky/MazaniVyberVrstva";
-import PapirObal from "../fotky/PapirObal";
+import Ikona from "../Ikona";
 import FotkyRadkovaMrizka from "../fotky/FotkyRadkovaMrizka";
 import PostupnaFotka from "../fotky/PostupnaFotka";
 import { useFotkyMazani } from "../../hooks/useFotkyMazani";
@@ -41,8 +41,6 @@ export interface ExpeditionPhotosProps {
   isAdmin: boolean;
   /** Cover id changed (load, pick, upload, delete). Optional. */
   onZmenaNahledu?: (fotkaId: string | null) => void;
-  /** Frame for the cover inside this block. Default keeps the short production band. */
-  obalClassName?: string;
   /** Preview journal: drop the empty lined plate and ease portaled controls. */
   denik?: boolean;
 }
@@ -63,7 +61,6 @@ export default function ExpeditionPhotos({
   prihlasen,
   isAdmin,
   onZmenaNahledu,
-  obalClassName = "max-h-72 min-h-40 w-full",
   denik = false,
 }: ExpeditionPhotosProps): JSX.Element | null {
   const nadpisId: string = useId();
@@ -204,7 +201,6 @@ export default function ExpeditionPhotos({
 
   if (!probehla) return null;
 
-  const nahled: ApiFotka | null = stav === "hotovo" ? vyberNahledFotky(fotky) : null;
   const pocet: string = stav === "hotovo" ? String(fotky.length) : "…";
   const potvrzeniPocet =
     mazani.potvrzeni === null
@@ -521,58 +517,71 @@ export default function ExpeditionPhotos({
         )
       : null;
 
-  return (
-    <section aria-labelledby={nadpisId} className="mt-5 flex h-full flex-col rounded-2xl border border-pole bg-papir p-4">
-      <h3
-        id={nadpisId}
-        className="font-display text-xl font-bold text-inkoust"
-      >
-        Fotky z výpravy
-      </h3>
+  const otevriGalerii = (): void => {
+    setNahledChyba(null);
+    galerieZaviraRef.current = false;
+    setGalerieZavira(false);
+    setGalerieOtevrena(true);
+  };
+  // Titulní fotka je v návrhu nahoře na stránce, v mřížce jdou první čtyři.
+  const prvniCtyri = stav === "hotovo" ? fotky.slice(0, 4) : [];
+  const popisekPoctu = `${pocet} ${fotky.length === 1 ? "fotka" : fotky.length >= 2 && fotky.length <= 4 ? "fotky" : "fotek"}`;
 
-      {stav === "nacitani" && (
-        <div className="mt-2">
-          <KostraFotky pocet={4} />
-        </div>
-      )}
+  return (
+    <section aria-labelledby={nadpisId} className="flex flex-col gap-2 min-[90rem]:gap-4 min-[90rem]:rounded-2xl min-[90rem]:border min-[90rem]:border-linka min-[90rem]:bg-povrch min-[90rem]:p-5 min-[90rem]:shadow-denik">
+      <div className="flex items-center justify-between gap-3">
+        <h3 id={nadpisId} className="font-display text-lg font-bold text-inkoust min-[90rem]:text-[17px] min-[90rem]:tracking-[-0.3px]">
+          Fotky z výpravy
+        </h3>
+        {stav === "hotovo" ? <span className="text-[13px] font-semibold text-mech">{popisekPoctu}</span> : null}
+      </div>
+
+      {stav === "nacitani" && <KostraFotky pocet={4} />}
 
       {stav === "chyba" && (
-        <div className="mt-2 rounded-2xl border-2 border-inkoust/20 bg-papir p-4 text-center">
+        <div className="rounded-2xl border border-linka bg-povrch p-4 text-center">
           <p role="alert" className="text-sm font-semibold">
             {chyba ?? "Fotky se nepodařilo načíst."}
           </p>
           <button
             type="button"
             onClick={() => void nacist()}
-            className={`${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} mt-3 rounded-full bg-smrk px-5 text-sm font-bold text-papir [@media(hover:hover)_and_(pointer:fine)]:hover:bg-inkoust/90`}
+            className={`${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} mt-3 rounded-xl bg-smrk px-5 text-sm font-semibold text-povrch`}
           >
             Zkusit znovu
           </button>
         </div>
       )}
 
-      {stav === "hotovo" && (nahled !== null || !denik) && (
-        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-mlha">
-          <PapirObal
-            src={nahled !== null ? urlSouboruFotky(expeditionId, nahled.id) : null}
-            alt="Fotka z výpravy"
-            className={obalClassName}
-          />
+      {prvniCtyri.length > 0 && (
+        <div className="grid grid-cols-2 gap-1.5 min-[90rem]:grid-cols-4">
+          {prvniCtyri.map((fotka) => (
+            <button
+              key={fotka.id}
+              type="button"
+              onClick={otevriGalerii}
+              aria-label="Otevřít album výpravy"
+              className="bez-prejeti relative h-28 overflow-hidden rounded-xl bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+            >
+              <PostupnaFotka
+                src={urlSouboruFotky(expeditionId, fotka.id)}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            </button>
+          ))}
         </div>
       )}
 
       {stav === "hotovo" && (
         <button
           type="button"
-          onClick={() => {
-            setNahledChyba(null);
-            galerieZaviraRef.current = false;
-            setGalerieZavira(false);
-            setGalerieOtevrena(true);
-          }}
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} mt-3 w-full rounded-xl bg-mlha px-6 text-base font-semibold text-inkoust`}
+          onClick={otevriGalerii}
+          aria-label={`Všechny fotky (${pocet})`}
+          className="bez-prejeti -my-2 flex min-h-11 w-full items-center justify-between gap-1.5 text-left text-[13.5px] font-medium text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
         >
-          Všechny fotky ({pocet})
+          {fotky.length === 0 ? "Přidat první fotku" : "Zobrazit album"}
+          <Ikona nazev="chevron-right" className="size-[18px]" />
         </button>
       )}
 

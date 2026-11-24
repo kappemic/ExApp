@@ -4,7 +4,7 @@
 > `src/config/roles.ts` (`Role` union + `ROLE_LIST` + `getRoleStyle`
 > + helpery `je*()` + `chybaKombinaceRole` / `jeValidniKombinaceRole`).
 > `src/pages/AdminClenovePage.tsx`,
-> `src/components/Admin/ClenoveTable.tsx` a `RoleBadge` role jen konzumují —
+> `src/components/Admin/ClenoveTable.tsx` a `SpravaClena` role jen konzumují —
 > nedefinují vlastní seznam rolí ani vlastní význam rolí.
 
 ## Seznam rolí (`ROLE_LIST`)
@@ -154,7 +154,7 @@ Vynuceno ve 3 vrstvach: DB CHECK `users_funkce_vyzaduje_aktivniho_check`
 (`src/config/roles.ts`, `isAdmin` se ignoruje), a `validujUpravuUzivatele`
 (`server/src/validace.ts`, efektivni trio = merge s DB radkem, takze ani
 parcialni `clenstvi: clen` pri stavajici funkci neprojde).
-Klient zrcadli: `ClenDetailModal` hlida `chybaKombinace3D` na hranici formulare.
+Klient zrcadli: `SpravaClena` (`src/lib/sprava-clena.ts`) hlida `chybaKombinace3D` na hranici formulare.
 
 ### 4. `isAdmin` je ortogonalni
 

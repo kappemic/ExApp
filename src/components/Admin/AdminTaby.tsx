@@ -80,7 +80,7 @@ export default function AdminTaby({
             {tab.popisek}
             <span
               aria-label={`${pocet} členů – ${tab.popisek}`}
-              className={`inline-flex min-h-[24px] min-w-[28px] items-center justify-center rounded-full border px-1.5 text-xs font-extrabold tabular-nums ${
+              className={`inline-flex min-h-[24px] min-w-[28px] items-center justify-center rounded-full border px-1.5 text-xs font-extrabold ${
                 aktivni
                   ? "border-papir/40 bg-papir/15 text-papir"
                   : "border-linka bg-papir text-mech"

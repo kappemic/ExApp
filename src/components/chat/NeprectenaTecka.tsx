@@ -15,12 +15,12 @@ export interface NeprectenaTeckaProps {
  * - 8–10 px (nadpis 8px, karta 10px), `pointer-events-none` + `shrink-0`,
  *   takže nikdy nezasahuje do 44px tap-targetu a drží 360px layout.
  * - Přístupnost: `role="status"` + `aria-label="Nepřečtené zprávy"`,
- *   bílý kroužek + tmavý obrys (není jen barvou), kontrast red-800
+ *   bílý kroužek + tmavý obrys (není jen barvou), kontrast terakoty
  *   na papíru ~7:1, viditelný focus se neřeší (nedostává focus).
  * - Token-kontrakt (M1): bílý kroužek VŽDY `ring-2 ring-papir`,
  *   nikdy stínovou arbitrary hodnotou — ring je token design-systému,
  *   stínová arbitrary hodnota ho obchází a rozbíjí konzistenci.
- *   Tmavý obrys drží `border border-inkoust/40`. Bez titulku (mrtvý —
+ *   Obrys drží `border border-akcent`. Bez titulku (mrtvý —
  *   `pointer-events-none` tooltip nikdy nezobrazí a duplikoval by popisek).
  * - `motion-reduce` bez animace (puls jen když je povolený pohyb).
  */
@@ -43,7 +43,7 @@ export default function NeprectenaTecka({
       role="status"
       aria-label={popisek}
       data-testid="neprectena-tecka"
-      className={`pointer-events-none inline-block shrink-0 rounded-full border border-inkoust/40 bg-red-800 ring-2 ring-papir motion-safe:animate-pulse motion-reduce:animate-none ${rozmer}`}
+      className={`pointer-events-none inline-block shrink-0 rounded-full border border-akcent bg-akcent ring-2 ring-papir motion-safe:animate-pulse motion-reduce:animate-none ${rozmer}`}
     />
   );
 }

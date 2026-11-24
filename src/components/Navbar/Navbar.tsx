@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type JSX, type RefObject } from "react";
+import { useEffect, useRef, useState, type JSX, type MouseEvent, type RefObject } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import LogoKlubu from "../LogoKlubu";
 import Ikona, { type NazevIkony } from "../Ikona";
 import AvatarKruh from "../AvatarKruh";
 import NeprectenaTecka from "../chat/NeprectenaTecka";
+import BublinaListy from "./BublinaListy";
 import NavigacniRozbalovak from "./NavigacniRozbalovak";
 import { popisekNeprectenych } from "../../hooks/useUnreadExpeditions";
 import { useKonverzacePrehled } from "../../hooks/useKonverzacePrehled";
@@ -67,7 +68,7 @@ function MenuRadek({
         {ikona !== undefined ? <Ikona nazev={ikona} className={`size-[15px] ${zvyrazneno ? "text-smrk" : "text-ink-3"}`} /> : null}
         <span className="min-w-0 flex-1 truncate">{popisek}</span>
         {badge !== undefined && badge !== null && badge > 0 ? (
-          <span className="inline-flex items-center justify-center rounded-full bg-akcent-100 px-[7px] py-0.5 text-[9.5px] font-semibold tabular-nums text-akcent">
+          <span className="inline-flex items-center justify-center rounded-full bg-akcent-100 px-[7px] py-0.5 text-[9.5px] font-semibold text-akcent">
             {badge}
           </span>
         ) : null}
@@ -78,8 +79,8 @@ function MenuRadek({
 
 function MenuOddelovac({ popisek }: { popisek: string }): JSX.Element {
   return (
-    <li role="separator" className="mt-1 border-t border-linka px-[9px] pb-1 pt-2">
-      <span className="text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#b3b8a4]">{popisek}</span>
+    <li role="separator" className="border-t border-linka px-[9px] pb-1 pt-2">
+      <span className="text-[9.5px] font-bold uppercase tracking-[1.1px] text-ink-5">{popisek}</span>
     </li>
   );
 }
@@ -112,7 +113,7 @@ function MenuVice({ onZavrit }: { onZavrit: () => void }): JSX.Element {
   return (
     <ul className="flex flex-col gap-0.5">
       <MenuRadek ikona="users" popisek="Členové" onClick={() => jdi("/cleny")} />
-      <MenuRadek ikona="chart-column" popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
+      <MenuRadek ikona="chart-column" popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky&pohled=klub")} />
       {jeAdmin ? (
         <>
           <MenuOddelovac popisek="Admin" />
@@ -150,19 +151,19 @@ function MenuProfil({ onZavrit }: { onZavrit: () => void }): JSX.Element {
   }
 
   return (
-  <div className="flex flex-col gap-1">
+  <div className="flex flex-col gap-0.5">
     <div className="flex items-center gap-2.5 border-b border-linka px-2 pb-2.5 pt-2">
-      <AvatarKruh jmeno={celeJmeno} url={user.avatarUrl} velikost={34} />
+      <AvatarKruh jmeno={celeJmeno} url={user.avatarUrl} ton="moje" velikost={34} />
       <div className="min-w-0">
         <p className="truncate text-[12.5px] font-semibold text-inkoust">{celeJmeno}</p>
         <p className="truncate text-[10.5px] text-ink-3">{user.email}</p>
       </div>
     </div>
-    <ul className="flex flex-col gap-0.5 pt-1">
+    <ul className="flex flex-col gap-0.5">
       <MenuRadek ikona="user" popisek="Můj profil" onClick={() => jdi("/profil")} />
       <MenuRadek ikona="chart-column" popisek="Statistiky" onClick={() => jdi("/profil?tab=statistiky")} />
       <MenuRadek ikona="bell" popisek="Oznámení" onClick={() => jdi("/nastaveni")} />
-      <li role="separator" aria-hidden="true" className="my-1 h-px bg-linka" />
+      <li role="separator" aria-hidden="true" className="h-px bg-linka" />
       <MenuRadek
         ikona="log-out"
         popisek="Odhlásit se"
@@ -177,7 +178,7 @@ function MenuProfil({ onZavrit }: { onZavrit: () => void }): JSX.Element {
 }
 
 function jeViceAktivni(cesta: string, hledani: string): boolean {
-  if (cesta === "/cleny" || cesta === "/nastaveni") return true;
+  if (cesta.startsWith("/cleny") || cesta === "/nastaveni") return true;
   if (cesta === "/admin/kody" || cesta === "/zpevnik/fronta") return true;
   if (cesta === "/profil" && hledani.includes("tab=statistiky")) return true;
   return false;
@@ -206,7 +207,7 @@ function popisekChat(pocet: number): string {
 
 /**
  * Červená tečka u Chatu — reuse `NeprectenaTecka` (8px `nadpis`,
- * red-800 na papíru + bílý kroužek `ring-papir` + tmavý obrys,
+ * terakota na papíru + bílý kroužek `ring-papir` + tmavý obrys,
  * takže není jen barvou; `pointer-events-none` drží 44px tap-target).
  * Pozice: absolutně vpravo nahoře u ikony, mobil i desktop stejně.
  */
@@ -223,20 +224,59 @@ function ChatTecka({ popisek }: { popisek: string }): JSX.Element {
 
 function tridyDesktopOdkazu(aktivni: boolean): string {
   const zaklad =
-    "nahled-press flex min-h-11 items-center gap-[7px] rounded-[10px] px-[13px] py-[9px] [&:last-child]:px-[11px] text-[13.5px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
+    "nahled-press relative flex items-center gap-[7px] rounded-[10px] px-[13px] py-[9px] before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] [&:last-child]:px-[11px] text-[13.5px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
   if (aktivni) {
-    return `${zaklad} bg-mlha font-semibold text-smrk`;
+    return `${zaklad} font-semibold text-smrk`;
   }
   return `${zaklad} font-medium text-mech [&_svg]:text-ink-3 hover:bg-mlha/60 hover:text-inkoust`;
 }
 
 function tridyMobilOdkazu(aktivni: boolean): string {
   const zaklad =
-    "nahled-press flex min-h-11 min-w-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-3xl px-1 text-[10px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
+    "nahled-press relative flex h-full min-h-11 min-w-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[10px] leading-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk motion-reduce:transition-none [touch-action:manipulation]";
   if (aktivni) {
-    return `${zaklad} bg-mlha font-semibold text-smrk`;
+    return `${zaklad} font-semibold text-smrk`;
   }
   return `${zaklad} font-medium text-mech`;
+}
+
+/** Záložka, pod kterou adresa patří, nebo -1. Vybírá místo pro bublinu. */
+function indexMobilZalozky(cesta: string, hledani: string): number {
+  // Žebříčky a Profil nemají na telefonu vlastní položku, patří pod Více.
+  const podVice =
+    jeViceAktivni(cesta, hledani) || cesta.startsWith("/zebricky") || cesta === "/profil" || cesta === "/vice";
+  return MOBIL_POLOZKY.findIndex(({ to }) =>
+    to === "/vice" ? podVice : !podVice && (cesta === to || cesta.startsWith(`${to}/`)),
+  );
+}
+
+/** Záložka horní lišty. Za odkazy je ještě „Více“, -1 znamená žádnou. */
+function indexDesktopZalozky(cesta: string, hledani: string): number {
+  if (jeViceAktivni(cesta, hledani)) return DESKTOP_POLOZKY.length;
+  return DESKTOP_POLOZKY.findIndex(({ to }) => cesta === to || cesta.startsWith(`${to}/`));
+}
+
+/**
+ * Vybraná záložka navigace. Po kliknutí ukazuje novou hned, i když se stránka
+ * teprve stahuje. Klik platí jen do změny adresy, jinak by po návratu zpět
+ * ukazoval starou záložku.
+ */
+function useVybranaZalozka(
+  podleAdresy: number,
+  adresa: string,
+): { vybrana: number; naKlik: (index: number, udalost: MouseEvent) => void } {
+  const [klik, setKlik] = useState<{ index: number; adresa: string } | null>(null);
+  useEffect(() => {
+    setKlik(null);
+  }, [adresa]);
+  return {
+    vybrana: klik !== null && klik.adresa === adresa ? klik.index : podleAdresy,
+    naKlik: (index, udalost) => {
+      // Otevření v nové kartě nechá bublinu na místě.
+      if (udalost.metaKey || udalost.ctrlKey || udalost.shiftKey) return;
+      setKlik({ index, adresa });
+    },
+  };
 }
 
 export function TopBar({
@@ -253,47 +293,56 @@ export function TopBar({
   const polozky: PolozkaNavigace[] = DESKTOP_POLOZKY;
   const maNeprectene: boolean = pocetNeprectenych > 0;
   const { pathname, search } = useLocation();
-  const viceAktivni = jeViceAktivni(pathname, search);
+  const seznamRef = useRef<HTMLDivElement>(null);
+  const { vybrana, naKlik } = useVybranaZalozka(indexDesktopZalozky(pathname, search), `${pathname}${search}`);
 
   return (
-    <nav aria-label="Hlavní navigace" className="hidden items-center gap-1 min-[90rem]:flex min-[90rem]:justify-self-center">
-      {polozky.map(({ to, popisek, end, Ikona }) => {
-        const jeChat: boolean = to === "/chat";
-        const label: string = jeChat ? popisekChat(pocetNeprectenych) : popisek;
-        return (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            aria-label={jeChat ? label : undefined}
-            className={({ isActive }) => tridyDesktopOdkazu(isActive)}
-          >
-            {() => (
+    <nav aria-label="Hlavní navigace" className="relative hidden min-[90rem]:block min-[90rem]:justify-self-center">
+      <div ref={seznamRef} className="relative z-10 flex items-center gap-0.5">
+        {polozky.map(({ to, popisek, end, Ikona }, index) => {
+          const jeChat: boolean = to === "/chat";
+          const label: string = jeChat ? popisekChat(pocetNeprectenych) : popisek;
+          const aktivni = index === vybrana;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              aria-label={jeChat ? label : undefined}
+              onClick={(udalost) => naKlik(index, udalost)}
+              className={tridyDesktopOdkazu(aktivni)}
+            >
               <span className="flex items-center gap-[7px]">
-                <span className="relative inline-flex shrink-0 [touch-action:manipulation]">
+                <span
+                  className={`relative inline-flex shrink-0 [touch-action:manipulation] ${aktivni ? "lista-ikona-aktivni" : ""}`}
+                >
                   <Ikona />
                   {jeChat && maNeprectene ? <ChatTecka popisek={popisek} /> : null}
                 </span>
                 <span>{popisek}</span>
               </span>
-            )}
-          </NavLink>
-        );
-      })}
-      <button
-        ref={viceKotvaRef}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={viceOtevreno}
-        aria-controls="menu-vice"
-        onClick={onVicePrepnout}
-        className={tridyDesktopOdkazu(viceAktivni)}
-      >
-        <span className="flex items-center gap-[7px]">
-          <IkonaVice />
-          <span>Více</span>
-        </span>
-      </button>
+            </NavLink>
+          );
+        })}
+        <button
+          ref={viceKotvaRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={viceOtevreno}
+          aria-controls="menu-vice"
+          onClick={onVicePrepnout}
+          className={tridyDesktopOdkazu(vybrana === polozky.length)}
+        >
+          <span className="flex items-center gap-[7px]">
+            <span className={`inline-flex shrink-0 ${vybrana === polozky.length ? "lista-ikona-aktivni" : ""}`}>
+              <IkonaVice />
+            </span>
+            <span>Více</span>
+          </span>
+        </button>
+      </div>
+      {/* Až za seznamem: ref na něj musí být při prvním vykreslení hotový. */}
+      <BublinaListy seznam={seznamRef} index={vybrana} umisteni="inset-0" zaobleni="rounded-[10px]" />
     </nav>
   );
 }
@@ -301,6 +350,9 @@ export function TopBar({
 export function MobileBar({ pocetNeprectenych = 0 }: { pocetNeprectenych?: number } = {}): JSX.Element {
   const polozky: PolozkaNavigace[] = MOBIL_POLOZKY;
   const maNeprectene: boolean = pocetNeprectenych > 0;
+  const { pathname, search } = useLocation();
+  const seznamRef = useRef<HTMLUListElement>(null);
+  const { vybrana, naKlik } = useVybranaZalozka(indexMobilZalozky(pathname, search), `${pathname}${search}`);
 
   return (
     <nav
@@ -308,31 +360,33 @@ export function MobileBar({ pocetNeprectenych = 0 }: { pocetNeprectenych?: numbe
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-3 pt-2 min-[90rem]:hidden"
       style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}
     >
-      <ul className="pointer-events-auto mx-auto flex h-14 items-stretch gap-0.5 rounded-[28px] border border-white bg-povrch/70 p-1 shadow-[0_8px_24px_rgba(28,38,21,0.07)] backdrop-blur-md">
-        {polozky.map(({ to, popisek, end, Ikona }) => {
-          const jeChat: boolean = to === "/chat";
-          return (
-            <li key={to} className="min-w-0 flex-1">
-              <NavLink
-                to={to}
-                end={end}
-                aria-label={jeChat ? popisekChat(pocetNeprectenych) : undefined}
-                className={({ isActive }) => tridyMobilOdkazu(isActive)}
-              >
-                {() => (
-                  <>
-                    <span className="relative inline-flex shrink-0">
-                      <Ikona className="h-[22px] w-[22px]" />
-                      {jeChat && maNeprectene && <ChatTecka popisek={popisek} />}
-                    </span>
-                    <span>{popisek}</span>
-                  </>
-                )}
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="pointer-events-auto relative mx-auto h-14 max-w-[30rem] rounded-[28px] border border-white bg-povrch/70 p-1 shadow-[0_8px_24px_#1c261512] backdrop-blur-md">
+        <ul ref={seznamRef} className="relative z-10 m-0 flex h-full list-none items-stretch gap-0.5 p-0">
+          {polozky.map(({ to, popisek, end, Ikona }, index) => {
+            const jeChat: boolean = to === "/chat";
+            const aktivni = index === vybrana;
+            return (
+              <li key={to} className="min-w-0 flex-1">
+                <NavLink
+                  to={to}
+                  end={end}
+                  aria-label={jeChat ? popisekChat(pocetNeprectenych) : undefined}
+                  onClick={(udalost) => naKlik(index, udalost)}
+                  className={tridyMobilOdkazu(aktivni)}
+                >
+                  <span className={`relative inline-flex shrink-0 ${aktivni ? "lista-ikona-aktivni" : ""}`}>
+                    <Ikona className="h-[22px] w-[22px]" />
+                    {jeChat && maNeprectene && <ChatTecka popisek={popisek} />}
+                  </span>
+                  <span>{popisek}</span>
+                </NavLink>
+              </li>
+            );
+          })}
+        </ul>
+        {/* Až za seznamem: ref na něj musí být při prvním vykreslení hotový. */}
+        <BublinaListy seznam={seznamRef} index={vybrana} umisteni="inset-1" zaobleni="rounded-full" />
+      </div>
     </nav>
   );
 }
@@ -366,13 +420,13 @@ export function AppHeader({
       <header className="sticky top-0 z-40 hidden h-[76px] items-center border-b border-linka bg-povrch px-10 min-[90rem]:grid min-[90rem]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <Link
           to="/vypravy"
-          className="nahled-press flex min-h-[44px] min-w-[44px] flex-col justify-center rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+          className="nahled-press flex min-h-[44px] min-w-[44px] flex-col justify-center rounded-md pr-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
           aria-label="ExApp – výpravy"
         >
           <span className="flex items-center gap-[11px]">
             <LogoKlubu velikost="sm" />
             <span className="flex flex-col">
-              <span className="font-display text-[17px] font-bold leading-tight tracking-[-0.3px] text-inkoust">ExApp</span>
+              <span className="font-display text-[17px] font-bold tracking-[-0.3px] text-inkoust">ExApp</span>
               <span className="text-[11px] font-medium tracking-[0.3px] text-ink-3">Školní expediční klub</span>
             </span>
           </span>

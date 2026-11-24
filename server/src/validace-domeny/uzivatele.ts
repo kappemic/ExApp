@@ -16,6 +16,13 @@ import {
 } from "../../../src/config/roles";
 import type { ChybyPoli, VysledekValidace } from "./spolecne";
 import { ctiString, overSkolaTrida, pridej, jeRecord } from "./spolecne";
+import { overNarozeninyPatch } from "./profil";
+import {
+  overDiscordNickPatch,
+  overJmenoPatch,
+  overPrijmeniPatch,
+  overTelefonPatch,
+} from "./ucty";
 
 
 
@@ -59,8 +66,8 @@ export function validujUpravuRoleUzivatele(
 
 /* ------------------------------------------------------------------ */
 /* PATCH /api/users/:id — nové parciální 3D trio (aditivní).             */
-/* Přijímá `clenstvi?/funkce?/isAdmin?/isSuperadmin?/skola?/trida?`      */
-/* (parciální) NEBO samotné staré `{ role }`                             */
+/* Přijímá `clenstvi?/funkce?/isAdmin?/isSuperadmin?` a osobní údaje     */
+/* (`UpravitUdajeUzivatele`), parciálně, NEBO samotné staré `{ role }`                             */
 /* (přes `validujUpravuRoleUzivatele`).                                  */
 /* Kombinace obojího → uspech:false (route složí 422).                  */
 /* Pravidlo 3D: `clen` + funkce → chyba (`chybaKombinace3D`).            */
@@ -74,6 +81,14 @@ export interface CistaUpravaUzivatele {
   funkce?: Funkce;
   isAdmin?: boolean;
   isSuperadmin?: boolean;
+  jmeno?: string;
+  prijmeni?: string;
+  /** undefined = beze změny, null = smazat. */
+  telefon?: string | null;
+  /** undefined = beze změny, null = smazat. */
+  discordNick?: string | null;
+  /** YYYY-MM-DD; undefined = beze změny, null = smazat. */
+  narozeniny?: string | null;
   skola?: string;
   trida?: string;
   role?: Role;
@@ -101,6 +116,11 @@ export function validujUpravuUzivatele(
     Object.hasOwn(telo, "funkce") ||
     Object.hasOwn(telo, "isAdmin") ||
     Object.hasOwn(telo, "isSuperadmin") ||
+    Object.hasOwn(telo, "jmeno") ||
+    Object.hasOwn(telo, "prijmeni") ||
+    Object.hasOwn(telo, "telefon") ||
+    Object.hasOwn(telo, "discordNick") ||
+    Object.hasOwn(telo, "narozeniny") ||
     Object.hasOwn(telo, "skola") ||
     Object.hasOwn(telo, "trida");
 
@@ -108,7 +128,7 @@ export function validujUpravuUzivatele(
     pridej(
       chyby,
       "role",
-      "Zadej buď starou roli, nebo nové pole (členství / funkce / admin / hlavní admin / škola / třída) — ne obojí.",
+      "Zadej buď starou roli, nebo nové pole (členství / funkce / admin / hlavní admin / osobní údaje), ne obojí.",
     );
     return { uspech: false, data: null, chybyPoli: chyby };
   }
@@ -166,6 +186,17 @@ export function validujUpravuUzivatele(
       data.isSuperadmin = raw;
     }
   }
+
+  const jmeno = overJmenoPatch(chyby, telo);
+  if (jmeno !== undefined) data.jmeno = jmeno;
+  const prijmeni = overPrijmeniPatch(chyby, telo);
+  if (prijmeni !== undefined) data.prijmeni = prijmeni;
+  const telefon = overTelefonPatch(chyby, telo);
+  if (telefon.poslan) data.telefon = telefon.hodnota;
+  const discordNick = overDiscordNickPatch(chyby, telo);
+  if (discordNick.poslan) data.discordNick = discordNick.hodnota;
+  const narozeniny = overNarozeninyPatch(chyby, telo);
+  if (narozeniny.poslan) data.narozeniny = narozeniny.hodnota;
 
   if (Object.hasOwn(telo, "skola")) {
     const cista = overSkolaTrida(

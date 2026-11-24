@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { zpevnikPisne } from "../../drizzle/schema/zpevnik_pisne";
 import {
   seradPisne,
@@ -313,7 +313,8 @@ export function registrujZpevnik(app: Express): void {
           const radky = await db
             .select()
             .from(zpevnikPisne)
-            .where(eq(zpevnikPisne.stav, "navrh"));
+            .where(eq(zpevnikPisne.stav, "navrh"))
+            .orderBy(desc(zpevnikPisne.createdAt));
           const navrhy = radky
             .filter((radek) => vidiNavrh(ucet, radek.navrhovatelId))
             .map(naNavrh);

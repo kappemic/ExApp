@@ -6,26 +6,27 @@ Platí pro `/vypravy` a pro dialogy, které ta stránka otevře. Zdroj pravdy je
 
 ## 1. Věta
 
-Bílý list, olivová značka, okrová jen na rozhodnutí. Písmo Onest na text, Bricolage Grotesque na nadpisy. Tvary jsou zaoblené. Prázdné stavy mají podklad `mlha`. Ostatní plochy jsou bílé.
+Krémový list (`papir`), olivová značka (`smrk`), terracottová hlavní akce (`akcent`). Písmo Onest na text, Bricolage Grotesque na nadpisy. Tvary jsou zaoblené (~16 px u menu a panelů). Prázdné stavy a aktivní řádky drží světle šalvějové `mlha`. Karty a dialogy sedí na `povrch`.
 
 ## 2. Barvy
 
-Tokeny jsou v `@theme` v `src/index.css`. Na `bg-okr` je vždy `text-inkoust`.
+Tokeny jsou v `@theme` v `src/index.css`. Na `bg-okr` je vždy `text-inkoust`, nikdy bílý text. Primární CTA (`Přihlásit se`, `Hotovo`, „Nová výprava“ v novém shellu) je `bg-akcent` + `text-papir`.
 
 | Token | Hex | K čemu |
 | --- | --- | --- |
-| `papir` | `#ffffff` | pozadí, karty, dialog |
-| `inkoust` | `#26301a` | text, focus |
-| `smrk` | `#556b2f` | značka, vybraný den, odkaz |
-| `jantar` | `#8f5f0a` | drobný okrový text, štítek schůzky |
-| `mech` | `#5e6b4e` | druhý řádek, čas, popisek |
-| `linka` | `#e7e9df` | vlasová linka, dělení sloupců |
-| `mlha` | `#eef1e4` | prázdný stav, pruh po výpravě, hover řádku |
+| `papir` | `#f7f4eb` | pozadí stránky |
+| `povrch` | `#fffdf6` | karty, hlavička, vyskakovací menu |
+| `inkoust` | `#1c2615` | text, focus |
+| `smrk` | `#2e4022` | značka, vybraný den v kalendáři |
+| `akcent` | `#a8461c` | hlavní akce (terracotta) |
+| `jantar` / `okr` | `#7a5b22` | okrový doplněk, štítek schůzky; na ploše vždy tmavý text |
+| `mech` | `#55604a` | druhý řádek, čas, popisek |
+| `linka` | `#e4dfce` | vlasová linka, dělení sloupců |
+| `mlha` | `#e8edda` | prázdný stav, hover, dnešní den (světlý kruh) |
 | `pole` | `#8c937b` | okraj polí a karet |
-| `okr` | `#d99b26` | hlavní akce: přihlášení, nová výprava, schůzka |
-| `okr-tmavy` | `#c4861a` | hover okrové plochy |
+| `brand-100` | `#e8edda` | stejná role jako `mlha` v peru |
 
-Čísla dnů mimo aktuální měsíc jsou `pole` na bílém pozadí. Pozadí buňky se kvůli tomu nemění.
+Čísla dnů mimo aktuální měsíc jsou `pole` na krémovém pozadí. Pozadí buňky se kvůli tomu nemění.
 
 ## 3. Písmo
 
@@ -68,7 +69,7 @@ Datum je `dd.mm.rrrr`, čas `hh.mm`. Vyskakovací kalendář, sloupce hodin a se
 
 List je bílý, nahoře snímek. Nadcházející výprava má od `lg` dva sloupce: vlevo popis a lidé, vpravo diskuze. Proběhlá výprava je jeden sloupec. Nahoře lidé, pod nimi na celou šířku listu vedle sebe kilometry a fotky. Ušlá trasa leží na světlé mapě a drží skutečný tvar. Diskuze je pod tím, bez velkého nadpisu. Výška jde podle zpráv a zastaví se na stropu. Prázdné vlákno nezabírá prázdný panel.
 
-- Přihlásit se a Odhlásit se jsou okrové a sedí hned pod srazem.
+- Přihlásit se je `bg-akcent` + `text-papir` a sedí hned pod srazem. Odhlásit se zůstává textově `text-akcent`.
 - Lidé jsou vlastní blok „Kdo jede“ nebo „Kdo byl“. Vidí ho každý. Na telefonu jsou avatary nad jmény, ať věta zabere celou šířku. Od `sm` je to jeden řádek: překryté avatary, počet a všechna jména. Druhý seznam se nerozjíždí.
 - Pruh „Výprava proběhla“ a tlačítko Upravit výpravu patří správě. Seznam lidí v něm není.
 - Stavový štítek na snímku (`neuzavřeno`, `volno`, `proběhlá`) se nekreslí.
@@ -77,7 +78,7 @@ List je bílý, nahoře snímek. Nadcházející výprava má od `lg` dva sloupc
 
 ### Diskuze u výpravy
 
-Vlastní karta, oddělená od zbytku listu. Cizí vzkaz má plochu, vlastní má okrový nádech. Poslat není okrové, okrová patří přihlášení. Při psaní se pole nezvýrazňuje rámečkem. Tři tečky u zprávy jsou malé, bez tlačítkového rámu, a menu se otevře až z nich. Sedí vpravo nahoře vedle textu, takže ho nepřekrývají a z řádku nepřetékají. Navazující zprávy téhož člověka ve stejný den nemají jméno ani datum. Čas se u nich ukáže až po najetí, stejně jako tři tečky. Nový den začne znovu jménem a datem.
+Vlastní karta, oddělená od zbytku listu. Cizí vzkaz má plochu, vlastní má okrový nádech. Poslat není akcentní; terracotta patří přihlášení. Při psaní se pole nezvýrazňuje rámečkem. Tři tečky u zprávy jsou malé, bez tlačítkového rámu, a menu se otevře až z nich. Sedí vpravo nahoře vedle textu, takže ho nepřekrývají a z řádku nepřetékají. Navazující zprávy téhož člověka ve stejný den nemají jméno ani datum. Čas se u nich ukáže až po najetí, stejně jako tři tečky. Nový den začne znovu jménem a datem.
 
 ## 6. Pohyb
 
@@ -97,7 +98,7 @@ Křivka je `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`.
 ## 7. Jak přidat nový kus
 
 1. Barvu ber z tokenů v `src/index.css`. Nový odstín nepatří do palety, dokud není v tom souboru.
-2. Okrová je rozhodnutí (přihlášení, založení, schůzka). Druhá akce ve stejném dialogu okrová není.
+2. Primární rozhodnutí je `akcent` (přihlášení, založení, schůzka v novém shellu). Druhá akce ve stejném dialogu terracotta není. Okrová (`okr`) zůstává doplňková na ploše s tmavým textem.
 3. `mlha` je prázdno a klidný pruh, ne každé tlačítko.
 4. Okraj formuláře je `pole`. `linka` je na to moc světlá.
 5. Vyskakovací panel mimo strom aplikace potřebuje vlastní plné pozadí. Třída `nocturne` je průhledná schválně.

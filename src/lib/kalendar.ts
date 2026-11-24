@@ -514,3 +514,54 @@ export function udalostiProTyden(
   }
   return vysledek;
 }
+
+/**
+ * Pruhy výprav po týdnech: v jednom řádku mřížky má výprava stejný pruh ve všech
+ * dnech, takže pás nepřeskakuje a pod ním zůstane prázdné místo („Beskydy“ a
+ * „Jeseníky“ v ExApp · Kalendář). Vrací den → (id výpravy → číslo pruhu).
+ */
+export function pruhyVyprav(
+  mrizka: ReadonlyArray<string>,
+  mapa: ReadonlyMap<string, ReadonlyArray<KalendarniUdalost>>,
+  zacatek: (id: string) => string,
+): Map<string, Map<string, number>> {
+  const vysledek = new Map<string, Map<string, number>>();
+  for (let radek = 0; radek < mrizka.length; radek += 7) {
+    const dny = mrizka.slice(radek, radek + 7);
+    const obsazeno: Array<Set<string>> = [];
+    const pruhy = new Map<string, number>();
+    const dnyVypravy = new Map<string, string[]>();
+    for (const den of dny) {
+      for (const v of vypravyDne(mapa.get(den) ?? [])) {
+        const seznam = dnyVypravy.get(v.id) ?? [];
+        seznam.push(den);
+        dnyVypravy.set(v.id, seznam);
+      }
+    }
+    const poradi = [...dnyVypravy.keys()].sort(
+      (a, b) => zacatek(a).localeCompare(zacatek(b)) || a.localeCompare(b),
+    );
+    for (const id of poradi) {
+      const jeho = dnyVypravy.get(id) ?? [];
+      let pruh = 0;
+      while (jeho.some((den) => obsazeno[pruh]?.has(den) === true)) pruh += 1;
+      const mnozina = obsazeno[pruh] ?? new Set<string>();
+      for (const den of jeho) mnozina.add(den);
+      obsazeno[pruh] = mnozina;
+      pruhy.set(id, pruh);
+    }
+    for (const den of dny) {
+      const denni = new Map<string, number>();
+      for (const v of vypravyDne(mapa.get(den) ?? [])) denni.set(v.id, pruhy.get(v.id) ?? 0);
+      vysledek.set(den, denni);
+    }
+  }
+  return vysledek;
+}
+
+/** Krátký název do štítku kalendáře: „Beskydy – Lysá hora“ → „Beskydy“, schůzka → „Schůzka“. */
+export function kratkyNazevUdalosti(nazev: string, typ: TypUdalosti): string {
+  const cisty = nazev.trim();
+  if (typ === "schuzka") return /schůzk/i.test(cisty) ? "Schůzka" : cisty;
+  return cisty.split(/\s+[–-]\s+/)[0] ?? cisty;
+}

@@ -23,8 +23,9 @@ const MESIC_GEN = [
 ];
 
 /** „PÁ 11. – NE 13. PROSINCE“ (velkými písmeny řeší CSS). */
-export function rozsahDnu(od: string, doDne: string): string {
+export function rozsahDnu(od: string, doDne: string | null): string {
   const a = new Date(`${od}T12:00:00`);
+  if (doDne === null) return `${DEN_KRATKY[a.getDay()]} ${a.getDate()}. ${MESIC_GEN[a.getMonth()]}`;
   const b = new Date(`${doDne}T12:00:00`);
   const zacatek = `${DEN_KRATKY[a.getDay()]} ${a.getDate()}.`;
   const konec = `${DEN_KRATKY[b.getDay()]} ${b.getDate()}. ${MESIC_GEN[b.getMonth()]}`;

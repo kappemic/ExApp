@@ -19,12 +19,6 @@ export const fotkyHoverBgLinka =
 export const fotkyHoverBgPapir =
   "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-papir/90";
 
-export const fotkyHoverBgJantar =
-  "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-jantar/10";
-
-export const fotkyHoverBgJantarPlne =
-  "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-jantar/90";
-
 export const fotkyHoverBgSmrk =
   "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-smrk/10";
 
@@ -38,6 +32,12 @@ export const fotkyTlacitkoPrimarni = `${fotkyTlacitkoZaklad} ${fotkyHoverOpacity
 
 /** Secondary outline — Přidat album, Stáhnout. */
 export const fotkyTlacitkoSekundarni = `${fotkyTlacitkoZaklad} ${fotkyHoverBgSmrk} gap-1.5 rounded-xl border border-linka bg-povrch px-3.5 text-sm font-semibold text-inkoust disabled:opacity-60`;
+
+/** Nevratná akce — Smazat vybrané. Terakota patří jen mazání. */
+export const fotkyTlacitkoSmazat = `${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} gap-1.5 rounded-xl bg-akcent px-3.5 text-sm font-semibold text-papir disabled:opacity-60`;
+
+/** Slabší mazání vedle `fotkyTlacitkoSmazat` — Smazat vše. */
+export const fotkyTlacitkoOdebrat = `${fotkyTlacitkoZaklad} ${fotkyHoverOpacity} gap-1.5 rounded-xl border border-transparent bg-[#fbede7] px-3.5 text-sm font-semibold text-akcent disabled:opacity-60`;
 
 /** Filter chips on /fotky (pen: selected = brand fill). */
 export const fotkyChipZaklad =
@@ -67,20 +67,16 @@ export const fotkyNahravaciObalSbaleny = "";
 /** Expanded: minimal chrome; borders live on disclosure panels, not an empty wrapper */
 export const fotkyNahravaciObalRozbaleny = "flex flex-col gap-2";
 
-/** Album grid toolbar — sticks below AppHeader (h-16) */
+/** Album grid toolbar — a phone has no app header, the computer one is 76 px tall. */
 export const fotkyAlbumToolbarZaklad =
-  "sticky top-16 z-30 mb-3 flex w-full min-w-0 flex-col gap-1.5 rounded-lg border-2 bg-papir/95 shadow-denik backdrop-blur-sm transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2";
+  "sticky top-[max(0.5rem,env(safe-area-inset-top))] z-30 mb-4 flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border bg-povrch min-[90rem]:top-[84px] transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2";
 
 /** Action clusters inside album toolbars (restore / delete / download) */
 export const fotkyAkceSkupina = "flex flex-wrap items-center gap-1.5 sm:gap-2";
 
 /** Trash management — equal two-column grid on a phone, one wrapping row from sm. */
 export const fotkyKosAkceObal =
-  "grid w-full min-w-0 grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2";
-
-/** Tighter chrome when the toolbar is stuck on small viewports */
-export const fotkyAlbumToolbarKompaktni =
-  "max-sm:gap-1 max-sm:px-2 max-sm:py-1.5 max-sm:[&_[data-fotky-album-toolbar-nadpis]]:text-xs max-sm:[&_[data-fotky-album-akce-row]]:flex-row max-sm:[&_[data-fotky-album-akce-row]]:flex-wrap max-sm:[&_[data-fotky-album-akce-row]]:gap-1.5 max-sm:[&_[data-fotky-mazaci-akce]]:flex-row max-sm:[&_[data-fotky-mazaci-akce]]:flex-wrap max-sm:[&_[data-fotky-mazaci-akce]]:gap-1.5 max-sm:[&_[data-fotky-stahovaci-akce]]:flex-row max-sm:[&_[data-fotky-stahovaci-akce]]:flex-wrap max-sm:[&_[data-fotky-stahovaci-akce]]:gap-1.5 max-sm:[&_[data-fotky-kos-akce]]:gap-1 max-sm:[&_[data-fotky-album-akce-row]_button]:min-h-[40px] max-sm:[&_[data-fotky-album-akce-row]_button]:min-w-[40px] max-sm:[&_[data-fotky-album-akce-row]_button]:px-2.5 max-sm:[&_[data-fotky-album-akce-row]_button]:text-xs";
+  "grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2";
 
 /** Inset focus so the 2px photo gap does not jump when a tile is focused. */
 const FOTKY_FOCUS_DLAZDICE =
@@ -111,7 +107,7 @@ export const fotkyLightboxRadek =
 export const fotkyLightboxZoom = `${fotkyLightboxIkonaZaklad} rounded-full bg-papir text-inkoust shadow-[0_0_0_2px_rgba(245,242,234,0.95)]`;
 
 export const fotkyLightboxPocet =
-  "text-sm font-bold tabular-nums text-papir drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]";
+  "text-sm font-bold text-papir drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]";
 
 /** Destructive album action tucked under upload disclosure */
 export const fotkySmazatAlbumDiscreet = `${fotkyStisk} ${fotkyHoverOpacity} ${FOTKY_FOCUS} min-h-[44px] max-w-full truncate rounded-md px-2 py-2 text-left text-xs font-semibold text-inkoust/45 underline decoration-inkoust/25 underline-offset-[3px] transition-[transform,opacity,color,decoration-color] duration-[160ms] ease-out motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)]:hover:text-jantar [@media(hover:hover)_and_(pointer:fine)]:hover:decoration-jantar/50`;

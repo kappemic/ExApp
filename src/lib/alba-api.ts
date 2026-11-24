@@ -390,6 +390,27 @@ export async function nahrajFotku(albumId: string, soubor: File): Promise<AlbaVy
   }
 }
 
+/** Náhled alba výpravy. Server ho povolí adminovi a jen u proběhlé výpravy. */
+export async function nastavNahledAlba(
+  expeditionId: string,
+  fotkaId: string,
+): Promise<AlbaVysledek<null>> {
+  const zaklad = apiBase();
+  if (zaklad.length === 0) {
+    return { ok: false, chyba: "Bez připojení náhled nastavit nejde." };
+  }
+  try {
+    const odpoved = await fetch(
+      `${zaklad}/api/expeditions/${segment(expeditionId)}/fotky/${segment(fotkaId)}/nahled`,
+      { method: "POST", credentials: "include", headers: { Accept: "application/json" } },
+    );
+    if (odpoved.ok) return { ok: true, data: null };
+    return chybaZTela(await ctiJsonTelo(odpoved), "Náhled alba se nepodařilo nastavit.");
+  } catch {
+    return { ok: false, chyba: "Bez připojení náhled nastavit nejde." };
+  }
+}
+
 /** Czech count: 1 fotka, 2–4 fotky, 11–14 fotek, 21 fotka, … */
 export function popisekPoctuFotek(pocet: number): string {
   const n = Math.abs(Math.trunc(pocet));

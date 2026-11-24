@@ -94,6 +94,20 @@ export function vychoziPravaSkupiny(): PravoSkupiny[] {
   return SKUPINA_ROLE.map((role) => ({ role, cist: true, psat: true }));
 }
 
+/** Kdo do skupiny píše a kdo ji jen čte, slovy do přehledu oprávnění. */
+export function souhrnPrav(prava: readonly PravoSkupiny[]): { pise: string; cte: string | null } {
+  const pisou = prava.filter((pravo) => pravo.psat);
+  const ctou = prava.filter((pravo) => pravo.cist && !pravo.psat);
+  const jmena = (vybrane: readonly PravoSkupiny[]): string =>
+    vybrane.length === SKUPINA_ROLE.length
+      ? "všichni"
+      : vybrane.map((pravo) => nazevRoleSkupiny(pravo.role)).join(", ");
+  return {
+    pise: pisou.length === 0 ? "nikdo" : jmena(pisou),
+    cte: ctou.length === 0 ? null : jmena(ctou),
+  };
+}
+
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

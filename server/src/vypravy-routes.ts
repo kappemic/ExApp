@@ -9,6 +9,7 @@ import {
   count,
   eq,
   inArray,
+  type SQL,
 } from "drizzle-orm";
 import {
   type Express,
@@ -134,6 +135,24 @@ export function apiExpediceSPoctem(
   };
 }
 
+/** Unknown participant id is an empty list, never a 500. */
+function posliPrazdnySeznamVyprav(
+  res: Response,
+  page: number | undefined,
+  pageSize: number | undefined,
+): void {
+  if (page === undefined || pageSize === undefined) {
+    const telo: ExpediceListResponse = { expedice: [] };
+    res.json(telo);
+    return;
+  }
+  const telo: ExpediceListResponse = {
+    expedice: [],
+    pagination: { page, pageSize, totalItems: 0, totalPages: 1 },
+  };
+  res.json(telo);
+}
+
 export function registrujVypravy(app: Express): void {
   /* ------------------------------------------------------------------ */
   /* GET /api/expeditions — veřejné čtení z Neon DB (Krok 3 + Krok 2      */
@@ -151,6 +170,7 @@ export function registrujVypravy(app: Express): void {
           stav?: unknown;
           page?: unknown;
           pageSize?: unknown;
+          ucastnik?: unknown;
         };
         let stav: StavVypravy | undefined;
         if (dotaz.stav !== undefined) {
@@ -193,26 +213,49 @@ export function registrujVypravy(app: Express): void {
         }
 
         const db = getDb();
+        let idVyprav: string[] | undefined;
+        if (dotaz.ucastnik !== undefined) {
+          const surovyUcastnik = dotaz.ucastnik;
+          const textUcastnika =
+            typeof surovyUcastnik === "string" ? surovyUcastnik.trim() : "";
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textUcastnika)) {
+            posliPrazdnySeznamVyprav(res, page, pageSize);
+            return;
+          }
+          const vazby = await db
+            .select({ expeditionId: participants.expeditionId })
+            .from(participants)
+            .where(eq(participants.userId, textUcastnika));
+          idVyprav = [...new Set(vazby.map((vazba) => vazba.expeditionId))];
+          if (idVyprav.length === 0) {
+            posliPrazdnySeznamVyprav(res, page, pageSize);
+            return;
+          }
+        }
         // History reads newest first, so the oldest records sit on the last page.
         const poradi =
           stav === "proběhlá"
             ? desc(expeditions.datum)
             : asc(expeditions.datum);
+        const filtry: SQL[] = [];
+        if (stav !== undefined) filtry.push(eq(expeditions.stav, stav));
+        if (idVyprav !== undefined) filtry.push(inArray(expeditions.id, idVyprav));
+        const kde = filtry.length > 0 ? and(...filtry) : undefined;
         let radky;
         let totalItemsSql: number | null = null;
         if (page !== undefined && pageSize !== undefined) {
           const offset = (page - 1) * pageSize;
           const pocet =
-            stav === undefined
+            kde === undefined
               ? await db.select({ hodnota: count() }).from(expeditions)
               : await db
                   .select({ hodnota: count() })
                   .from(expeditions)
-                  .where(eq(expeditions.stav, stav));
+                  .where(kde);
           const surovy = pocet[0]?.hodnota ?? 0;
           totalItemsSql = typeof surovy === "number" ? surovy : Number(surovy);
           radky =
-            stav === undefined
+            kde === undefined
               ? await db
                   .select()
                   .from(expeditions)
@@ -222,18 +265,18 @@ export function registrujVypravy(app: Express): void {
               : await db
                   .select()
                   .from(expeditions)
-                  .where(eq(expeditions.stav, stav))
+                  .where(kde)
                   .orderBy(poradi)
                   .limit(pageSize)
                   .offset(offset);
         } else {
           radky =
-            stav === undefined
+            kde === undefined
               ? await db.select().from(expeditions).orderBy(poradi)
               : await db
                   .select()
                   .from(expeditions)
-                  .where(eq(expeditions.stav, stav))
+                  .where(kde)
                   .orderBy(poradi);
         }
         const nahledy = await nactiMapuNahledu(

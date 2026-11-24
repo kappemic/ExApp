@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from "react";
-import SpodniSheet, { PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
+import SpodniSheet, { NADPIS_ODDILU_PANELU, PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
 import Ikona from "../Ikona";
+import { formatCelyDatum } from "../../lib/expedition-utils";
 import { formatKmNaDesetinu } from "../../lib/format-cisla";
 import {
   druhStravaChyby,
@@ -16,6 +17,8 @@ export interface SparovatAktivituSheetProps {
   otevreno: boolean;
   expeditionId: string;
   nazevVypravy: string;
+  /** Datum výpravy YYYY-MM-DD, když ho volající zná. */
+  datumVypravy?: string | null;
   onZavrit: () => void;
   onSparovano?: () => void;
 }
@@ -26,7 +29,6 @@ function formatDatum(datum: string): string {
   return new Date(cas).toLocaleDateString("cs-CZ", {
     day: "numeric",
     month: "numeric",
-    year: "numeric",
   });
 }
 
@@ -34,6 +36,7 @@ export default function SparovatAktivituSheet({
   otevreno,
   expeditionId,
   nazevVypravy,
+  datumVypravy = null,
   onZavrit,
   onSparovano,
 }: SparovatAktivituSheetProps): JSX.Element {
@@ -116,9 +119,18 @@ export default function SparovatAktivituSheet({
   }
 
   return (
-    <SpodniSheet otevreno={otevreno} titulek="Spárovat aktivitu" onZavrit={onZavrit}>
-      <p className="text-sm leading-relaxed text-mech">{nazevVypravy}</p>
-      <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-mech">Aktivity ze Stravy</p>
+    <SpodniSheet
+      otevreno={otevreno}
+      titulek="Spárovat aktivitu"
+      podtitul={
+        datumVypravy !== null && datumVypravy.length >= 10
+          ? `${nazevVypravy} · ${formatCelyDatum(datumVypravy.slice(0, 10))}`
+          : nazevVypravy
+      }
+      sirka={520}
+      onZavrit={onZavrit}
+    >
+      <p className={NADPIS_ODDILU_PANELU}>Aktivity ze Stravy</p>
 
       {faze === "nacitani" && (
         <p role="status" className="mt-3 text-sm text-mech">
@@ -137,7 +149,7 @@ export default function SparovatAktivituSheet({
       )}
 
       {faze === "hotovo" && navrhy.length > 0 && (
-        <ul role="radiogroup" aria-label="Aktivity ze Stravy" className="mt-2.5 flex flex-col gap-2">
+        <ul role="radiogroup" aria-label="Aktivity ze Stravy" className="mt-[18px] flex flex-col gap-[18px] min-[90rem]:mt-3.5 min-[90rem]:gap-3.5">
           {navrhy.map((navrh) => {
             const vybrana = vybranaId === navrh.id;
             return (
@@ -147,21 +159,23 @@ export default function SparovatAktivituSheet({
                   role="radio"
                   aria-checked={vybrana}
                   onClick={() => setVybranaId(navrh.id)}
-                  className={`nahled-press flex w-full items-center gap-3 rounded-[14px] border p-3.5 text-left transition-colors motion-reduce:transition-none ${
-                    vybrana ? "border-smrk/30 bg-mlha" : "border-linka bg-povrch hover:bg-povrch-2"
+                  className={`bez-prejeti flex w-full items-center gap-2.5 rounded-[14px] border p-3.5 text-left transition-colors motion-reduce:transition-none min-[90rem]:rounded-[10px] min-[90rem]:px-[11px] min-[90rem]:py-2.5 ${
+                    vybrana
+                      ? "border-transparent bg-mlha min-[90rem]:border-smrk"
+                      : "border-linka bg-papir hover:bg-povrch-2 min-[90rem]:border-transparent min-[90rem]:bg-povrch-2"
                   }`}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-inkoust">{navrh.nazev}</span>
-                    <span className="mt-1 block text-[12.5px] tabular-nums text-mech">
-                      {formatDatum(navrh.datum)} · {formatKmNaDesetinu(navrh.km)} · +{String(navrh.prevyseniM)} m
-                    </span>
-                  </span>
                   <span
                     aria-hidden="true"
-                    className={`flex size-5 shrink-0 items-center justify-center rounded-full border-2 ${vybrana ? "border-smrk bg-smrk text-papir" : "border-pole"}`}
+                    className={`hidden size-4 shrink-0 items-center justify-center rounded-full min-[90rem]:flex ${vybrana ? "bg-smrk" : "border border-pole"}`}
                   >
-                    {vybrana ? <Ikona nazev="check" className="size-3" tloustka={3} /> : null}
+                    {vybrana ? <span className="size-1.5 rounded-full bg-povrch" /> : null}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-1 min-[90rem]:gap-px">
+                    <span className="text-sm font-semibold text-inkoust min-[90rem]:text-[12.5px]">{navrh.nazev}</span>
+                    <span className="text-[12.5px] text-mech min-[90rem]:text-[11px] min-[90rem]:text-ink-3">
+                      {formatDatum(navrh.datum)} · {formatKmNaDesetinu(navrh.km)} · {String(navrh.prevyseniM)} m
+                    </span>
                   </span>
                 </button>
               </li>
@@ -169,6 +183,13 @@ export default function SparovatAktivituSheet({
           })}
         </ul>
       )}
+
+      {faze === "hotovo" && navrhy.length > 0 ? (
+        <p className="mt-3.5 hidden gap-2 rounded-[10px] bg-akcent-100 p-[11px] text-[11px] leading-[15px] text-[#7a3a1b] min-[90rem]:flex">
+          <Ikona nazev="info" className="size-[13px] text-akcent" />
+          Započítá se všem účastníkům.
+        </p>
+      ) : null}
 
       {zprava !== null && (
         <p role="status" className="mt-3 text-sm font-semibold text-inkoust">
@@ -203,7 +224,7 @@ export default function SparovatAktivituSheet({
         </div>
       )}
       {faze === "hotovo" && navrhy.length > 0 ? (
-        <div className={`${PATICKA_SHEETU} mt-4`}>
+        <div className={PATICKA_SHEETU}>
           <button type="button" onClick={onZavrit} className={TLACITKO_PATICKY_ZRUSIT}>
             Zrušit
           </button>

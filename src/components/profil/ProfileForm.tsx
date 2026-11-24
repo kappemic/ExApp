@@ -27,6 +27,7 @@ import { nactiSkolyTridy } from "../../lib/skoly-tridy";
 import VstupSNabidkou from "../VstupSNabidkou";
 import AvatarUpload from "./AvatarUpload";
 import DatumVstup from "../DatumVstup";
+import Ikona from "../Ikona";
 import TelefonPole from "./TelefonPole";
 import {
   kodZemeZTelefonu,
@@ -40,6 +41,8 @@ interface ProfileFormProps {
   onUlozeno: (novy: ApiUser) => void;
   /** Cream rows matching pen Profil; hides avatar block (hero avatar is outside). */
   variant?: "vychozi" | "radky";
+  /** Varianta `radky` ukáže pole hesel jen v záložce Účet a na telefonu. */
+  sHeslem?: boolean;
 }
 
 interface FormHodnoty {
@@ -112,10 +115,18 @@ function telefonSeLisi(narodni: string, kod: KodZeme, ulozeny: string | null): b
   return vlevo !== vpravo;
 }
 
+/** „Poslední změna 3. listopadu 2026“ pod formulářem. */
+function posledniZmena(iso: string | undefined): string {
+  const dt = new Date(iso ?? "");
+  if (Number.isNaN(dt.getTime())) return "Žádné změny.";
+  return `Poslední změna ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "long", year: "numeric" }).format(dt)}`;
+}
+
 export default function ProfileForm({
   pocatecni,
   onUlozeno,
   variant = "vychozi",
+  sHeslem = true,
 }: ProfileFormProps): JSX.Element {
   const [form, setForm] = useState<FormHodnoty>(() => zApi(pocatecni));
   const [kodZeme, setKodZeme] = useState<KodZeme>(() => kodZemeZTelefonu(pocatecni.telefon));
@@ -397,12 +408,12 @@ export default function ProfileForm({
   function pole(label: string, id: string, chyba: string | undefined, deti: JSX.Element): JSX.Element {
     return (
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={id} className="text-sm font-bold">
+        <label htmlFor={id} className="text-[11.5px] font-semibold text-mech">
           {label}
         </label>
         {deti}
         {chyba !== undefined && (
-          <p id={`${id}-chyba`} role="alert" className="text-sm font-bold text-red-800">
+          <p id={`${id}-chyba`} role="alert" className="text-xs font-semibold text-akcent">
             {chyba}
           </p>
         )}
@@ -411,8 +422,10 @@ export default function ProfileForm({
   }
 
   const radky = variant === "radky";
+  // Změna e-mailu chce současné heslo i mimo záložku Účet.
+  const potrebaHesla = form.email.trim() !== pocatecni.email.trim() || chyby.soucasneHeslo !== undefined;
   const vstupTrida = radky
-    ? "min-h-11 w-full rounded-2xl border border-pole bg-povrch px-4 py-2 text-base text-inkoust placeholder:text-mech focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/30 disabled:opacity-50"
+    ? "h-[46px] w-full rounded-[11px] border border-pole bg-povrch px-3.5 text-base text-inkoust placeholder:text-ink-4 focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 disabled:opacity-50 min-[90rem]:h-[42px] min-[90rem]:rounded-[10px] min-[90rem]:bg-pole-podklad min-[90rem]:px-3 min-[90rem]:text-[13.5px]"
     : "min-h-[44px] w-full rounded border border-pole bg-white px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir disabled:opacity-50";
 
   function onInput(poleJmeno: FormPole) {
@@ -428,7 +441,7 @@ export default function ProfileForm({
       aria-label="Osobní údaje"
       className="mx-auto w-full max-w-2xl text-left lg:mx-0 lg:max-w-none"
     >
-      <div className={`flex flex-col ${radky ? "gap-2" : "gap-4"}`}>
+      <div className={radky ? "flex flex-col gap-4 min-[90rem]:grid min-[90rem]:grid-cols-2" : "flex flex-col gap-4"}>
         {radky ? null : (
           <AvatarUpload
             hodnota={form.avatarUrl.trim().length === 0 ? null : form.avatarUrl}
@@ -441,7 +454,7 @@ export default function ProfileForm({
           />
         )}
 
-        <div className={`grid grid-cols-1 gap-4 ${radky ? "" : "sm:grid-cols-2"}`}>
+        <div className={`grid grid-cols-1 gap-4 ${radky ? "min-[90rem]:col-span-2 min-[90rem]:grid-cols-2" : "sm:grid-cols-2"}`}>
           {pole(
             "Jméno *",
             "profil-jmeno",
@@ -498,7 +511,7 @@ export default function ProfileForm({
           />,
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${radky ? "min-[90rem]:col-span-2" : ""}`}>
           {pole(
             "Telefon",
             "profil-telefon",
@@ -538,7 +551,7 @@ export default function ProfileForm({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${radky ? "min-[90rem]:col-span-2" : ""}`}>
           {pole(
             "Škola",
             "profil-skola",
@@ -674,7 +687,7 @@ export default function ProfileForm({
           />,
         )}
 
-        <div className="flex flex-col gap-1.5">
+        <div className={radky && !sHeslem && !potrebaHesla ? "hidden" : `flex flex-col gap-1.5 ${radky ? "min-[90rem]:col-span-2" : ""}`}>
           {pole(
             "Současné heslo",
             "profil-soucasne-heslo",
@@ -697,14 +710,14 @@ export default function ProfileForm({
               className={vstupTrida}
             />,
           )}
-          <p id="profil-soucasne-heslo-napoveda" className="text-sm text-mech">
+          <p id="profil-soucasne-heslo-napoveda" className="text-[11.5px] text-ink-3">
             Vyplň jen při změně e-mailu nebo hesla.
           </p>
         </div>
 
-        <fieldset className="rounded-lg border-2 border-dashed border-inkoust/30 bg-papir px-4 py-3">
-          <legend className="px-1 text-sm font-bold">Nové heslo (prázdné = neměnit)</legend>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <fieldset className={radky && !sHeslem ? "hidden" : `m-0 min-w-0 border-0 p-0 ${radky ? "min-[90rem]:col-span-2" : ""}`}>
+          <legend className="sr-only">Nové heslo (prázdné = neměnit)</legend>
+          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${radky ? "min-[90rem]:col-span-2" : ""}`}>
             {pole(
               "Nové heslo",
               "profil-heslo",
@@ -742,16 +755,16 @@ export default function ProfileForm({
           </div>
         </fieldset>
 
-        <div aria-live="polite" className="min-h-[1.5rem]">
+        <div aria-live="polite" className={radky ? "empty:hidden min-[90rem]:col-span-2" : "min-h-[1.5rem]"}>
           {oznameni !== null && (
             <p
               role={oznameni.typ === "chyba" ? "alert" : "status"}
               className={
                 oznameni.typ === "uspech"
-                  ? "rounded border-2 border-green-700 bg-green-50 px-3 py-2 text-sm font-bold text-green-900"
+                  ? "rounded-[10px] bg-mlha px-3 py-2 text-[13px] font-semibold text-smrk"
                   : oznameni.typ === "chyba"
-                    ? "rounded border-2 border-red-700 bg-red-50 px-3 py-2 text-sm font-bold text-red-900"
-                    : "rounded border border-inkoust/20 bg-papir px-3 py-2 text-sm font-medium"
+                    ? "rounded-[10px] bg-akcent-100 px-3 py-2 text-[13px] font-semibold text-akcent"
+                    : "rounded-[10px] bg-povrch-2 px-3 py-2 text-[13px] font-medium text-mech"
               }
             >
               {oznameni.text}
@@ -763,14 +776,14 @@ export default function ProfileForm({
       <div
         className={
           radky
-            ? "sticky bottom-0 z-10 -mx-1 mt-3 border-t border-linka bg-papir/95 px-1 py-3 backdrop-blur"
+            ? "sticky bottom-0 z-10 mt-5 bg-papir/95 py-3 backdrop-blur min-[90rem]:static min-[90rem]:bg-transparent min-[90rem]:py-0"
             : "sticky bottom-0 z-10 -mx-1 mt-2 border-t border-linka bg-papir/95 px-1 py-3 backdrop-blur"
         }
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-inkoust/70" aria-live="polite">
-            {maZmeny ? "Máš neuložené změny." : "Žádné změny."}
+          <p className="text-xs text-ink-3" aria-live="polite">
+            {maZmeny ? "Máš neuložené změny." : radky ? posledniZmena(pocatecni.updatedAt) : "Žádné změny."}
           </p>
           <button
             type="submit"
@@ -778,10 +791,11 @@ export default function ProfileForm({
             aria-busy={uklada}
             className={
               radky
-                ? "min-h-11 w-full rounded-2xl bg-smrk px-6 text-base font-bold text-papir disabled:opacity-50 sm:w-auto"
+                ? "nahled-press inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-smrk px-[18px] text-sm font-semibold text-povrch disabled:opacity-50 sm:w-auto min-[90rem]:h-[46px]"
                 : "nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
             }
           >
+            {radky ? <Ikona nazev="check" className="hidden size-4 min-[90rem]:block" /> : null}
             {uklada ? "Ukládám…" : "Uložit změny"}
           </button>
         </div>

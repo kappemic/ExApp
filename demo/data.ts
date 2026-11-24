@@ -14,10 +14,12 @@ import type {
   ApiUcastnik,
   ApiUser,
   ApiZprava,
+  ApiZpravaPriloha,
   UserListItem,
 } from "../src/shared/api-types.ts";
 import type { ApiZpevnikPisen, ApiZpevnikNavrh } from "../src/shared/zpevnik.ts";
 import { parsujVlozeni } from "../src/shared/zpevnik.ts";
+import { SKUPINA_ROLE, type PravoSkupiny } from "../src/lib/skupiny-pristup.ts";
 
 /* ---------------------------------------------------------------- */
 /* Pomocné                                                          */
@@ -121,6 +123,8 @@ export function seznamUzivatelu(): UserListItem[] {
   return UZIVATELE.map((u) => ({
     id: u.id,
     jmeno: `${u.jmeno} ${u.prijmeni ?? ""}`.trim(),
+    krestniJmeno: u.jmeno,
+    prijmeni: u.prijmeni ?? "",
     email: u.email,
     role: u.role,
     clenstvi: u.clenstvi,
@@ -422,7 +426,7 @@ export const NAVRHY: ApiZpevnikNavrh[] = [
 /* Zprávy a konverzace                                              */
 /* ---------------------------------------------------------------- */
 
-function zprava(id: string, autor: number, channel: ApiZprava["channel"], text: string, kdy: string, expeditionId: string | null = null): ApiZprava {
+function zprava(id: string, autor: number, channel: ApiZprava["channel"], text: string, kdy: string, expeditionId: string | null = null, prilohy: ApiZpravaPriloha[] = []): ApiZprava {
   return {
     id,
     expeditionId,
@@ -431,9 +435,15 @@ function zprava(id: string, autor: number, channel: ApiZprava["channel"], text: 
     authorAvatarUrl: null,
     channel,
     text,
-    prilohy: [],
+    prilohy,
     createdAt: kdy,
   };
+}
+
+/** Příloha k ukázkové zprávě; id nese příponu, podle ní demo server vrátí obsah. */
+function priloha(id: string, nazev: string, kB: number): ApiZpravaPriloha {
+  const jeObrazek = /\.(jpe?g|png)$/i.test(nazev);
+  return { id, nazev, bajty: kB * 1024, contentType: jeObrazek ? "image/jpeg" : "application/octet-stream", jeObrazek };
 }
 
 export const ZPRAVY = new Map<string, ApiZprava[]>([
@@ -444,11 +454,28 @@ export const ZPRAVY = new Map<string, ApiZprava[]>([
       zprava("g2", 3, "general", "Můžu přinést mapy Jeseníků.", cas(-2, 18, 20)),
       zprava("g3", 0, "general", "Super, přidávám to do kalendáře.", cas(-2, 19, 2)),
       zprava("g4", 1, "general", "Sraz v 7:40 na hlaváku, kdo jde z Florence?", cas(0, 7, 52)),
+      zprava("g4a", 1, "general", "Parkovat se dá tady: https://mapy.com/cs/turisticka?x=15.7385&y=50.7361&z=14&source=coor&id=15.7385%2C50.7361", cas(0, 7, 53)),
       zprava("g5", 3, "general", "Já. Vezmu lékárničku a náhradní ponožky.", cas(0, 7, 55)),
       zprava("g6", 0, "general", "Přidávám to do kalendáře, ať to nikdo nezmešká.", cas(0, 8, 3)),
       zprava("g7", 2, "general", "Kolik je vlastně místa v autě?", cas(0, 8, 10)),
       zprava("g8", 1, "general", "Tři, počítám i s batohem.", cas(0, 8, 12)),
       zprava("g9", 0, "general", "Super, beru spacák navíc.", cas(0, 8, 14)),
+      zprava("g10", 2, "general", "https://www.google.com/maps/place/Sn%C4%9B%C5%BEka/@50.7360,15.7400,15z", cas(0, 8, 20)),
+      zprava("g11", 0, "general", "Trasu máme tady, ať se každý podívá: https://www.strava.com/routes/3210000", cas(0, 8, 22)),
+      zprava("g12", 3, "general", "Fotky z minula a program:", cas(0, 8, 30), null, [
+        priloha("chat-f1", "IMG_2041.jpg", 2310),
+        priloha("chat-f2", "IMG_2042.jpg", 1980),
+        priloha("chat-f3", "IMG_2043.jpg", 2640),
+        priloha("chat-f4", "IMG_2044.jpg", 2120),
+        priloha("chat-f5", "IMG_2045.jpg", 2280),
+        priloha("chat-f6", "IMG_2046.jpg", 1890),
+        priloha("chat-s1", "Program zimní tábor 2026 – finální verze.pdf", 412),
+      ]),
+      zprava("g13", 0, "general", "", cas(0, 8, 41), null, [priloha("chat-f7", "parkoviste.jpg", 1440)]),
+      zprava("g14", 0, "general", "Tady je GPX a rozpočet.", cas(0, 8, 42), null, [
+        priloha("chat-s2", "krkonose-den1.gpx", 88),
+        priloha("chat-s3", "Rozpočet.xlsx", 24),
+      ]),
     ],
   ],
   [
@@ -459,14 +486,14 @@ export const ZPRAVY = new Map<string, ApiZprava[]>([
     ],
   ],
   [
-    "skupina:vedeni",
+    "skupina:6f1d2a10-0000-4000-8000-000000000001",
     [
       zprava("v1", 5, "skupina", "Zápis z porady je v dokumentech.", cas(-1, 16)),
       zprava("v2", 1, "skupina", "Díky, projdu to večer.", cas(-1, 17)),
     ],
   ],
   [
-    "skupina:digital",
+    "skupina:6f1d2a10-0000-4000-8000-000000000002",
     [
       zprava("dg1", 8, "skupina", "Kdo má klíče od klubovny?", cas(0, 12, 4)),
     ],
@@ -499,6 +526,15 @@ export const ZPRAVY = new Map<string, ApiZprava[]>([
   ],
 ]);
 
+export const SKUPINY: Array<{ id: string; nazev: string; prava: PravoSkupiny[] }> = [
+  { id: "6f1d2a10-0000-4000-8000-000000000001", nazev: "Vedení klubu", prava: prava(["vedeni", "admin"]) },
+  { id: "6f1d2a10-0000-4000-8000-000000000002", nazev: "Digitál", prava: prava(["aktivni-clen", "clen-rady", "vedeni", "admin"]) },
+];
+
+function prava(role: readonly string[]): PravoSkupiny[] {
+  return SKUPINA_ROLE.map((r) => ({ role: r, cist: role.includes(r), psat: role.includes(r) }));
+}
+
 export function konverzace(): ApiKonverzace[] {
   const posledni = (klic: string): ApiZprava | null => {
     const seznam = ZPRAVY.get(klic) ?? [];
@@ -507,8 +543,16 @@ export function konverzace(): ApiKonverzace[] {
   return [
     { key: "dulezite", expeditionId: null, channel: "dulezite", nazev: "Důležité", muzeCist: true, muzePsat: true, lastMessage: posledni("dulezite"), unreadCount: 1 },
     { key: "general", expeditionId: null, channel: "general", nazev: "Obecný", muzeCist: true, muzePsat: true, lastMessage: posledni("general"), unreadCount: 2 },
-    { key: "skupina:vedeni", expeditionId: null, channel: "skupina", nazev: "Vedení klubu", muzeCist: true, muzePsat: true, lastMessage: posledni("skupina:vedeni"), unreadCount: 0 },
-    { key: "skupina:digital", expeditionId: null, channel: "skupina", nazev: "Digitál", muzeCist: true, muzePsat: true, lastMessage: posledni("skupina:digital"), unreadCount: 1 },
+    ...SKUPINY.map((skupina): ApiKonverzace => ({
+      key: `skupina:${skupina.id}`,
+      expeditionId: null,
+      channel: "skupina",
+      nazev: skupina.nazev,
+      muzeCist: true,
+      muzePsat: true,
+      lastMessage: posledni(`skupina:${skupina.id}`),
+      unreadCount: skupina.nazev === "Digitál" ? 1 : 0,
+    })),
     { key: "expedice:demo-brdy", expeditionId: "demo-brdy", channel: "expedice", nazev: "Brdy – Padrťské rybníky", lastMessage: posledni("expedice:demo-brdy"), unreadCount: 0 },
     { key: "expedice:demo-podyji", expeditionId: "demo-podyji", channel: "expedice", nazev: "Podyjí – vinice a vyhlídky", lastMessage: posledni("expedice:demo-podyji"), unreadCount: 0 },
     {
@@ -536,7 +580,7 @@ export function konverzace(): ApiKonverzace[] {
 /* Žebříček                                                         */
 /* ---------------------------------------------------------------- */
 
-export function zebricek(): Array<{ userId: string; jmeno: string; vypravy: number; km: number }> {
+export function zebricek(): Array<{ userId: string; jmeno: string; vypravy: number; km: number; clenOd?: number }> {
   const souhrn = new Map<string, { vypravy: number; km: number }>();
   for (const v of VYPRAVY.filter((x) => x.stav === "proběhlá")) {
     for (const u of UCASTNICI.get(v.id) ?? []) {
@@ -548,7 +592,7 @@ export function zebricek(): Array<{ userId: string; jmeno: string; vypravy: numb
   return [...souhrn.entries()]
     .map(([userId, s]) => {
       const u = UZIVATELE.find((x) => x.id === userId);
-      return { userId, jmeno: u === undefined ? "?" : `${u.jmeno} ${u.prijmeni ?? ""}`.trim(), vypravy: s.vypravy, km: Math.round(s.km * 10) / 10 };
+      return { userId, jmeno: u === undefined ? "?" : `${u.jmeno} ${u.prijmeni ?? ""}`.trim(), vypravy: s.vypravy, km: Math.round(s.km * 10) / 10, ...(u?.createdAt ? { clenOd: new Date(u.createdAt).getFullYear() } : {}) };
     })
     .sort((a, b) => b.vypravy - a.vypravy || b.km - a.km || a.jmeno.localeCompare(b.jmeno, "cs"));
 }

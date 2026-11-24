@@ -14,6 +14,8 @@ export interface DatumVstupProps {
   min?: string;
   max?: string;
   className?: string;
+  /** Ikona v poli, v modálech je to šipka. */
+  ikona?: "calendar" | "chevron-down";
   ariaInvalid?: boolean;
   ariaDescribedBy?: string;
 }
@@ -48,6 +50,7 @@ export default function DatumVstup({
   min,
   max,
   className = "",
+  ikona = "calendar",
   ariaInvalid = false,
   ariaDescribedBy,
 }: DatumVstupProps): JSX.Element {
@@ -96,7 +99,7 @@ export default function DatumVstup({
         inputMode="numeric"
         autoComplete="bday"
         lang="cs"
-        placeholder="dd.mm.rrrr"
+        placeholder="dd. mm. rrrr"
         value={text}
         disabled={disabled}
         aria-invalid={ariaInvalid}
@@ -118,9 +121,9 @@ export default function DatumVstup({
         aria-controls={panelId}
         disabled={disabled}
         onClick={() => (otevreno ? setOtevreno(false) : otevri())}
-        className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
+        className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Ikona nazev="calendar" className="size-4" />
+        <Ikona nazev={ikona} className="size-4 min-[90rem]:size-3.5 min-[90rem]:text-ink-3" />
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}
@@ -128,6 +131,7 @@ export default function DatumVstup({
         onZavrit={() => setOtevreno(false)}
         sirka={292}
         label="Kalendář"
+        puvod="konec"
         vzhled="datum"
       >
         <div id={panelId} className="flex flex-col gap-3">
@@ -155,12 +159,14 @@ export default function DatumVstup({
               <span key={den} className="text-[10px] font-bold uppercase tracking-[0.6px] text-ink-3">{den}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-0.5">
+          <div className="grid grid-cols-7 gap-x-0.5 gap-y-1 min-[90rem]:gap-y-0.5">
             {bunky.map((bunka) => {
               const vybrano = bunka.ymd === value;
               const jeDnes = bunka.ymd === dnes;
               const zakazano = mimoRozsah(bunka.ymd);
               const cislo = Number(bunka.ymd.slice(8, 10));
+              // Návrh nechává dny před prvním v měsíci prázdné.
+              if (bunka.mimoMesic && cislo > 20) return <span key={bunka.ymd} aria-hidden="true" />;
               return (
                 <button
                   key={bunka.ymd}
@@ -172,7 +178,7 @@ export default function DatumVstup({
                     onChange(bunka.ymd);
                     setOtevreno(false);
                   }}
-                  className={`flex h-10 items-center justify-center rounded-full text-[12.5px] tabular-nums transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-30 min-[90rem]:h-[34px] ${
+                  className={`flex size-9 items-center justify-center justify-self-center rounded-full text-[12.5px] transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-30 min-[90rem]:size-[34px] ${
                     vybrano
                       ? "bg-smrk font-bold text-papir"
                       : jeDnes

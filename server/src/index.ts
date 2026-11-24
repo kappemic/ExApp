@@ -16,12 +16,13 @@ import { registrujAlba } from "./alba-routes";
 import { posliChybu } from "./chyby";
 import { registrujCestaSnimky } from "./cesta-snimky-routes";
 import { registrujCleny } from "./clenove-routes";
-import { doplnHostovanyPuvod, parseAllowedOrigins } from "./cors";
+import { doplnHostovanyPuvod, normalizujPuvod, parseAllowedOrigins, puvodJePovoleny } from "./cors";
 import { getDb } from "./db";
 import { registrujDiskuzi } from "./diskuze-routes";
 import { registrujFotkyVyprav } from "./fotky-routes";
 import { vytvorOriginKontrolu } from "./origin-kontrola";
 import { ctiEnv, jeProdukce, prostredi } from "./prostredi";
+import { registrujNahledyOdkazu } from "./nahled-odkazu-routes";
 import { registrujSchuzky } from "./schuzky-routes";
 import { registrujSkupiny } from "./skupiny";
 import { kompreseOdpovedi } from "./komprese";
@@ -64,14 +65,26 @@ app.set("trust proxy", 1);
 // in staticky-klient. The TLS edge (Railway) speaks HTTP/2 to the browser; this
 // process stays HTTP/1.1 behind that proxy.
 app.use(kompreseOdpovedi);
+const POVOLENE_PUVODY = new Set(
+  CLIENT_URL.map((puvod) => normalizujPuvod(puvod)).filter(
+    (puvod): puvod is string => puvod !== null,
+  ),
+);
+const lokalniPorty = !jeProdukce();
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin(puvod, hotovo) {
+      if (puvod === undefined) {
+        hotovo(null, true);
+        return;
+      }
+      hotovo(null, puvodJePovoleny(puvod, POVOLENE_PUVODY, lokalniPorty));
+    },
     credentials: true,
   }),
 );
 app.use(cookieParser());
-app.use("/api", vytvorOriginKontrolu(CLIENT_URL));
+app.use("/api", vytvorOriginKontrolu(CLIENT_URL, { lokalniPorty }));
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -86,6 +99,7 @@ registrujSchuzky(app);
 registrujStravu(app);
 registrujStatistiky(app);
 registrujDiskuzi(app);
+registrujNahledyOdkazu(app);
 registrujAlba(app);
 registrujSkupiny(app);
 registrujCestaSnimky(app);

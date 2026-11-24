@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ChatFotka } from "../../lib/chat-fotky";
 import { formatCasKratce } from "../../lib/format-cas";
@@ -8,6 +8,8 @@ import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "../fotky/Lig
 import PostupnaFotka from "../fotky/PostupnaFotka";
 import StahniFotkuTlacitko from "../fotky/StahniFotkuTlacitko";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek } from "../fotky/fotky-ui";
+import { zamkniPosuv } from "../../lib/zamek-posuvu";
+import { useOdchod, zmizeniDialogu } from "../../lib/pohyb";
 
 export interface ChatLightroomStav {
   otevreno: boolean;
@@ -123,13 +125,12 @@ export default function ChatLightroom({
       }
     }
     window.addEventListener("keydown", naKlavesu, true);
-    const predchozi = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", naKlavesu, true);
-      document.body.style.overflow = predchozi;
-    };
+    return () => window.removeEventListener("keydown", naKlavesu, true);
   }, [fotky.length, index, onZavrit]);
+
+  useEffect(() => zamkniPosuv(), []);
+  const korenRef = useRef<HTMLDivElement>(null);
+  useOdchod(korenRef, true, zmizeniDialogu);
 
   if (typeof document === "undefined") return null;
 
@@ -158,10 +159,11 @@ export default function ChatLightroom({
 
   return createPortal(
     <div
+      ref={korenRef}
       role="dialog"
       aria-modal="true"
       aria-label={maFotku ? `Fotka z chatu ${nazev}` : `Fotky · ${nazev}`}
-      className="nocturne lightbox-pozadi fixed inset-0 z-[100] flex flex-col overscroll-contain"
+      className="nocturne lightbox-pozadi lightbox-nabeh fixed inset-0 z-[100] flex flex-col overscroll-contain"
       onMouseDown={(udalost) => {
         if (udalost.target === udalost.currentTarget) onZavrit();
       }}

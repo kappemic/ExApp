@@ -160,7 +160,7 @@ function overTextNaPrazdnyPatch(
   return cista;
 }
 
-function overNarozeninyPatch(
+export function overNarozeninyPatch(
   chyby: ChybyPoli,
   data: Record<string, unknown>,
 ): { poslan: boolean; hodnota: string | null } {

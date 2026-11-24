@@ -5,8 +5,8 @@ import VyskakovaciPanel from "./VyskakovaciPanel";
 
 const CAS_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const HODINY = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-/** Po 5 minutách (návrh ukazuje 00, 10, 20…). Přesný čas jde dál napsat do pole. */
-const MINUTY = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+/** Po 10 minutách jako v návrhu. Přesný čas jde dál napsat do pole. */
+const MINUTY = Array.from({ length: 6 }, (_, i) => String(i * 10).padStart(2, "0"));
 
 export interface CasVstupProps {
   id: string;
@@ -15,17 +15,22 @@ export interface CasVstupProps {
   onChange: (cas: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Ikona v poli, v modálech je to šipka. */
+  ikona?: "clock" | "chevron-down";
   ariaInvalid?: boolean;
 }
 
 function SloupecCasu({
   hodnoty,
   vybrano,
+  vychozi,
   label,
   onVyber,
 }: {
   hodnoty: readonly string[];
   vybrano: string;
+  /** Kam se seznam odroluje, dokud není nic vybrané. */
+  vychozi?: string;
   label: string;
   onVyber: (hodnota: string) => void;
 }): JSX.Element {
@@ -33,12 +38,13 @@ function SloupecCasu({
 
   useEffect(() => {
     const seznam = seznamRef.current;
-    if (seznam === null || vybrano.length === 0) return;
-    const prvek = seznam.querySelector<HTMLElement>(`[data-hodnota="${vybrano}"]`);
+    const cil = vybrano.length > 0 ? vybrano : vychozi;
+    if (seznam === null || cil === undefined) return;
+    const prvek = seznam.querySelector<HTMLElement>(`[data-hodnota="${cil}"]`);
     if (prvek === null) return;
     const top = prvek.getBoundingClientRect().top - seznam.getBoundingClientRect().top + seznam.scrollTop;
     seznam.scrollTop = top - seznam.clientHeight / 2 + prvek.clientHeight / 2;
-  }, [vybrano]);
+  }, [vybrano, vychozi]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
@@ -54,7 +60,7 @@ function SloupecCasu({
             data-hodnota={hodnota}
             aria-selected={aktivni}
             onClick={() => onVyber(hodnota)}
-            className={`flex h-10 w-full shrink-0 items-center justify-center rounded-lg text-sm tabular-nums transition-colors motion-reduce:transition-none min-[90rem]:h-[34px] ${
+            className={`flex h-10 w-full shrink-0 items-center justify-center rounded-lg text-sm transition-colors motion-reduce:transition-none min-[90rem]:h-[34px] ${
               aktivni ? "bg-mlha font-semibold text-smrk" : "font-medium text-inkoust hover:bg-povrch-2"
             }`}
           >
@@ -68,7 +74,7 @@ function SloupecCasu({
 }
 
 /**
- * Time field shown as `HH.MM`. The parent still receives `HH:MM`.
+ * Time field shown as `HH:MM`.
  * The corner control opens a paper clock with hours and minutes.
  */
 export default function CasVstup({
@@ -77,6 +83,7 @@ export default function CasVstup({
   onChange,
   disabled = false,
   className = "",
+  ikona = "clock",
   ariaInvalid = false,
 }: CasVstupProps): JSX.Element {
   const [text, setText] = useState<string>(() => isoCasNaEvropsky(value));
@@ -119,7 +126,7 @@ export default function CasVstup({
         inputMode="numeric"
         autoComplete="off"
         lang="cs"
-        placeholder="hh.mm"
+        placeholder="hh:mm"
         value={text}
         disabled={disabled}
         aria-invalid={ariaInvalid}
@@ -140,9 +147,9 @@ export default function CasVstup({
         aria-controls={panelId}
         disabled={disabled}
         onClick={() => setOtevreno((stav) => !stav)}
-        className="absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
+        className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Ikona nazev="clock" className="size-4" />
+        <Ikona nazev={ikona} className="size-4 min-[90rem]:size-3.5 min-[90rem]:text-ink-3" />
       </button>
       <VyskakovaciPanel
         otevreno={otevreno}
@@ -150,14 +157,15 @@ export default function CasVstup({
         onZavrit={() => setOtevreno(false)}
         sirka={242}
         label="Výběr času"
+        puvod="konec"
         vzhled="cas"
       >
         <div id={panelId} className="flex flex-col gap-2.5">
           <p className="text-[15px] font-bold">Čas</p>
           <div className="flex items-start gap-2">
-            <SloupecCasu hodnoty={HODINY} vybrano={hodina} label="Hodina" onVyber={nastavHodinu} />
+            <SloupecCasu hodnoty={HODINY} vybrano={hodina} vychozi="16" label="Hodina" onVyber={nastavHodinu} />
             <span aria-hidden="true" className="flex w-2 items-center justify-center self-center pt-4 text-lg font-bold text-inkoust">:</span>
-            <SloupecCasu hodnoty={MINUTY} vybrano={minuta} label="Minuta" onVyber={nastavMinutu} />
+            <SloupecCasu hodnoty={minuta.length === 2 && !MINUTY.includes(minuta) ? [...MINUTY, minuta].sort() : MINUTY} vybrano={minuta} label="Minuta" onVyber={nastavMinutu} />
           </div>
           <div className="flex items-center justify-between px-0.5 pt-0.5">
             <button

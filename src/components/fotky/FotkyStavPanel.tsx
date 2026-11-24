@@ -48,7 +48,7 @@ export default function FotkyStavPanel({
       <div className="border-b border-inkoust/15 bg-papir/90 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
           <p className="text-sm font-bold tracking-tight text-inkoust">{nadpis}</p>
-          <p className="shrink-0 text-xs font-semibold tabular-nums text-inkoust/65">
+          <p className="shrink-0 text-xs font-semibold text-inkoust/65">
             {hotovo}/{polozky.length}
           </p>
         </div>

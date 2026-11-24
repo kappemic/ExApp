@@ -2,17 +2,28 @@ import {
   createContext,
   useContext,
   useEffect,
-  useId,
   useState,
   type JSX,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { nactiCleny } from "../../lib/admin-clenove";
-import { inicialyProAvatar, urlAvataruProZobrazeni } from "../../lib/storage/avatar";
+import { urlAvataruProZobrazeni } from "../../lib/storage/avatar";
 import PostupnaFotka from "../fotky/PostupnaFotka";
 import type { UserListItem } from "../../shared/api-types";
 import { zobrazeniTelefonu } from "../../shared/telefon";
+import { klicSoukromehoChatu } from "../../shared/soukromy-klic";
+import { popisekClena, profilClena } from "../../lib/clen-popisek";
+import { useAuth } from "../../hooks/useAuth";
+import AvatarKruh from "../AvatarKruh";
+import { KARTA_UDAJU } from "../ProfilKusy";
+import SpodniSheet, {
+  OBSAH_PANELU,
+  PATICKA_SHEETU,
+  TLACITKO_PATICKY_HLAVNI,
+  TLACITKO_PATICKY_ZRUSIT,
+} from "../shell/SpodniSheet";
 
 export interface ClenProfilVstup {
   id: string;
@@ -85,18 +96,19 @@ function RadekKontaktu({
   href?: string;
 }): JSX.Element {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-mech">
-        {popisek}
-      </span>
+    <li className="flex min-h-11 items-center justify-between gap-4 px-3.5">
+      <span className="shrink-0 text-[13px] text-ink-3">{popisek}</span>
       {href !== undefined ? (
-        <a href={href} className="text-sm font-semibold text-smrk underline underline-offset-2">
-          {hodnota}
+        <a
+          href={href}
+          className="inline-flex min-h-11 min-w-0 items-center text-right text-[13px] font-semibold text-smrk hover:underline"
+        >
+          <span className="min-w-0 break-all">{hodnota}</span>
         </a>
       ) : (
-        <span className="text-sm font-semibold">{hodnota}</span>
+        <span className="min-w-0 break-words text-right text-[13px] font-semibold text-inkoust">{hodnota}</span>
       )}
-    </div>
+    </li>
   );
 }
 
@@ -107,7 +119,8 @@ function KartaProfilu({
   vstup: ClenProfilVstup;
   onZavrit: () => void;
 }): JSX.Element {
-  const titulekId = useId();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [detail, setDetail] = useState<UserListItem | null>(null);
   const [nacitam, setNacitam] = useState<boolean>(true);
   const [zvetseno, setZvetseno] = useState<boolean>(false);
@@ -139,14 +152,6 @@ function KartaProfilu({
   }, []);
 
   useEffect(() => {
-    const puvodniOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = puvodniOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
     function naKlavesu(udalost: KeyboardEvent): void {
       if (udalost.key !== "Escape") return;
       udalost.preventDefault();
@@ -164,84 +169,86 @@ function KartaProfilu({
   const telefonZobrazeni = zobrazeniTelefonu(detail?.telefon);
   const discord = (detail?.discordNick ?? "").trim();
   const email = (detail?.email ?? "").trim();
+  const skola = [detail?.skola ?? "", detail?.trida ?? ""].map((cast) => cast.trim()).filter((cast) => cast.length > 0).join(" · ");
+  const klicChatu = user === null || user.id === vstup.id ? null : klicSoukromehoChatu(user.id, vstup.id);
+
+  function prejdi(cil: string): void {
+    onZavrit();
+    navigate(cil);
+  }
 
   return (
     <>
-      <div
-        className="nocturne fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-none bg-inkoust/50 p-4 sm:items-center"
-        onClick={onZavrit}
+      <SpodniSheet
+        otevreno
+        nadDialogem
+        titulek={jmeno}
+        podtitul={
+          detail !== null ? popisekClena(profilClena(detail), detail.isSuperadmin) : nacitam ? "Načítám profil…" : null
+        }
+        vlevo={
+          fotka !== null ? (
+            <button
+              type="button"
+              onClick={() => setZvetseno(true)}
+              aria-label="Zvětšit fotku"
+              className="nahled-press size-16 shrink-0 overflow-hidden rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
+            >
+              <PostupnaFotka
+                src={fotka}
+                alt=""
+                width={64}
+                height={64}
+                onError={() => setRozbity(true)}
+                className="size-full object-cover"
+              />
+            </button>
+          ) : (
+            <AvatarKruh jmeno={jmeno} url={null} ton="barevny" velikost={64} />
+          )
+        }
+        sirka={420}
+        onZavrit={onZavrit}
       >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titulekId}
-          onClick={(udalost) => udalost.stopPropagation()}
-          className="my-auto w-full max-w-sm rounded-2xl border border-linka bg-papir p-5 shadow-denik"
-        >
-          <div className="flex flex-col items-center gap-3 text-center">
-            {fotka !== null ? (
-              <button
-                type="button"
-                onClick={() => setZvetseno(true)}
-                aria-label="Zvětšit fotku"
-                className="h-32 w-32 overflow-hidden rounded-full border border-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
-              >
-                <PostupnaFotka
-                  src={fotka}
-                  alt=""
-                  width={128}
-                  height={128}
-                  onError={() => setRozbity(true)}
-                  className="h-full w-full object-cover"
-                />
-              </button>
-            ) : (
-              <div
-                aria-hidden="true"
-                className="flex h-32 w-32 items-center justify-center rounded-full border border-linka bg-linka text-3xl font-extrabold"
-              >
-                {inicialyProAvatar(jmeno)}
-              </div>
-            )}
-            <h2 id={titulekId} className="text-xl font-extrabold tracking-tight">
-              {jmeno}
-            </h2>
-            {fotka !== null && (
-              <p className="text-xs text-inkoust/60">Klepnutím na fotku ji zvětšíš.</p>
-            )}
-          </div>
-
-          {nacitam && (
-            <p role="status" className="mt-4 text-center text-sm text-inkoust/70">
-              Načítám profil…
-            </p>
-          )}
-
-          {detail !== null && (
-            <div className="mt-4 flex flex-col gap-3 text-left">
-              {email.length > 0 && (
-                <RadekKontaktu popisek="E-mail" hodnota={email} href={`mailto:${email}`} />
-              )}
-              {telefonZobrazeni.text.length > 0 && (
+        <div className={OBSAH_PANELU}>
+          {detail !== null ? (
+            <ul aria-label="Kontakt" className={KARTA_UDAJU}>
+              {email.length > 0 ? <RadekKontaktu popisek="E-mail" hodnota={email} href={`mailto:${email}`} /> : null}
+              {telefonZobrazeni.text.length > 0 ? (
                 <RadekKontaktu
                   popisek="Telefon"
                   hodnota={telefonZobrazeni.text}
                   href={telefonZobrazeni.href ?? undefined}
                 />
-              )}
-              {discord.length > 0 && <RadekKontaktu popisek="Discord" hodnota={discord} />}
-            </div>
+              ) : null}
+              {discord.length > 0 ? <RadekKontaktu popisek="Discord" hodnota={discord} /> : null}
+              {skola.length > 0 ? <RadekKontaktu popisek="Škola" hodnota={skola} /> : null}
+            </ul>
+          ) : nacitam ? (
+            <div role="status" aria-label="Načítám profil" className="h-[140px] rounded-2xl bg-povrch-2 motion-safe:animate-pulse" />
+          ) : (
+            <p className="text-[13.5px] text-mech">Údaje člena se nepodařilo načíst.</p>
           )}
-
-          <button
-            type="button"
-            onClick={onZavrit}
-            className="mt-5 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-smrk px-5 text-sm font-bold text-papir focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation]"
-          >
-            Zavřít
-          </button>
+          <div className={`${PATICKA_SHEETU} -mt-[18px] min-[90rem]:!mt-1.5`}>
+            <button
+              type="button"
+              onClick={() => prejdi(`/cleny/${encodeURIComponent(vstup.id)}`)}
+              className={TLACITKO_PATICKY_ZRUSIT}
+            >
+              Celý profil
+            </button>
+            {klicChatu !== null ? (
+              <button
+                type="button"
+                onClick={() => prejdi(`/chat?konverzace=${encodeURIComponent(klicChatu)}`)}
+                className={TLACITKO_PATICKY_HLAVNI}
+              >
+                Napsat zprávu
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </SpodniSheet>
       {zvetseno && fotka !== null && (
         <div
           role="dialog"

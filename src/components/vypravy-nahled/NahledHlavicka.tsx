@@ -38,6 +38,7 @@ export default function NahledHlavicka({
   razeni,
   onRazeni,
   kalendarOvladani,
+  mesicKalendare,
 }: {
   zobrazeni: Zobrazeni;
   onZobrazeni: (zobrazeni: Zobrazeni) => void;
@@ -53,6 +54,8 @@ export default function NahledHlavicka({
   onRazeni: (razeni: RazeniVyprav) => void;
   /** Navigace měsíce a legenda, v kalendáři na počítači vpravo v liště. */
   kalendarOvladani?: ReactNode;
+  /** „Prosinec 2026“ pod nadpisem kalendáře na telefonu. */
+  mesicKalendare?: string;
 }): JSX.Element {
   const maDotaz = dotaz.trim().length > 0;
   const vKalendari = zobrazeni === "kalendar";
@@ -98,17 +101,17 @@ export default function NahledHlavicka({
   );
 
   return (
-    <header className="flex flex-col gap-[22px] min-[90rem]:gap-[18px]">
+    <header className={`flex flex-col ${vKalendari ? "gap-5 min-[90rem]:gap-8 min-[90rem]:pt-1" : "gap-[22px] min-[90rem]:gap-[18px]"}`}>
       <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:items-end">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[0.98] min-[90rem]:tracking-[-1.4px]">
+          <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
             Výpravy
           </h1>
-          <p className="text-xs text-ink-3 min-[90rem]:hidden">Školní expediční klub</p>
+          <p className="text-xs text-ink-3 first-letter:uppercase min-[90rem]:hidden">
+            {vKalendari && mesicKalendare !== undefined ? mesicKalendare : "Školní expediční klub"}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {!vKalendari ? (
-            <>
+        <div className={`flex shrink-0 items-center gap-3 ${vKalendari ? "max-[90rem]:hidden min-[90rem]:gap-2.5" : ""}`}>
               <button
                 type="button"
                 onClick={() => setHledaniMobil((pred) => !pred)}
@@ -120,8 +123,6 @@ export default function NahledHlavicka({
                 <Ikona nazev="search" className="size-[18px]" />
               </button>
               <div className="hidden w-[252px] min-[90rem]:block">{pole}</div>
-            </>
-          ) : null}
           {novaVyprava !== undefined ? (
             <button
               type="button"
@@ -143,7 +144,9 @@ export default function NahledHlavicka({
         <div
           role="group"
           aria-label="Zobrazení výprav"
-          className="inline-flex h-9 w-fit items-center gap-0.5 rounded-[18px] bg-povrch-2 p-[3px] min-[90rem]:h-auto min-[90rem]:rounded-[13px] min-[90rem]:p-1"
+          className={`inline-flex w-fit items-center min-[90rem]:h-auto min-[90rem]:gap-0.5 min-[90rem]:bg-povrch-2 min-[90rem]:p-1 ${
+            vKalendari ? "gap-2 min-[90rem]:rounded-xl" : "h-9 gap-0.5 rounded-[18px] bg-povrch-2 p-[3px] min-[90rem]:rounded-[13px]"
+          }`}
         >
           {VOLBY.map((volba) => {
             const aktivni = volba.id === zobrazeni;
@@ -153,15 +156,21 @@ export default function NahledHlavicka({
                 type="button"
                 aria-pressed={aktivni}
                 onClick={() => onZobrazeni(volba.id)}
-                className={`bez-prejeti inline-flex h-[30px] touch-manipulation select-none items-center gap-1.5 rounded-[15px] px-3 text-[12.5px] transition-colors motion-reduce:transition-none min-[90rem]:h-auto min-[90rem]:gap-[7px] min-[90rem]:rounded-[9px] min-[90rem]:px-3.5 min-[90rem]:py-[7px] min-[90rem]:text-[13.5px] ${FOKUS} ${
-                  aktivni
-                    ? "bg-povrch font-semibold text-inkoust shadow-[0_1px_2px_#1c261514]"
-                    : "font-medium text-mech hover:text-inkoust"
+                className={`bez-prejeti inline-flex touch-manipulation select-none items-center transition-colors motion-reduce:transition-none ${
+                  vKalendari ? "h-8 rounded-full px-3 text-[13px] max-[90rem]:border" : "h-[30px] gap-1.5 rounded-[15px] px-3 text-[12.5px]"
+                } min-[90rem]:h-auto min-[90rem]:gap-[7px] min-[90rem]:rounded-[9px] min-[90rem]:px-3.5 min-[90rem]:py-[7px] min-[90rem]:text-[13.5px] ${FOKUS} ${
+                  vKalendari
+                    ? aktivni
+                      ? "font-semibold text-povrch max-[90rem]:border-transparent max-[90rem]:bg-smrk min-[90rem]:bg-povrch min-[90rem]:text-inkoust"
+                      : "font-medium text-mech max-[90rem]:border-linka max-[90rem]:bg-povrch hover:text-inkoust"
+                    : aktivni
+                      ? "bg-povrch font-semibold text-inkoust shadow-[0_1px_2px_#1c261514] min-[90rem]:shadow-none"
+                      : "font-medium text-mech hover:text-inkoust"
                 }`}
               >
                 <Ikona
                   nazev={volba.ikona}
-                  className={`size-[13px] min-[90rem]:size-[15px] ${aktivni ? "text-inkoust" : "text-ink-3"}`}
+                  className={`size-[13px] min-[90rem]:size-[15px] ${vKalendari ? "max-[90rem]:hidden" : ""} ${aktivni ? "text-inkoust" : "text-ink-3"}`}
                 />
                 <span>{volba.popisek}</span>
               </button>

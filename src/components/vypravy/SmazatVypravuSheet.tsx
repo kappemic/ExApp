@@ -1,16 +1,12 @@
 import { useEffect, useState, type JSX } from "react";
-import SpodniSheet, { PATICKA_SHEETU } from "../shell/SpodniSheet";
+import Ikona from "../Ikona";
+import SpodniSheet, { PATICKA_SHEETU, TLACITKO_PATICKY_SMAZAT, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
 import type { Expedition } from "../../lib/mock-expeditions";
 import { formatRozsahData } from "../../lib/expedition-utils";
 import {
   nactiPoctySmazaniVypravy,
   type PoctySmazaniVypravy,
 } from "../../lib/vyprava-pocty-smazani";
-
-const TLACITKO_SMAZAT =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-akcent px-5 text-base font-semibold text-papir hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:cursor-not-allowed disabled:opacity-60";
-const TLACITKO_ZRUSIT =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-pole bg-papir px-5 text-base font-semibold text-inkoust hover:bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60";
 
 function ceskyPocetZaznamu(n: number): string {
   if (n === 1) return "1 záznam";
@@ -55,38 +51,56 @@ export default function SmazatVypravuSheet({
   const fotky = pocty?.fotky ?? 0;
   const zpravy = pocty?.zpravy ?? 0;
 
+  const souvisejici = [
+    `${ceskyPocetZaznamu(dochazka)} docházky`,
+    `${fotky === 1 ? "1 fotka" : fotky >= 2 && fotky <= 4 ? `${fotky} fotky` : `${fotky} fotek`} v albu`,
+    `${zpravy === 1 ? "1 zpráva" : zpravy >= 2 && zpravy <= 4 ? `${zpravy} zprávy` : `${zpravy} zpráv`} v diskuzi`,
+  ];
+
   return (
-    <SpodniSheet otevreno={otevreno} titulek="Smazat výpravu?" onZavrit={onZavrit}>
-      <div className="space-y-4 pb-2">
-        <p className="font-display text-lg font-bold text-inkoust">{expedice.nazev}</p>
-        <p className="text-sm text-mech">
+    <SpodniSheet
+      otevreno={otevreno}
+      titulek="Smazat výpravu?"
+      podtitul={
+        <>
+          {expedice.nazev} ·{" "}
           <time dateTime={expedice.datum}>{formatRozsahData(expedice.datum, expedice.datumDo)}</time>
-        </p>
-        <p className="rounded-2xl border border-red-800/25 bg-red-50 px-4 py-3 text-sm leading-relaxed text-inkoust">
-          Tahle akce je nevratná. Smažou se i související záznamy.
-        </p>
-        <ul className="space-y-1 text-sm text-mech">
-          <li>{ceskyPocetZaznamu(dochazka)} docházky</li>
-          <li>
-            {fotky === 1 ? "1 fotka" : fotky >= 2 && fotky <= 4 ? `${fotky} fotky` : `${fotky} fotek`}
-          </li>
-          <li>
-            {zpravy === 1 ? "1 zpráva" : zpravy >= 2 && zpravy <= 4 ? `${zpravy} zprávy` : `${zpravy} zpráv`}
-          </li>
+        </>
+      }
+      sirka={440}
+      onZavrit={onZavrit}
+    >
+      <div className="flex flex-col gap-[18px] min-[90rem]:gap-3.5">
+        <div className="flex gap-2.5 min-[90rem]:rounded-[10px] min-[90rem]:bg-[#fbede7] min-[90rem]:p-3">
+          <Ikona nazev="triangle-alert" className="hidden size-[15px] text-akcent min-[90rem]:block" />
+          <p className="text-[13.5px] leading-5 text-mech min-[90rem]:text-[11.5px] min-[90rem]:leading-[17px] min-[90rem]:text-[#7a3a1b]">
+            Smazáním zmizí i docházka, fotky a diskuze k výpravě. Akce se nedá vrátit.
+          </p>
+        </div>
+        <ul className="flex flex-col gap-2 rounded-[14px] bg-akcent-100 p-3.5 min-[90rem]:gap-[7px] min-[90rem]:bg-transparent min-[90rem]:p-0">
+          {souvisejici.map((radek) => (
+            <li
+              key={radek}
+              className="flex items-center gap-2 text-[13.5px] font-semibold text-akcent min-[90rem]:text-[11.5px] min-[90rem]:font-normal min-[90rem]:text-ink-3"
+            >
+              <span aria-hidden="true" className="hidden size-[5px] shrink-0 rounded-full bg-ink-5 min-[90rem]:block" />
+              {radek}
+            </li>
+          ))}
         </ul>
         {chyba !== null ? (
-          <p role="alert" className="text-sm font-semibold text-red-800">
+          <p role="alert" className="text-[13px] font-semibold text-akcent">
             {chyba}
           </p>
         ) : null}
-        <div className={PATICKA_SHEETU}>
-          <button type="button" onClick={onZavrit} disabled={mazeSe} className={TLACITKO_ZRUSIT}>
-            Zrušit
-          </button>
-          <button type="button" onClick={onPotvrdit} disabled={mazeSe} className={TLACITKO_SMAZAT}>
-            {mazeSe ? "Mažu…" : "Smazat"}
-          </button>
-        </div>
+      </div>
+      <div className={PATICKA_SHEETU}>
+        <button type="button" onClick={onZavrit} disabled={mazeSe} className={TLACITKO_PATICKY_ZRUSIT}>
+          Zrušit
+        </button>
+        <button type="button" onClick={onPotvrdit} disabled={mazeSe} className={TLACITKO_PATICKY_SMAZAT}>
+          {mazeSe ? "Mažu…" : "Smazat"}
+        </button>
       </div>
     </SpodniSheet>
   );

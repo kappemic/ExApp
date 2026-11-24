@@ -30,26 +30,34 @@
 
 /* The journal shell is transparent on purpose. A popover portaled to
    the body still carries that class, so it needs its own solid sheet. */
-.nocturne.vyskakovaci-panel {
+.nocturne.vyskakovaci-panel,
+.nocturne.vyskakovaci-menu {
   background-color: var(--color-povrch);
   /* ExApp.pen: Výběr data / času, nabídky. */
   box-shadow: 0 1px 2px #1c261512, 0 12px 28px #1c261518;
-  animation: vyskakovaci-vstup 140ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+/* Panel vyjíždí od prvku, který ho otevřel (transform-origin nastavuje komponenta). */
+.vyskakovaci-panel,
+.vyskakovaci-menu {
+  --vyskok: -4px;
+  animation: vyskakovaci-vstup 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.vyskakovaci-panel.nahoru {
+  --vyskok: 4px;
 }
 
 @keyframes vyskakovaci-vstup {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+    transform: translateY(var(--vyskok, -4px)) scale(0.95);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nocturne.vyskakovaci-panel {
+  .vyskakovaci-panel,
+  .vyskakovaci-menu {
     animation: none;
   }
 }
@@ -193,7 +201,9 @@
     transform 160ms var(--ease-out),
     background-color 160ms var(--ease-out),
     color 160ms var(--ease-out),
-    border-color 160ms var(--ease-out);
+    border-color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
 }
 
 .nocturne :is(a, button, [role="button"]):not(:disabled):active,

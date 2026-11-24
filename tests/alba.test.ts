@@ -82,7 +82,7 @@ describe("sestavSeznamAlb", () => {
     createdAt: new Date(createdAt),
   });
 
-  it("dává nejdřív výpravy podle data a názvu, potom vlastní alba podle vzniku", () => {
+  it("dává nejdřív výpravy od nejnovější, potom vlastní alba od nejnovějšího", () => {
     const alba = sestavSeznamAlb(
       [
         { id: "brdy", nazev: "Brdy", datum: "2024-05-01", stav: "proběhlá" },
@@ -96,7 +96,7 @@ describe("sestavSeznamAlb", () => {
       [],
       [],
     );
-    expect(alba.map((album) => album.id)).toEqual(["brdy", "alpy", "beskydy", UUID, UUID_B]);
+    expect(alba.map((album) => album.id)).toEqual(["alpy", "beskydy", "brdy", UUID_B, UUID]);
     expect(alba.map((album) => album.druh)).toEqual([
       "vyprava",
       "vyprava",
@@ -105,13 +105,13 @@ describe("sestavSeznamAlb", () => {
       "vlastni",
     ]);
     expect(alba[0]).toMatchObject({
-      nazev: "Brdy",
-      expeditionId: "brdy",
+      nazev: "Alpy",
+      expeditionId: "alpy",
       pocetFotek: 0,
       nahledFotkaId: null,
     });
     expect(alba[3]).toMatchObject({
-      nazev: "První",
+      nazev: "Druhé",
       expeditionId: null,
       pocetFotek: 0,
       nahledFotkaId: null,

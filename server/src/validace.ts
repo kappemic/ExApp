@@ -18,6 +18,7 @@ export type {
 export {
   validujRegistraci,
   validujPrihlaseni,
+  validujOvereniKodu,
   validujPoznamkuKodu,
   validujUpravuClena,
 } from "./validace-domeny/ucty";

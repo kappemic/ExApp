@@ -6,11 +6,11 @@ import { Link } from "react-router-dom";
  * kolem i mezi řádky. Sdílí Členové, Žebříčky, Více a Chat.
  */
 export const SEZNAM_KARTA_TRIDA =
-  "min-w-0 overflow-hidden rounded-2xl border border-linka bg-povrch divide-y divide-linka";
+  "m-0 min-w-0 list-none overflow-hidden rounded-2xl border border-linka bg-povrch p-0 divide-y divide-linka shadow-karta";
 
 /** Řádek uvnitř karty bez vlastního okraje. Výška 64 px kvůli avataru. */
 export const SEZNAM_RADEK_TRIDA =
-  "flex min-h-[64px] w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-inkoust [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk motion-safe:transition-colors [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/50";
+  "flex min-h-[60px] w-full min-w-0 items-center gap-3 px-3.5 py-3 text-left text-inkoust [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk motion-safe:transition-colors [@media(hover:hover)_and_(pointer:fine)]:hover:bg-mlha/50";
 
 interface SeznamKartaProps {
   children: ReactNode;
@@ -85,10 +85,10 @@ export function SeznamRadek({
   const vnitrek = (
     <>
       {vlevo}
-      <span className="min-w-0 flex-1">
-        <span className="block min-w-0 truncate text-[15px] font-semibold">{nazev}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="block min-w-0 truncate text-[14.5px] font-semibold">{nazev}</span>
         {podtitul !== undefined && podtitul !== null ? (
-          <span className="block min-w-0 truncate text-[13px] text-ink-3">{podtitul}</span>
+          <span className="block min-w-0 truncate text-xs text-ink-3">{podtitul}</span>
         ) : null}
       </span>
       {vpravo}
@@ -118,13 +118,13 @@ export function SeznamRadek({
   );
 }
 
-/** Kulatý štítek s ikonou vlevo v řádku (Více, Nastavení). */
-export function SeznamIkona({ children, ton = "neutralni" }: { children: ReactNode; ton?: "neutralni" | "akcent" }): JSX.Element {
+/** Čtvercový štítek 32 px s ikonou vlevo v řádku (Více, Nastavení). */
+export function SeznamIkona({ children, ton = "neutralni" }: { children: ReactNode; ton?: "neutralni" | "akcent" | "svetly" }): JSX.Element {
   return (
     <span
       aria-hidden="true"
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-        ton === "akcent" ? "bg-akcent-100 text-akcent" : "bg-povrch-2 text-inkoust"
+      className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] ${
+        ton === "akcent" ? "bg-akcent-100 text-akcent" : ton === "svetly" ? "bg-papir text-smrk" : "bg-povrch-2 text-mech"
       }`}
     >
       {children}
