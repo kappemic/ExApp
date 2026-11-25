@@ -614,7 +614,7 @@ export default function StravaParovani({
             value={km}
             onChange={(e) => setKm(e.target.value)}
             placeholder="např. 12,5"
-            className="min-h-[44px] rounded-xl border-2 border-inkoust/30 bg-papir px-3 font-normal"
+            className="min-h-[44px] rounded-xl border-2 border-inkoust/30 bg-papir px-3 text-base font-normal"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -625,7 +625,7 @@ export default function StravaParovani({
             value={prevyseni}
             onChange={(e) => setPrevyseni(e.target.value)}
             placeholder="např. 350"
-            className="min-h-[44px] rounded-xl border-2 border-inkoust/30 bg-papir px-3 font-normal"
+            className="min-h-[44px] rounded-xl border-2 border-inkoust/30 bg-papir px-3 text-base font-normal"
           />
         </label>
       </div>

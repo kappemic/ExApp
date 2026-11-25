@@ -207,7 +207,7 @@ export default function ZpravaBublina({
         }}
         disabled={mazeTuhle}
         aria-label={`Smazat zprávu: ${popisek}`}
-        className="smazat-zpravu bez-prejeti inline-flex min-h-[44px] min-w-[44px] items-center rounded-md px-1 text-[13px] font-semibold text-akcent [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
+        className="smazat-zpravu bez-prejeti relative inline-flex h-8 min-w-[44px] items-center justify-center rounded-[9px] bg-akcent-100 px-2.5 text-[12.5px] font-semibold text-akcent before:absolute before:-inset-x-1 before:-inset-y-1.5 before:content-[''] [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk disabled:opacity-60"
       >
         {mazeTuhle ? "Mažu…" : keSmazani.length > 1 ? `Smazat ${formatCasKratce(polozka.createdAt)}` : "Smazat"}
       </button>
@@ -314,7 +314,7 @@ export default function ZpravaBublina({
               </span>
             )}
             {menu && keSmazani.length > 0 ? (
-              <div id={menuId} className="nabeh-dolu flex flex-wrap items-center gap-x-2">
+              <div id={menuId} className="nabeh-dolu mt-1.5 flex flex-wrap items-center gap-2">
                 {tlacitkaSmazat}
               </div>
             ) : null}
@@ -492,7 +492,7 @@ export default function ZpravaBublina({
             </span>
           ) : tlacitkaSmazat.length > 0 ? (
             <div className="bublina-akce">
-              <div className="flex flex-wrap items-center gap-x-2">{tlacitkaSmazat}</div>
+              <div className="flex flex-wrap items-center gap-2 py-1.5">{tlacitkaSmazat}</div>
             </div>
           ) : null}
         </div>

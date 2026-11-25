@@ -65,8 +65,10 @@
 /* Vršek na telefonu: pod stavovým řádkem (čas, baterie) je tmavá obloha a z ní
    vystupují hřebeny, poslední v barvě stránky. Viz `.vrsek-hreben`. */
 :root {
-  --stavova-lista: env(safe-area-inset-top, 0px);
-  --hreben: 32px;
+  /* Pod časem zbývá na iPhonu s výřezem místo, hřeben do něj o 8 px zasahuje.
+     iPhone bez výřezu má lištu 20 px a z ní se neubírá. */
+  --stavova-lista: max(min(env(safe-area-inset-top, 0px), 20px), env(safe-area-inset-top, 0px) - 8px);
+  --hreben: 20px;
   --horni-okraj: calc(var(--stavova-lista) + var(--hreben));
 }
 
@@ -141,6 +143,20 @@
       animation: none !important;
       transition: none !important;
     }
+  }
+}
+
+/* iOS stránku přiblíží, když má pole písmo menší než 16 px. Pravidlo platí jen
+   na iPhonu a iPadu (jinde `-webkit-touch-callout` není) a jistí i pole, která
+   by velikost zdědila po popisku. Větší písmo (kód pozvánky) zůstává. */
+@supports (-webkit-touch-callout: none) {
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="button"], [type="submit"]),
+    textarea,
+    select
+  ):not(.text-xl) {
+    font-size: 16px !important;
+    font-size-adjust: none;
   }
 }
 
@@ -501,15 +517,28 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 }
 
-/* Pevný pruh pod časem drží na místě, hřeben pod ním odjede se stránkou.
+/* Hřeben odjede se stránkou, pod časem zůstane průhledné sklo: obsah jím
+   prosvítá a dole se ztrácí. Slabý olivový tón drží čitelný bílý čas na iOS.
    Vzor se opakuje po 420 px a navazuje, proto sedí i na tabletu. */
 .vrsek-pruh {
   position: fixed;
   inset: 0 0 auto;
   z-index: 45;
-  height: var(--stavova-lista);
-  background: var(--color-smrk);
+  height: calc(var(--stavova-lista) * 1.2);
+  background: rgb(46 64 34 / 0.5);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
   pointer-events: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .vrsek-pruh {
+    background: var(--color-smrk);
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
 .vrsek-hreben {
@@ -518,7 +547,7 @@ input[type="file"]:active::-webkit-file-upload-button {
   height: var(--horni-okraj);
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 32' preserveAspectRatio='none'%3E%3Cpath fill='%234b5f3b' d='M0 17C14 14 26 8 38 8S62 14 74 14 100 3 114 3 146 15 162 15 192 9 206 9 236 17 250 17 284 5 300 5 334 14 348 14 372 10 384 11 408 18 420 17V32H0Z'/%3E%3Cpath fill='%238a9b76' d='M0 23C40 15 84 13 124 19S204 27 246 19 330 12 366 18 408 25 420 23V32H0Z'/%3E%3Cpath fill='%23f7f4eb' d='M0 29C50 23 96 22 146 26S234 32 284 27 376 23 420 29V32H0Z'/%3E%3C/svg%3E")
-      left bottom / 420px 32px repeat-x,
+      left bottom / 420px var(--hreben) repeat-x,
     var(--color-smrk);
   pointer-events: none;
 }
@@ -661,9 +690,14 @@ input[type="file"]:active::-webkit-file-upload-button {
     opacity: 1;
   }
 
+  .bublina-akce > div {
+    padding-block: 0;
+  }
+
   .bublina-akce .smazat-zpravu {
-    min-width: 0;
-    min-height: 24px;
+    height: 24px;
+    padding-inline: 4px;
+    background: none;
     font-size: 11.5px;
   }
 

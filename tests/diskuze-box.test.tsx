@@ -312,6 +312,8 @@ describe("DiskuzeBox zdroj-kontrakt (a11y + deník + 44px + optimistic)", () => 
     expect(diskuze).toContain("min-h-[44px]");
     expect(bublina).toContain("min-h-[44px]");
     expect(bublina).toContain("min-w-[44px]");
+    // Smazat je vidět 32 px vysoké, dotyková plocha je o 6 px větší nahoře i dole.
+    expect(bublina).toMatch(/smazat-zpravu[^"]* h-8 min-w-\[44px\][^"]*before:-inset-y-1\.5/);
   });
 
   it("composer: 16px (bez iOS zoomu) + enterkeyhint=send + počítadlo 1000", () => {

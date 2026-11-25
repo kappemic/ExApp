@@ -4,7 +4,7 @@ import Ikona, { type NazevIkony } from "../Ikona";
 import { POPISEK_POLE } from "../formular-tridy";
 
 const VSTUP_ZAKLAD =
-  "h-[46px] w-full rounded-[11px] border bg-povrch px-3.5 text-base text-inkoust placeholder:text-ink-4 transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 lg:text-[13.5px]";
+  "h-[46px] w-full rounded-[11px] border bg-povrch px-3.5 text-base text-inkoust placeholder:text-ink-4 transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 min-[90rem]:text-[13.5px]";
 export const AUTH_VSTUP = `${VSTUP_ZAKLAD} border-pole focus:border-smrk`;
 export const AUTH_VSTUP_CHYBA = `${VSTUP_ZAKLAD} border-akcent focus:border-akcent`;
 
