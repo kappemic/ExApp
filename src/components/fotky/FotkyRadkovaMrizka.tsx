@@ -11,27 +11,16 @@ import { pomerZRozmeru } from "../../lib/fotky-rozmery";
 const VIDITELNE_RADKY_MOBIL = 4;
 const VIDITELNE_RADKY_DESKTOP = 5;
 
-/** Řady alba: počítač střídá 2 fotky (300 px) a 3 fotky (220 px), tablet má tři, telefon dvě. */
-function radkyAlba(
-  fotky: readonly { id: string }[],
-  sirka: number,
-): Array<{ dlazdice: DlazdiceRadku[] }> {
-  if (sirka <= 0) return [];
-  const pocitac = sirka >= 900;
-  const mezera = pocitac ? 14 : 8;
-  const vzor = pocitac ? [{ pocet: 2, vyska: 300 }, { pocet: 3, vyska: 220 }] : sirka >= 600
-      ? [{ pocet: 3, vyska: 180 }]
-      : [{ pocet: 2, vyska: 152 }];
-  const vysledek: Array<{ dlazdice: DlazdiceRadku[] }> = [];
-  for (let od = 0, rada = 0; od < fotky.length; rada += 1) {
-    const { pocet, vyska } = vzor[rada % vzor.length] ?? { pocet: 2, vyska: 152 };
-    const kus = fotky.slice(od, od + pocet);
-    const sloupcu = pocitac ? kus.length : pocet;
-    const sirkaDlazdice = Math.floor((sirka - mezera * (sloupcu - 1)) / sloupcu);
-    vysledek.push({ dlazdice: kus.map((fotka) => ({ id: fotka.id, sirka: sirkaDlazdice, vyska })) });
-    od += pocet;
-  }
-  return vysledek;
+/* Album jako v Google Fotkách: řady na celou šířku, fotky v původním poměru a úzké mezery. */
+const ALBUM_MEZERA_PX = 4;
+const ALBUM_RADEK_TELEFON_PX = 180;
+const ALBUM_RADEK_TABLET_PX = 220;
+const ALBUM_RADEK_POCITAC_PX = 260;
+const ALBUM_POCITAC_PX = 900;
+
+function vyskaRadkuAlba(sirka: number): number {
+  if (sirka >= ALBUM_POCITAC_PX) return ALBUM_RADEK_POCITAC_PX;
+  return sirka >= FOTKY_RADEK_ZLOM_PX ? ALBUM_RADEK_TABLET_PX : ALBUM_RADEK_TELEFON_PX;
 }
 
 interface FotkyRadkovaMrizkaProps<
@@ -40,10 +29,10 @@ interface FotkyRadkovaMrizkaProps<
   fotky: readonly T[];
   className?: string;
   /**
-   * Vzhled podle ExApp.pen (album): mezery 8 / 14 px, rohy 14 px, řady po dvou a třech.
+   * Stěna alba: vyšší řady, mezery 4 px a zaoblený jen vnější obrys.
    * Bez něj zůstanou dlaždice od kraje ke kraji s 2px mezerou.
    */
-  karty?: boolean;
+  album?: boolean;
   render: (
     fotka: T,
     rozmer: DlazdiceRadku,
@@ -52,15 +41,15 @@ interface FotkyRadkovaMrizkaProps<
 }
 
 /**
- * Edge-to-edge photo rows. Tiles keep the measured aspect ratio,
- * sit 2px apart, and carry no frame of their own.
+ * Justified photo rows. Tiles keep the measured aspect ratio
+ * and carry no frame of their own.
  */
 export default function FotkyRadkovaMrizka<
   T extends { id: string; sirka?: number | null; vyska?: number | null },
 >({
   fotky,
   className = "",
-  karty = false,
+  album = false,
   render,
 }: FotkyRadkovaMrizkaProps<T>): JSX.Element {
   const obalRef = useRef<HTMLDivElement>(null);
@@ -102,12 +91,11 @@ export default function FotkyRadkovaMrizka<
           pomer: pomery[fotka.id] ?? pomerZRozmeru(fotka.sirka, fotka.vyska),
         })),
         sirka,
-        cilovaVyskaRadku(sirka),
+        album ? vyskaRadkuAlba(sirka) : cilovaVyskaRadku(sirka),
+        album ? ALBUM_MEZERA_PX : undefined,
       ),
-    [fotky, pomery, sirka],
+    [fotky, album, pomery, sirka],
   );
-  // Album podle ExApp.pen: pevné řady bez ohledu na poměr stran.
-  const radkyKaret = useMemo(() => (karty ? radkyAlba(fotky, sirka) : []), [fotky, karty, sirka]);
 
   const podleId = useMemo(() => {
     const mapa = new Map<string, T>();
@@ -119,8 +107,8 @@ export default function FotkyRadkovaMrizka<
 
   return (
     <div ref={obalRef} className={`min-w-0 ${className.length > 0 ? className : "w-full"}`}>
-      <ul className={`m-0 flex list-none flex-wrap p-0 ${karty ? (sirka >= 900 ? "gap-[14px]" : "gap-2") : "gap-[2px]"}`}>
-        {(karty ? radkyKaret : radky).map((radek, indexRadku) =>
+      <ul className={`m-0 flex list-none flex-wrap p-0 ${album ? "gap-1 overflow-hidden rounded-2xl" : "gap-[2px]"}`}>
+        {radky.map((radek, indexRadku) =>
           radek.dlazdice.map((dlazdice) => {
             const fotka = podleId.get(dlazdice.id);
             if (fotka === undefined) return null;
@@ -136,7 +124,7 @@ export default function FotkyRadkovaMrizka<
             return (
               <li
                 key={dlazdice.id}
-                className={`relative shrink-0 overflow-hidden ${karty ? "rounded-[14px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[14px] after:border after:border-black/[0.08]" : ""}`}
+                className="relative shrink-0 overflow-hidden"
                 style={styl}
               >
                 {render(fotka, dlazdice, (prirozenaSirka, prirozenaVyska) => {

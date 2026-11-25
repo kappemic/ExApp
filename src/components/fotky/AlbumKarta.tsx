@@ -12,14 +12,15 @@ interface AlbumKartaProps {
   velikost?: VelikostAlbumu;
 }
 
+/** Dvě karty vedle velké jsou 16 : 9, velké tím vyjde přibližně 3 : 2. */
 const OBAL_POCITAC: Record<VelikostAlbumu, string> = {
-  bezna: "min-[90rem]:h-[262px]",
-  velka: "min-[90rem]:h-0 min-[90rem]:min-h-[320px] min-[90rem]:grow",
-  vedle: "min-[90rem]:h-[216px]",
+  bezna: "",
+  velka: "min-[90rem]:aspect-auto min-[90rem]:h-0 min-[90rem]:min-h-[320px] min-[90rem]:grow",
+  vedle: "min-[90rem]:aspect-[16/9]",
 };
 
 /**
- * Album v mřížce podle ExApp.pen. Telefon: karta, obal 108 px, název 13 px.
+ * Album v mřížce podle ExApp.pen. Telefon: karta, obal 3 : 2, název 13 px.
  * Počítač (1440+): obal se zaoblenými rohy bez rámečku, název s datem pod ním.
  */
 export default function AlbumKarta({
@@ -45,7 +46,7 @@ export default function AlbumKarta({
             src={urlObaluAlba(album)}
             alt=""
             prazdnyPopisek="Zatím žádné fotky"
-            className={`h-[108px] w-full shrink-0 min-[90rem]:transition-transform min-[90rem]:duration-300 min-[90rem]:ease-out motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:group-hover:scale-[1.02] ${OBAL_POCITAC[velikost]}`}
+            className={`aspect-[3/2] w-full shrink-0 min-[90rem]:transition-transform min-[90rem]:duration-300 min-[90rem]:ease-out motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:group-hover:scale-[1.02] ${OBAL_POCITAC[velikost]}`}
           />
           <span
             aria-hidden="true"

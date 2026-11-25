@@ -116,7 +116,11 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
     res.statusCode = 200;
     res.setHeader("Content-Type", "image/svg+xml");
     res.setHeader("Cache-Control", "max-age=3600");
-    res.end(krajina(id));
+    // Rozměry jako v datech, jinak by fotka na výšku přišla na šířku.
+    const fotka = [...FOTKY_VYPRAV.values()].flat().find((f) => f.id === id);
+    const poradi = Number(/-f(\d+)$/.exec(id)?.[1] ?? "1") - 1;
+    const naVysku = fotka === undefined && poradi % 2 === 1;
+    res.end(krajina(id, fotka?.sirka ?? (naVysku ? 1000 : 1600), fotka?.vyska ?? (naVysku ? 1300 : 1067)));
     return;
   }
 
