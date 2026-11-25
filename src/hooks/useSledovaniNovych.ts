@@ -1,12 +1,9 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { snizenyPohyb } from "../lib/pohyb";
 
-/** O kolik pod okrajem displeje smí být konec alba, aby se ještě posouvalo za novými fotkami. */
-const TOLERANCE_PX = 500;
-
 /**
- * Nahrané fotky přibývají na konci alba. První z dávky album ukáže posunem,
- * další sleduje jen dokud člověk neodroluje jinam.
+ * Nahrané fotky přibývají na konci alba. Album k nim doroluje jen jednou, u první
+ * z dávky, a jen když člověk mezitím nezačal posouvat sám. Dál už stránkou nehýbe.
  */
 export function useSledovaniNovych(
   konecRef: RefObject<HTMLElement | null>,
@@ -14,20 +11,27 @@ export function useSledovaniNovych(
   aktivni: boolean,
 ): void {
   const predchozi = useRef(pocet);
-  const ukazano = useRef(false);
+  const hotovo = useRef(false);
+
+  useEffect(() => {
+    if (!aktivni) return;
+    hotovo.current = false;
+    const prevzalPosun = (): void => {
+      hotovo.current = true;
+    };
+    window.addEventListener("wheel", prevzalPosun, { passive: true });
+    window.addEventListener("touchmove", prevzalPosun, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", prevzalPosun);
+      window.removeEventListener("touchmove", prevzalPosun);
+    };
+  }, [aktivni]);
 
   useEffect(() => {
     const pribylo = pocet > predchozi.current;
     predchozi.current = pocet;
-    if (!aktivni) {
-      ukazano.current = false;
-      return;
-    }
-    const konec = konecRef.current;
-    if (!pribylo || konec === null) return;
-    const daleko = konec.getBoundingClientRect().top > window.innerHeight + TOLERANCE_PX;
-    if (ukazano.current && daleko) return;
-    ukazano.current = true;
-    konec.scrollIntoView({ block: "end", behavior: snizenyPohyb() ? "auto" : "smooth" });
+    if (!aktivni || !pribylo || hotovo.current) return;
+    hotovo.current = true;
+    konecRef.current?.scrollIntoView({ block: "end", behavior: snizenyPohyb() ? "auto" : "smooth" });
   }, [aktivni, konecRef, pocet]);
 }

@@ -698,7 +698,7 @@ export default function AlbumFotky({
       <div
         ref={konecRef}
         aria-hidden="true"
-        className={`scroll-mb-24 min-[90rem]:scroll-mb-6 ${nahravani !== null ? "h-[min(52vh,20rem)]" : ""}`}
+        className={`scroll-mb-24 min-[90rem]:scroll-mb-6 ${nahravani !== null ? "h-44 sm:h-[min(52vh,20rem)]" : ""}`}
       />
 
       {mazani.mazatChyba !== null ? (

@@ -176,6 +176,30 @@ export function useNahravaniAlba(albumId: string): NahravaniAlba | null {
   );
 }
 
+/** Server větší soubor odmítne (`FOTKA_MAX_BAJTU`). */
+const FOTKA_MAX_BAJTU = 8 * 1024 * 1024;
+
+function stejnySoubor(a: File, b: File): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+/** Přidá nově vybrané fotky k výběru. Vynechá opakované, moc velké a soubory, které nejsou obrázek. */
+export function pridejKVyberu(
+  stavajici: readonly File[],
+  nove: readonly File[],
+): { soubory: File[]; chyba: string | null } {
+  const soubory = [...stavajici];
+  let velkych = 0;
+  let jinych = 0;
+  for (const soubor of nove) {
+    if (!soubor.type.startsWith("image/")) jinych += 1;
+    else if (soubor.size > FOTKA_MAX_BAJTU) velkych += 1;
+    else if (!soubory.some((vybrany) => stejnySoubor(vybrany, soubor))) soubory.push(soubor);
+  }
+  if (velkych > 0) return { soubory, chyba: `Přes 8 MB, nejde nahrát: ${popisekPoctuFotek(velkych)}.` };
+  return { soubory, chyba: jinych > 0 ? "Nahrát jdou jen fotky." : null };
+}
+
 /** „Nahrát 1 fotku“, „Nahrát 3 fotky“, bez výběru „Nahrát fotky“. */
 export function popisekNahrat(pocet: number): string {
   if (pocet === 0) return "Nahrát fotky";

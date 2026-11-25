@@ -98,7 +98,6 @@ export default function FotkyNahravaciPanel({
       <SpodniSheet
         otevreno={nahravaniOtevreno}
         titulek="Nahrát fotky"
-        podtitul={alba.find((polozka) => polozka.id === vybraneId)?.nazev ?? "Vyber album níže."}
         onZavrit={() => {
           setNahravaniOtevreno(false);
         }}

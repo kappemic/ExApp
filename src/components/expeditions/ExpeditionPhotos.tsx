@@ -455,7 +455,7 @@ export default function ExpeditionPhotos({
                 <div
                   ref={konecRef}
                   aria-hidden="true"
-                  className={`scroll-mb-3 ${nahravani !== null ? "h-[calc(min(52vh,20rem)+4.5rem)] min-[90rem]:h-[min(52vh,20rem)]" : ""}`}
+                  className={`scroll-mb-3 ${nahravani !== null ? "h-56 sm:h-[calc(min(52vh,20rem)+4.5rem)] min-[90rem]:h-[min(52vh,20rem)]" : ""}`}
                 />
 
                 {nahledChyba !== null && (

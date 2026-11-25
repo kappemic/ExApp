@@ -1,4 +1,6 @@
-import type { DragEvent, JSX, ReactNode } from "react";
+import { useEffect, useRef, type DragEvent, type JSX, type ReactNode } from "react";
+import { popisekPoctuFotek } from "../../lib/alba-api";
+import { snizenyPohyb } from "../../lib/pohyb";
 import Ikona from "../Ikona";
 import NahledSouboru from "./NahledSouboru";
 
@@ -18,6 +20,8 @@ interface PoleFotekProps {
   children: ReactNode;
   onPridat: (soubory: File[]) => void;
   onOdebrat: (index: number) => void;
+  /** Tlačítko „Odebrat vše“, když je vybraných víc. */
+  onOdebratVse?: () => void;
   /** Už uložené fotky, ukazují se před novými. */
   ulozene?: readonly { id: string; url: string }[];
   onSmazatUlozenou?: (id: string) => void;
@@ -37,10 +41,22 @@ export default function PoleFotek({
   children,
   onPridat,
   onOdebrat,
+  onOdebratVse,
   ulozene = [],
   onSmazatUlozenou,
 }: PoleFotekProps): JSX.Element {
   const prazdne = soubory.length === 0 && ulozene.length === 0;
+  const mrizkaRef = useRef<HTMLUListElement>(null);
+  const predchoziPocet = useRef(soubory.length);
+
+  // Nově přidané jsou na konci, mřížka k nim doroluje.
+  useEffect(() => {
+    const pribylo = predchoziPocet.current > 0 && soubory.length > predchoziPocet.current;
+    predchoziPocet.current = soubory.length;
+    const mrizka = mrizkaRef.current;
+    if (!pribylo || mrizka === null) return;
+    mrizka.scrollTo({ top: mrizka.scrollHeight, behavior: snizenyPohyb() ? "auto" : "smooth" });
+  }, [soubory.length]);
 
   function naPretazeni(udalost: DragEvent<HTMLDivElement>): void {
     udalost.preventDefault();
@@ -80,46 +96,62 @@ export default function PoleFotek({
           {children}
         </label>
       ) : (
-        <ul
-          aria-label="Vybrané fotky"
-          className="posuvnik grid max-h-[min(19rem,42dvh)] grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2 overflow-y-auto p-2.5"
-        >
-          {ulozene.map((fotka) => (
-            <li key={fotka.id} className={DLAZDICE}>
-              <img src={fotka.url} alt="" className="size-full object-cover" />
-              {onSmazatUlozenou !== undefined ? (
+        <>
+          <div className="flex min-h-11 items-center justify-between gap-3 pl-3.5 pr-1">
+            <p className="text-[13px] font-semibold text-inkoust">
+              {popisekPoctuFotek(soubory.length + ulozene.length)}
+            </p>
+            {onOdebratVse !== undefined && soubory.length > 1 ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={onOdebratVse}
+                className="bez-prejeti inline-flex min-h-11 items-center rounded-xl px-2.5 text-[13px] font-medium text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk"
+              >
+                Odebrat vše
+              </button>
+            ) : null}
+          </div>
+          <ul
+            ref={mrizkaRef}
+            aria-label="Vybrané fotky"
+            className="posuvnik grid max-h-[min(19rem,30dvh)] grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2 overflow-y-auto px-2.5 pb-2.5 min-[90rem]:max-h-[min(19rem,42dvh)]"
+          >
+            {ulozene.map((fotka) => (
+              <li key={fotka.id} className={DLAZDICE}>
+                <img src={fotka.url} alt="" className="size-full object-cover" />
+                {onSmazatUlozenou !== undefined ? (
+                  <TlacitkoOdebrat
+                    popisek="Odebrat snímek"
+                    disabled={disabled}
+                    onClick={() => {
+                      onSmazatUlozenou(fotka.id);
+                    }}
+                  />
+                ) : null}
+              </li>
+            ))}
+            {soubory.map((soubor, index) => (
+              <li key={klicSouboru(soubor)} className={DLAZDICE}>
+                <NahledSouboru soubor={soubor} />
                 <TlacitkoOdebrat
-                  popisek="Odebrat snímek"
+                  popisek={`Odebrat fotku ${soubor.name}`}
                   disabled={disabled}
                   onClick={() => {
-                    onSmazatUlozenou(fotka.id);
+                    onOdebrat(index);
                   }}
                 />
-              ) : null}
-            </li>
-          ))}
-          {soubory.map((soubor, index) => (
-            <li key={klicSouboru(soubor)} className={DLAZDICE}>
-              <NahledSouboru soubor={soubor} />
-              <TlacitkoOdebrat
-                popisek={`Odebrat fotku ${soubor.name}`}
-                disabled={disabled}
-                onClick={() => {
-                  onOdebrat(index);
-                }}
-              />
-            </li>
-          ))}
-          <li>
-            <label
-              htmlFor={id}
-              title="Přidat další fotky"
-              className="flex aspect-square cursor-pointer items-center justify-center rounded-[9px] border border-dashed border-pole bg-povrch text-ink-3 hover:text-inkoust"
-            >
-              <Ikona nazev="plus" className="size-5" />
-            </label>
-          </li>
-        </ul>
+              </li>
+            ))}
+          </ul>
+          <label
+            htmlFor={id}
+            className="flex min-h-11 cursor-pointer items-center justify-center gap-2 border-t border-linka bg-povrch text-[13.5px] font-semibold text-inkoust hover:bg-povrch-2 min-[90rem]:text-[12.5px]"
+          >
+            <Ikona nazev="plus" className="size-4 text-mech" />
+            Přidat další
+          </label>
+        </>
       )}
     </div>
   );

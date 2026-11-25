@@ -13,6 +13,7 @@ import {
   ctiNahravani,
   nahrajDoAlba,
   popisekNahrat,
+  pridejKVyberu,
   poNahraniFotek,
   zavriNahravani,
   zkusNahratZnovu,
@@ -117,6 +118,16 @@ describe("nahrávání fotek na pozadí", () => {
     nahrajDoAlba("a", [soubor("1.jpg"), soubor("2.jpg")], { prvniJakoNahledVypravy: "vyprava-1" });
     await dobehni("a");
     expect(nastavNahledAlba.mock.calls).toEqual([["vyprava-1", "prvni"]]);
+  });
+
+  it("výběr vynechá opakované, moc velké a jiné soubory", () => {
+    const prvni = new File(["x"], "1.jpg", { type: "image/jpeg", lastModified: 1 });
+    const znovu = new File(["x"], "1.jpg", { type: "image/jpeg", lastModified: 1 });
+    const velky = new File([new Uint8Array(8 * 1024 * 1024 + 1)], "velka.jpg", { type: "image/jpeg" });
+    const pdf = new File(["x"], "a.pdf", { type: "application/pdf" });
+    expect(pridejKVyberu([prvni], [znovu])).toEqual({ soubory: [prvni], chyba: null });
+    expect(pridejKVyberu([prvni], [velky]).chyba).toBe("Přes 8 MB, nejde nahrát: 1 fotka.");
+    expect(pridejKVyberu([], [pdf])).toEqual({ soubory: [], chyba: "Nahrát jdou jen fotky." });
   });
 
   it("popisek tlačítka skloňuje počet", () => {

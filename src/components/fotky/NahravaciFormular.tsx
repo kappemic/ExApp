@@ -1,6 +1,6 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { popisekPoctuFotek } from "../../lib/alba-api";
-import { popisekNahrat } from "../../lib/nahravani-fotek";
+import { popisekNahrat, pridejKVyberu } from "../../lib/nahravani-fotek";
 import Ikona from "../Ikona";
 import { PATICKA_SHEETU, TLACITKO_PATICKY_HLAVNI, TLACITKO_PATICKY_ZRUSIT } from "../shell/SpodniSheet";
 import PoleFotek from "./PoleFotek";
@@ -37,12 +37,16 @@ export default function NahravaciFormular({
           className="rounded-2xl border border-linka bg-papir min-[90rem]:rounded-xl min-[90rem]:border-pole min-[90rem]:bg-pole-podklad"
           tridaPrazdne="gap-2 p-6 min-[90rem]:h-32 min-[90rem]:gap-[5px] min-[90rem]:p-0"
           onPridat={(nove) => {
-            const obrazky = nove.filter((soubor) => soubor.type.startsWith("image/"));
-            if (obrazky.length > 0) setSoubory((predchozi) => [...predchozi, ...obrazky]);
-            setChyba(null);
+            const vysledek = pridejKVyberu(soubory, nove);
+            setSoubory(vysledek.soubory);
+            setChyba(vysledek.chyba);
           }}
           onOdebrat={(index) => {
             setSoubory((predchozi) => predchozi.filter((_, i) => i !== index));
+          }}
+          onOdebratVse={() => {
+            setSoubory([]);
+            setChyba(null);
           }}
         >
           <Ikona nazev="image" className="size-7 text-ink-3 min-[90rem]:hidden" />
