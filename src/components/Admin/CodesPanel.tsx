@@ -1,4 +1,11 @@
 import { useEffect, useState, type FormEvent, type JSX } from "react";
+import {
+  ROLE_KODU,
+  nazevRoleKodu,
+  roleKoduNeboClen,
+  smiNastavitRoliKodu,
+  type RoleKodu,
+} from "../../config/roles";
 import { useAuth, type DemoKod } from "../../hooks/useAuth";
 import { apiBase } from "../../lib/api-base";
 import { ADMIN_CODES_PATH, VALIDACE, type ZivyKodPolozka } from "../../shared/api-types";
@@ -80,9 +87,9 @@ const POLE_KODU =
  * Prezentace; generování + úložiště řeší useAuth.generujKod.
  */
 export default function CodesPanel(): JSX.Element {
-  const { kody, generujKod } = useAuth();
+  const { kody, generujKod, isSuperadmin } = useAuth();
   const [poznamka, setPoznamka] = useState("");
-  const [roleNavrh, setRoleNavrh] = useState("clen");
+  const [roleNavrh, setRoleNavrh] = useState<RoleKodu>("clen");
   const [ted, setTed] = useState<number>(() => Date.now());
   const [zkopirovanoId, setZkopirovanoId] = useState<string | null>(null);
   const [kopieChyba, setKopieChyba] = useState<string | null>(null);
@@ -124,6 +131,7 @@ export default function CodesPanel(): JSX.Element {
       createdAt: polozka.expiresAt,
       expiresAt: polozka.expiresAt,
       poznamka: kody.find((lokalni) => lokalni.kod === polozka.code)?.poznamka ?? null,
+      role: roleKoduNeboClen(polozka.role),
     }));
     const kodyServeru = new Set(zeServeru.map((polozka) => polozka.kod));
     const zPameti = [...kody]
@@ -138,8 +146,9 @@ export default function CodesPanel(): JSX.Element {
     setKopieChyba(null);
     setGeneruji(true);
     try {
-      await generujKod(poznamka);
+      await generujKod(poznamka, roleNavrh);
       setPoznamka("");
+      setRoleNavrh("clen");
       try {
         setZive(await nactiZiveKody());
       } catch {
@@ -197,15 +206,26 @@ export default function CodesPanel(): JSX.Element {
             <VyberPole
               id="kody-role"
               value={roleNavrh}
-              onChange={setRoleNavrh}
+              onChange={(hodnota) => setRoleNavrh(roleKoduNeboClen(hodnota))}
               className={POLE_KODU}
-              volby={[{ value: "clen", popisek: "Člen" }]}
+              volby={ROLE_KODU.filter((role) => smiNastavitRoliKodu(role, isSuperadmin)).map((role) => ({
+                value: role,
+                popisek: nazevRoleKodu(role),
+              }))}
             />
+            <p className="text-xs text-ink-3">
+              {isSuperadmin
+                ? "S touhle rolí se založí každý účet, který kód použije."
+                : "Vyšší roli smí kódu nastavit jen hlavní admin."}
+            </p>
           </div>
           <div className="flex gap-2.5 min-[90rem]:justify-end">
             <button
               type="button"
-              onClick={() => setPoznamka("")}
+              onClick={() => {
+                setPoznamka("");
+                setRoleNavrh("clen");
+              }}
               className="nahled-press inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-linka bg-papir px-2.5 text-sm font-semibold text-mech min-[90rem]:h-[46px] min-[90rem]:flex-none min-[90rem]:border-transparent min-[90rem]:bg-transparent"
             >
               Zrušit
@@ -270,7 +290,7 @@ export default function CodesPanel(): JSX.Element {
                         {kod.kod}
                       </p>
                       <p className="text-xs text-ink-3 min-[90rem]:text-[11.5px]">
-                        <span className="min-[90rem]:hidden">Člen · </span>
+                        {nazevRoleKodu(kod.role)} ·{" "}
                         {poznamkaKodu !== null ? `${poznamkaKodu} · ` : ""}zbývá {formatZbyva(zbyva)}
                       </p>
                     </div>

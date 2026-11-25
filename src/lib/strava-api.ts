@@ -14,6 +14,7 @@
 
 import { apiBaseUrl } from "./api-base";
 import { OBECNA_CHYBA, ctiJsonTelo, jeRecord } from "./api-odpoved";
+import { CTENI_BEZ_SPOJENI, ZAPIS_BEZ_SPOJENI } from "./spojeni";
 import {
   ME_PATH,
   STRAVA_CALLBACK_DUVOD_ZPRAVY,
@@ -137,7 +138,7 @@ export async function nactiStravaStavRozsireny(moznosti?: {
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: CTENI_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -295,7 +296,7 @@ export async function nactiStravaStav(): Promise<
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: CTENI_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -326,7 +327,7 @@ export async function odpojStravu(): Promise<StravaVysledek<{ ok: true }>> {
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -356,7 +357,7 @@ export async function nactiNeparovaneAktivity(
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: CTENI_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -394,7 +395,7 @@ export async function sparujAktivitu(
       body: JSON.stringify({ activityId }),
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -428,7 +429,7 @@ export async function odpojAktivitu(
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {

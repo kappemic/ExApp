@@ -5,7 +5,6 @@ import PrazdnyStav from "../components/PrazdnyStav";
 import { IkonaLupa, IkonaNota } from "../components/SeznamIkony";
 import SpodniSheet from "../components/shell/SpodniSheet";
 import { NavrhPisneForm } from "../components/zpevnik/NavrhPisneForm";
-import { ZpevnikChip, ZpevnikChipLista } from "../components/zpevnik/ZpevnikChipy";
 import { ZpevnikHledani } from "../components/zpevnik/ZpevnikHledani";
 import { ZpevnikRadekKnihy } from "../components/zpevnik/ZpevnikRadekKnihy";
 import { nactiKnihu, stahniKnihu } from "../lib/zpevnik-api";
@@ -15,26 +14,15 @@ import { useNabeh } from "../lib/pohyb";
 /** Client slice of the book already loaded. The API has no paging. */
 const VELIKOST_STRANKY = 12;
 
-type KategorieFiltru = "vsechny" | "taborove" | "klubove";
-
-const KATEGORIE: readonly { id: KategorieFiltru; popisek: string }[] = [
-  { id: "vsechny", popisek: "Všechny" },
-  { id: "taborove", popisek: "Táborové" },
-  { id: "klubove", popisek: "Klubové" },
-];
-
 export default function ZpevnikPage(): JSX.Element {
   const navigate = useNavigate();
   const [pisne, setPisne] = useState<ApiZpevnikPisen[]>([]);
-  const [pisneServer, setPisneServer] = useState<ApiZpevnikPisen[]>([]);
-  const [abecedne, setAbecedne] = useState(false);
   const [dotaz, setDotaz] = useState("");
-  const [kategorie, setKategorie] = useState<KategorieFiltru>("vsechny");
   const [limit, setLimit] = useState(VELIKOST_STRANKY);
   const [nacitani, setNacitani] = useState(true);
   const [chyba, setChyba] = useState<string | null>(null);
   const [zTelefonu, setZTelefonu] = useState(false);
-  const seznamRef = useNabeh<HTMLUListElement>(`${kategorie}-${String(abecedne)}-${String(nacitani)}`, "zadna");
+  const seznamRef = useNabeh<HTMLUListElement>(String(nacitani), "zadna");
   const [navrhOtevren, setNavrhOtevren] = useState(false);
 
   useEffect(() => {
@@ -44,7 +32,6 @@ export default function ZpevnikPage(): JSX.Element {
       if (!zive) return;
       if (vysledek.ok) {
         setPisne(seradPisne(vysledek.pisne));
-        setPisneServer(vysledek.pisne);
         setZTelefonu(vysledek.zdroj === "telefon");
         // Kopie pro čtení bez sítě se ukládá sama, tlačítko návrh nemá.
         if (vysledek.zdroj !== "telefon") void stahniKnihu();
@@ -58,15 +45,12 @@ export default function ZpevnikPage(): JSX.Element {
 
   useEffect(() => {
     setLimit(VELIKOST_STRANKY);
-  }, [dotaz, kategorie]);
+  }, [dotaz]);
 
-  const kategorieVidiData = kategorie === "vsechny";
-
-  const nalezene = useMemo(() => {
-    if (!kategorieVidiData) return [];
-    const zdroj = abecedne ? pisne : pisneServer;
-    return zdroj.filter((pisen) => obsahujeHledani(pisen.nazev, pisen.autor, dotaz));
-  }, [pisne, pisneServer, abecedne, dotaz, kategorieVidiData]);
+  const nalezene = useMemo(
+    () => pisne.filter((pisen) => obsahujeHledani(pisen.nazev, pisen.autor, dotaz)),
+    [pisne, dotaz],
+  );
 
   const viditelne = nalezene.slice(0, limit);
   const zbyva = nalezene.length - viditelne.length;
@@ -78,7 +62,7 @@ export default function ZpevnikPage(): JSX.Element {
           <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
             Zpěvník
           </h1>
-          <p className="text-xs text-ink-3 min-[90rem]:hidden">
+          <p className="text-xs text-ink-3 min-[90rem]:mt-2 min-[90rem]:text-[13px] min-[90rem]:font-medium">
             {nacitani ? "Načítám…" : `${pisne.length} písní`}
           </p>
         </div>
@@ -98,31 +82,8 @@ export default function ZpevnikPage(): JSX.Element {
         </div>
       </header>
 
-      <div className="mt-5 flex flex-col gap-5 min-[90rem]:mt-8">
-        <div className="min-[90rem]:hidden">
-          <ZpevnikHledani id="hledani-zpevniku" value={dotaz} onChange={setDotaz} />
-        </div>
-        <div className="flex items-center justify-between gap-3 min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4">
-          <ZpevnikChipLista>
-            {KATEGORIE.map((polozka) => (
-              <ZpevnikChip
-                key={polozka.id}
-                vybrany={kategorie === polozka.id}
-                onClick={() => setKategorie(polozka.id)}
-              >
-                {polozka.popisek}
-              </ZpevnikChip>
-            ))}
-            <span className="hidden min-[90rem]:contents">
-              <ZpevnikChip vybrany={abecedne} onClick={() => setAbecedne((pred) => !pred)}>
-                Podle abecedy
-              </ZpevnikChip>
-            </span>
-          </ZpevnikChipLista>
-          <p className="hidden shrink-0 text-[13px] font-medium text-ink-3 min-[90rem]:block">
-            {nacitani ? "" : `${pisne.length} písní`}
-          </p>
-        </div>
+      <div className="mt-5 min-[90rem]:hidden">
+        <ZpevnikHledani id="hledani-zpevniku" value={dotaz} onChange={setDotaz} />
       </div>
 
       {zTelefonu && <p className="mt-4 text-[13px] text-mech">Teď čteš kopii z telefonu. Návrhy v ní nejsou.</p>}
@@ -130,17 +91,7 @@ export default function ZpevnikPage(): JSX.Element {
       {chyba !== null && <p className="mt-6 text-inkoust">{chyba}</p>}
       {nacitani && chyba === null && <p className="mt-8 text-mech">Načítám zpěvník…</p>}
 
-      {!nacitani && chyba === null && !kategorieVidiData && (
-        <PrazdnyStav
-          className="mt-6"
-          ikona={<IkonaNota />}
-          nadpis={kategorie === "taborove" ? "Táborové písně tu zatím nejsou" : "Klubové písně tu zatím nejsou"}
-          text="Ostatní písně najdeš mezi všemi."
-          akce={{ popisek: "Zobrazit všechny", onClick: () => setKategorie("vsechny"), varianta: "vedlejsi" }}
-        />
-      )}
-
-      {!nacitani && chyba === null && kategorieVidiData && nalezene.length === 0 &&
+      {!nacitani && chyba === null && nalezene.length === 0 &&
         (dotaz.trim().length > 0 ? (
           <PrazdnyStav
             className="mt-6"
@@ -159,7 +110,7 @@ export default function ZpevnikPage(): JSX.Element {
           />
         ))}
 
-      {kategorieVidiData && viditelne.length > 0 && (
+      {viditelne.length > 0 && (
         <div className="mt-5 overflow-hidden rounded-2xl border border-linka bg-povrch shadow-karta min-[90rem]:mt-8">
           <ul ref={seznamRef} className="m-0 list-none divide-y divide-linka p-0">
             {viditelne.map((pisen, index) => (
@@ -178,7 +129,7 @@ export default function ZpevnikPage(): JSX.Element {
         </div>
       )}
 
-      {kategorieVidiData && zbyva > 0 && (
+      {zbyva > 0 && (
         <button
           type="button"
           onClick={() => setLimit((stav) => stav + VELIKOST_STRANKY)}

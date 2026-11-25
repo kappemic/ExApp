@@ -201,6 +201,33 @@ export function mapujRoliNaProfil(staraRole: string): ClenskyProfil {
 }
 
 /**
+ * Role, na kterou smí mířit pozvánkový kód. `admin` tu záměrně není: kód je
+ * sdílený a opakovaně použitelný, admina uděluje jen hlavní admin u člena.
+ */
+export const ROLE_KODU = ["clen", "aktivni-clen", "clen-rady", "vedeni"] as const satisfies readonly Role[];
+
+export type RoleKodu = (typeof ROLE_KODU)[number];
+
+export function jeRoleKodu(hodnota: unknown): hodnota is RoleKodu {
+  return ROLE_KODU.some((role) => role === hodnota);
+}
+
+/** Neznámá hodnota (starý řádek, `admin`) spadne na `clen`. */
+export function roleKoduNeboClen(hodnota: unknown): RoleKodu {
+  return jeRoleKodu(hodnota) ? hodnota : "clen";
+}
+
+/** Vyšší roli než člen uděluje jen hlavní admin, stejně jako u úpravy člena. */
+export function smiNastavitRoliKodu(role: RoleKodu, isSuperadmin: boolean): boolean {
+  return role === "clen" || isSuperadmin;
+}
+
+/** Český název role kódu z `ROLE_LIST`. */
+export function nazevRoleKodu(role: RoleKodu): string {
+  return ROLE_LIST.find((polozka) => polozka.id === role)?.nazev ?? role;
+}
+
+/**
  * Vrátí českou chybovou hlášku, nebo `null` když je 3D kombinace validní.
  * Chyba jen pro `clen` + funkce; `isAdmin` se ignoruje (ortogonální).
  */

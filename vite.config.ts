@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import demoApi from "./demo/plugin.ts";
+import { jeNavigaceNaStranku, strankaZeSite } from "./src/lib/sw-navigace.ts";
 
 // `npm run dev:demo`: ukázková data bez databáze (demo/plugin.ts), jen ve vývoji.
 export default defineConfig(({ mode }) => ({
@@ -22,20 +23,15 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2,webmanifest}"],
         cleanupOutdatedCaches: true,
         importScripts: ["/push-sw.js"],
-        // A document navigation asks the server first. The saved copy is
+        // A document navigation asks the server first. The precached shell is
         // only for offline. A cache-first shell kept the previous design
         // after a deploy, even when the server already had the new files.
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "dokumenty",
-              cacheableResponse: { statuses: [200] },
-              expiration: { maxEntries: 16 },
-            },
-          },
-        ],
+        // Both nulls are needed: the plugin defaults navigateFallback to
+        // "index.html" and the precache answers "/" with it on its own, and
+        // either one would win over the rule below.
+        navigateFallback: null,
+        directoryIndex: null,
+        runtimeCaching: [{ urlPattern: jeNavigaceNaStranku, handler: strankaZeSite }],
       },
       devOptions: { enabled: false },
     }),

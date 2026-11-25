@@ -83,9 +83,13 @@ describe("cache statických souborů", () => {
 describe("nasazení se ukáže i v nainstalované aplikaci", () => {
   it("stránku bere nejdřív ze sítě, uložená kopie je jen offline", () => {
     const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
-    expect(vite).toContain('handler: "NetworkFirst"');
-    expect(vite).toContain('request.mode === "navigate"');
-    expect(vite).not.toContain("navigateFallback:");
+    // Bez null by platilo výchozí navigateFallback "index.html" a shell by šel vždy z cache.
+    expect(vite).toContain("navigateFallback: null");
+    expect(vite).toContain("directoryIndex: null");
+    // Chování pravidla hlídá tests/sw-navigace.test.ts.
+    expect(vite).toContain(
+      "runtimeCaching: [{ urlPattern: jeNavigaceNaStranku, handler: strankaZeSite }]",
+    );
   });
 });
 

@@ -233,6 +233,7 @@ export const VALIDACNI_ZPRAVY = {
   hesloDlouhe: "Heslo může mít nejvýš 128 znaků.",
   kodPovinny: "Zadej pozvánkový kód.",
   kodNeplatnyTvar: "Kód musí mít 8 znaků (bez 0, O, 1, I).",
+  kodRoleNeplatna: "Vyber roli kódu: člen, aktivní člen, člen rady, nebo vedení.",
   kodNeznamy: "Kód je neplatný. Zkontroluj ho, nebo požádej vedoucí o nový.",
   expediceNazevPovinny: "Zadej název výpravy.",
   expediceNazevKratky: "Název výpravy musí mít aspoň 3 znaky.",

@@ -21,6 +21,7 @@ import {
   type UlozAktivituRucneResponse,
 } from "../shared/api-types";
 import { OBECNA_CHYBA, chybaZApiTela, ctiJsonTelo, jeRecord } from "./api-odpoved";
+import { ZAPIS_BEZ_SPOJENI } from "./spojeni";
 import { apiBaseUrl } from "./api-base";
 
 export interface RucniAktivitaVstup {
@@ -81,7 +82,7 @@ export async function ulozAktivituRucne(
       }),
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {

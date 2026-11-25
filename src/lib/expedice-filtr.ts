@@ -78,18 +78,3 @@ export function rozdelVypravy<T extends VypravaKRozdeleni>(
   }
   return vysledek;
 }
-
-/** Řazení seznamů výprav (návrh: „Podle data“ / „Podle názvu“). */
-export type RazeniVyprav = "datum" | "nazev";
-
-/**
- * `datum` nechá pořadí, jak přišlo (seznamy jsou už chronologické),
- * `nazev` řadí česky podle abecedy. Vstup nemění.
- */
-export function seradVypravy<T extends { nazev: string }>(
-  seznam: readonly T[],
-  razeni: RazeniVyprav,
-): T[] {
-  if (razeni === "datum") return [...seznam];
-  return [...seznam].sort((a, b) => a.nazev.localeCompare(b.nazev, "cs"));
-}

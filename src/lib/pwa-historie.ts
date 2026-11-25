@@ -1,16 +1,26 @@
 /**
  * Offline cache for historical READ data (Phase 6).
  *
- * Only GET /api/expeditions, /api/expeditions/:id, /api/meetings,
- * /api/meetings/:id and /api/zebricky (query string is part of the key).
- * Writes, auth, Strava, discussion and extra path segments are never stored.
- * The storage backend is injected so tests do not touch localStorage.
+ * Only GET /api/expeditions, /api/expeditions/:id, its /ucastnici,
+ * /api/meetings, /api/meetings/:id, /api/zebricky, /api/zebricky/trasy and
+ * /api/statistiky/moje (query string is part of the key).
+ * Writes, auth, Strava, discussion and other path segments are never stored.
+ * The copy belongs to the signed-in account, `ulozeny-ucet.ts` drops it on
+ * sign-out. The storage backend is injected so tests do not touch localStorage.
  */
+import { apiBase } from "./api-base";
+import { maSpojeni, oznamSpojeni } from "./spojeni";
 
 export const HISTORIE_PREFIX = "exapp:historie:";
 export const MAX_ZNAKU_ZAZNAMU = 350_000;
 export const MAX_ZNAKU_CELKEM = 1_500_000;
 export const OFFLINE_HLAVICKA = "X-ExApp-Offline";
+/**
+ * Weak signal: with a saved copy at hand, the network gets this long. Less once
+ * the server is known to be silent. The trip list falls back after 4 s.
+ */
+export const CEKANI_NA_SIT_MS = 3000;
+const CEKANI_BEZ_SPOJENI_MS = 1500;
 
 /** Marker so StrictMode / double module init cannot wrap fetch twice. */
 const ZNACKA_ZAPNUTI = "__exappZapnutaOfflineHistorie";
@@ -48,7 +58,13 @@ export function jeHistorickeCteni(method: string, url: string): boolean {
   const casti = pathname.split("/").filter((cast) => cast.length > 0);
   if (casti.length < 2 || casti[0] !== "api") return false;
   const zdroj = casti[1];
-  if (zdroj === "zebricky") return casti.length === 2;
+  if (zdroj === "zebricky") {
+    return casti.length === 2 || (casti.length === 3 && casti[2] === "trasy");
+  }
+  if (zdroj === "statistiky") return casti.length === 3 && casti[2] === "moje";
+  if (zdroj === "expeditions" && casti.length === 4) {
+    return casti[3] === "ucastnici" && ID_SEGMENT.test(casti[2] ?? "");
+  }
   if (zdroj !== "expeditions" && zdroj !== "meetings") return false;
   if (casti.length === 2) return true;
   if (casti.length !== 3) return false;
@@ -101,10 +117,44 @@ export function nactiHistorii(
   }
 }
 
+/** Bumped on sign-out, so a response still in flight is not stored afterwards. */
+let epocha = 0;
+
+export function zneplatniHistorii(): void {
+  epocha += 1;
+}
+
+function kopieZHistorie(uloziste: HistorieUloziste, klic: string): Response | null {
+  const telo = nactiHistorii(uloziste, klic);
+  if (telo === null) return null;
+  return new Response(telo, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      [OFFLINE_HLAVICKA]: "1",
+    },
+  });
+}
+
+function jeZruseni(chyba: unknown): boolean {
+  return (
+    typeof chyba === "object" &&
+    chyba !== null &&
+    "name" in chyba &&
+    chyba.name === "AbortError"
+  );
+}
+
+function cekani(ms: number): Promise<null> {
+  return new Promise((hotovo) => {
+    setTimeout(() => hotovo(null), ms);
+  });
+}
+
 /**
  * Historical GET: store a 200 JSON clone on network success.
- * On network failure return the cached body as 200 + X-ExApp-Offline: 1.
- * Anything else is forwarded untouched and never written.
+ * On network failure, 5xx or a hanging connection return the saved body as
+ * 200 + X-ExApp-Offline: 1. Anything else is forwarded and never written.
  */
 export async function obsluzHistorickeVolani(
   vstup: RequestInfo | URL,
@@ -117,28 +167,47 @@ export async function obsluzHistorickeVolani(
     return puvodni(vstup, init);
   }
   const klic = klicHistorickeCache(url);
-  try {
+  const epochaVolani = epocha;
+  const zeSite = (async (): Promise<Response> => {
     const odpoved = await puvodni(vstup, init);
     if (odpoved.status === 200) {
       try {
         const text = await odpoved.clone().text();
-        ulozHistorii(uloziste, klic, text);
+        if (epochaVolani === epocha) ulozHistorii(uloziste, klic, text);
       } catch {
         // A cache write must not hide a successful response.
       }
     }
     return odpoved;
+  })();
+  // After a sign-out the saved copy may already belong to another account.
+  const kopie = (): Response | null =>
+    epochaVolani === epocha ? kopieZHistorie(uloziste, klic) : null;
+  let odpoved: Response | null;
+  try {
+    odpoved =
+      kopie() === null
+        ? await zeSite
+        : await Promise.race([zeSite, cekani(maSpojeni() ? CEKANI_NA_SIT_MS : CEKANI_BEZ_SPOJENI_MS)]);
   } catch (chyba) {
-    const telo = nactiHistorii(uloziste, klic);
-    if (telo === null) throw chyba;
-    return new Response(telo, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        [OFFLINE_HLAVICKA]: "1",
-      },
-    });
+    const nahrada = jeZruseni(chyba) ? null : kopie();
+    if (nahrada === null) throw chyba;
+    return nahrada;
   }
+  if (odpoved === null) {
+    const nahrada = kopie();
+    if (nahrada === null) return zeSite;
+    // Still hanging. The late answer refreshes the copy for next time.
+    zeSite.catch(() => undefined);
+    return nahrada;
+  }
+  if (odpoved.status >= 500) return kopie() ?? odpoved;
+  return odpoved;
+}
+
+function jeNaseApi(url: string): boolean {
+  const zaklad = apiBase();
+  return zaklad.length > 0 && url.startsWith(`${zaklad}/api/`);
 }
 
 /** Idempotent fetch wrapper. Safe to call again from React StrictMode. */
@@ -147,10 +216,27 @@ export function zapniOfflineHistorii(uloziste?: HistorieUloziste): void {
   if (g[ZNACKA_ZAPNUTI] === true) return;
   const cil = uloziste ?? vychoziUloziste();
   g[ZNACKA_ZAPNUTI] = true;
-  if (cil === null) return;
   const puvodni = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = (vstup: RequestInfo | URL, init?: RequestInit) =>
-    obsluzHistorickeVolani(vstup, init, puvodni, cil);
+  globalThis.fetch = async (
+    vstup: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const nase = jeNaseApi(adresaAMetoda(vstup, init).url);
+    try {
+      const odpoved =
+        cil === null
+          ? await puvodni(vstup, init)
+          : await obsluzHistorickeVolani(vstup, init, puvodni, cil);
+      if (nase) {
+        if (odpoved.headers.get(OFFLINE_HLAVICKA) !== null) oznamSpojeni(false);
+        else if (odpoved.status < 500) oznamSpojeni(true);
+      }
+      return odpoved;
+    } catch (chyba) {
+      if (nase && !jeZruseni(chyba)) oznamSpojeni(false);
+      throw chyba;
+    }
+  };
 }
 
 function vychoziUloziste(): HistorieUloziste | null {

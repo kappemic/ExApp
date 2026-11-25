@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useZpet } from "../hooks/useZpet";
 import Ikona from "./Ikona";
 
 interface HlavickaZpetProps {
@@ -113,13 +114,6 @@ export function AkceHlavicky({
   );
 }
 
-/** React Router si v historii drží pořadí; 0 znamená stránku otevřenou přímo z odkazu. */
-function jeKamSeVratit(): boolean {
-  const stav: unknown = window.history.state;
-  const poradi = typeof stav === "object" && stav !== null ? (stav as { idx?: unknown }).idx : undefined;
-  return typeof poradi === "number" && poradi > 0;
-}
-
 /**
  * Návrat na podstránkách na počítači (návrh ho má jen na telefonu a tabletu).
  * Sedí v horním odsazení stránky, nadpis proto zůstává tam, kde je v návrhu.
@@ -134,14 +128,11 @@ export function ZpetPocitac({
   popisek: string;
   className?: string;
 }): JSX.Element {
-  const navigate = useNavigate();
+  const naZpet = useZpet(zpet);
   return (
     <button
       type="button"
-      onClick={() => {
-        if (jeKamSeVratit()) void navigate(-1);
-        else void navigate(zpet);
-      }}
+      onClick={naZpet}
       title={popisek}
       className={`bez-prejeti group -ml-1.5 -mt-8 mb-1 hidden h-7 w-fit items-center gap-1 rounded-lg pl-1 pr-2.5 text-[13px] font-medium text-mech hover:text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:flex ${className}`}
     >

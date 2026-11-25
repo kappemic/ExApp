@@ -170,17 +170,25 @@ export function KonverzacePrehledProvider({
 }): JSX.Element {
   const { user, isLoading } = useAuth();
   const povoleno: boolean = !isLoading && user !== null;
-  const [konverzace, setKonverzace] = useState<ApiKonverzace[]>(() =>
-    ctiKonverzaceZCache(),
-  );
-  const [stav, setStav] = useState<"nacitani" | "hotovo" | "chyba">(() =>
-    ctiKonverzaceZCache().length > 0 ? "hotovo" : "nacitani",
-  );
+  const idUctu: string | null = user?.id ?? null;
+  const [konverzace, setKonverzace] = useState<ApiKonverzace[]>([]);
+  const [stav, setStav] = useState<"nacitani" | "hotovo" | "chyba">("nacitani");
   const [chyba, setChyba] = useState<string | null>(null);
   const probihaRef = useRef<boolean>(false);
   const generaceRef = useRef<number>(0);
-  const maDataRef = useRef<boolean>(ctiKonverzaceZCache().length > 0);
+  const maDataRef = useRef<boolean>(false);
   const skryteRef = useRef<Map<string, ApiKonverzace>>(new Map());
+
+  /* Přehled patří účtu. Kopie z telefonu se bere, až je jasné čí je. */
+  useEffect(() => {
+    generaceRef.current += 1;
+    skryteRef.current.clear();
+    const kopie: ApiKonverzace[] = idUctu === null ? [] : ctiKonverzaceZCache();
+    maDataRef.current = kopie.length > 0;
+    setKonverzace(kopie);
+    setStav(kopie.length > 0 ? "hotovo" : "nacitani");
+    setChyba(null);
+  }, [idUctu]);
 
   const bezSkrytych = useCallback((seznam: ApiKonverzace[]): ApiKonverzace[] => {
     if (skryteRef.current.size === 0) return seznam;

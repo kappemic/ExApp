@@ -661,7 +661,7 @@ export default function ConversationList({
           className="h-11 w-full rounded-xl border border-linka bg-povrch pl-10 pr-3.5 text-base text-inkoust outline-none placeholder:text-ink-4 focus:border-pole focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:h-[38px] min-[90rem]:rounded-[10px] min-[90rem]:border-transparent min-[90rem]:bg-povrch-2 min-[90rem]:pl-[34px] min-[90rem]:text-[12.5px] min-[90rem]:placeholder:text-ink-3"
         />
       </div>
-      <div role="tablist" aria-label="Druh konverzací" className="-mx-1 flex gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[90rem]:hidden">
+      <div role="tablist" aria-label="Druh konverzací" className="-mx-1 -mt-1 mb-[14px] flex gap-2 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[90rem]:hidden">
         {viditelneSegmenty(polozky, segment).map((polozka) => {
           const vybrana: boolean = segment === polozka.id;
           return (

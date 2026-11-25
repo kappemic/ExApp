@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import type { Plugin } from "vite";
+import { roleKoduNeboClen } from "../src/config/roles.ts";
 import type { PravoSkupiny } from "../src/lib/skupiny-pristup.ts";
 import type { ApiZpravaPriloha } from "../src/shared/api-types.ts";
 import {
@@ -292,6 +293,13 @@ async function obsluz(req: IncomingMessage, res: ServerResponse, url: URL): Prom
       Object.assign(uzivatel, telo);
       return posli(res, 200, { user: seznamUzivatelu()[i] });
     }
+  }
+  if (metoda === "POST" && cesta === "/api/admin/codes") {
+    const role = roleKoduNeboClen(telo["role"]);
+    const ted = Date.now();
+    const kod = { code: randomUUID().replace(/[^2-9a-f]/g, "").slice(0, 8).toUpperCase().padEnd(8, "X"), expiresAt: new Date(ted + 10 * 60_000).toISOString(), role };
+    KODY.unshift(kod);
+    return posli(res, 201, { id: randomUUID(), kod: kod.code, createdAt: new Date(ted).toISOString(), expiresAt: kod.expiresAt, role });
   }
   if (metoda === "POST" && cesta === "/api/diskuze/zpravy") {
     const kanal = typeof telo["channel"] === "string" ? telo["channel"] : "general";

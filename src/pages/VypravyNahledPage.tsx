@@ -24,6 +24,7 @@ import VypravaHero from "../components/vypravy-nahled/VypravaHero";
 import AgendaBrzy from "../components/vypravy-nahled/AgendaBrzy";
 import RailNeuzavrene from "../components/vypravy-nahled/RailNeuzavrene";
 import Strankovani from "../components/Strankovani";
+import { useStavStranky } from "../hooks/useStavStranky";
 import { useStrankovani } from "../hooks/useStrankovani";
 import { RADKU_NA_STRANKU } from "../lib/strankovani";
 import { nejblizsiAgenda } from "../lib/agenda";
@@ -33,8 +34,6 @@ import {
   filtrujExpedicePodleJmena,
   normalizujProVyhledavani,
   rozdelVypravy,
-  seradVypravy,
-  type RazeniVyprav,
 } from "../lib/expedice-filtr";
 import { dnesniDatumYmd, formatCelyDatum } from "../lib/expedition-utils";
 import { apiBase } from "../lib/api-base";
@@ -267,13 +266,9 @@ export default function VypravyNahledPage({ druh }: { druh?: DruhVyprav } = {}):
   const zmeneneRef = useRef<Set<string>>(new Set());
   const smazaneRef = useRef<Set<string>>(new Set());
   const [schuzky, setSchuzky] = useState<ApiSchuzka[]>([]);
-  const [kalendarRok, setKalendarRok] = useState<number>(
-    () => aktualniMesic().rok,
-  );
-  const [kalendarMesic, setKalendarMesic] = useState<number>(
-    () => aktualniMesic().mesic,
-  );
-  const [denDetail, setDenDetail] = useState<string | null>(null);
+  const [kalendarRok, setKalendarRok] = useStavStranky<number>("rok", aktualniMesic().rok);
+  const [kalendarMesic, setKalendarMesic] = useStavStranky<number>("mesic", aktualniMesic().mesic);
+  const [denDetail, setDenDetail] = useStavStranky<string | null>("den", null);
   const [schuzkaDetail, setSchuzkaDetail] = useState<{
     schuzka: ApiSchuzka;
     datumVyskytu: string;
@@ -296,11 +291,10 @@ export default function VypravyNahledPage({ druh }: { druh?: DruhVyprav } = {}):
   const historieCelkemRef = useRef<number | null>(null);
   const hledaniId: string = useId();
   const denRef = useNabeh<HTMLDivElement>(denDetail ?? "", "x");
-  const [dotaz, setDotaz] = useState<string>("");
-  const [okno, setOkno] = useState<KategorieOkna | null>(null);
-  const [razeni, setRazeni] = useState<RazeniVyprav>("datum");
-  const obsahRef = useNabeh<HTMLDivElement>(`${zobrazeni}-${razeni}`);
-  const [debouncedDotaz, setDebouncedDotaz] = useState<string>("");
+  const [dotaz, setDotaz] = useStavStranky<string>("dotaz", "");
+  const [okno, setOkno] = useStavStranky<KategorieOkna | null>("okno", null);
+  const obsahRef = useNabeh<HTMLDivElement>(zobrazeni);
+  const [debouncedDotaz, setDebouncedDotaz] = useState<string>(dotaz);
 
   useEffect(() => {
     historieRef.current = historie;
@@ -465,21 +459,21 @@ export default function VypravyNahledPage({ druh }: { druh?: DruhVyprav } = {}):
   const neuzavreneFiltrovane: Expedition[] = useMemo(
     () =>
       muzeSpravovatVypravy
-        ? seradVypravy(filtrujExpedicePodleJmena(neuzavrene, debouncedDotaz), razeni)
+        ? filtrujExpedicePodleJmena(neuzavrene, debouncedDotaz)
         : [],
-    [muzeSpravovatVypravy, neuzavrene, debouncedDotaz, razeni],
+    [muzeSpravovatVypravy, neuzavrene, debouncedDotaz],
   );
   const probihajiciFiltrovane: Expedition[] = useMemo(
-    () => seradVypravy(filtrujExpedicePodleJmena(probihajici, debouncedDotaz), razeni),
-    [probihajici, debouncedDotaz, razeni],
+    () => filtrujExpedicePodleJmena(probihajici, debouncedDotaz),
+    [probihajici, debouncedDotaz],
   );
   const nadchazejiciFiltrovane: Expedition[] = useMemo(
-    () => seradVypravy(filtrujExpedicePodleJmena(nadchazejici, debouncedDotaz), razeni),
-    [nadchazejici, debouncedDotaz, razeni],
+    () => filtrujExpedicePodleJmena(nadchazejici, debouncedDotaz),
+    [nadchazejici, debouncedDotaz],
   );
   const probehleFiltrovane: Expedition[] = useMemo(
-    () => seradVypravy(filtrujExpedicePodleJmena(probehle, debouncedDotaz), razeni),
-    [probehle, debouncedDotaz, razeni],
+    () => filtrujExpedicePodleJmena(probehle, debouncedDotaz),
+    [probehle, debouncedDotaz],
   );
   const pocetNejblizsich = probihajiciFiltrovane.length + nadchazejiciFiltrovane.length;
   const pocetVysledku: number =
@@ -852,8 +846,6 @@ export default function VypravyNahledPage({ druh }: { druh?: DruhVyprav } = {}):
                       onZpet: () => navigate("/vypravy"),
                     }
               }
-              razeni={razeni}
-              onRazeni={setRazeni}
               mesicKalendare={nazevMesice(kalendarRok, kalendarMesic)}
               kalendarOvladani={
                 <KalendarOvladani

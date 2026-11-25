@@ -125,7 +125,7 @@ export function popisekDne(iso: string): string {
 
 /** Tlačítka v hlavičce vlákna: telefon 44 px s linkou, počítač 32 px v šedé. */
 const TLACITKO_HLAVICKY =
-  "nahled-press size-11 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk min-[90rem]:size-8 min-[90rem]:rounded-[9px] min-[90rem]:border-0 min-[90rem]:bg-povrch-2 min-[90rem]:text-mech";
+  "nahled-press size-11 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk min-[90rem]:size-8 min-[90rem]:rounded-[9px] min-[90rem]:border-0 min-[90rem]:bg-povrch-2 min-[90rem]:text-mech";
 
 function PolozkaMenu({
   popisek,
@@ -713,7 +713,7 @@ export default function KonverzaceDetail({
             type="button"
             onClick={onZpet}
             aria-label="Zpět na seznam konverzací"
-            className="nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust [touch-action:manipulation] lg:hidden"
+            className="nahled-press inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-linka bg-povrch text-inkoust focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] lg:hidden"
           >
             <Ikona nazev="chevron-left" className="size-[18px]" />
           </button>

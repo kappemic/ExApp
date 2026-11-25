@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import HlavickaZpet, { AkceHlavicky, ZpetPocitac } from "../components/HlavickaZpet";
 import PrazdnyStav from "../components/PrazdnyStav";
+import { useStavStranky } from "../hooks/useStavStranky";
 import { DlazdiceStatu, IdentitaProfilu, KARTA_UDAJU, ProfilovaKarta, RadekUdaje, ZALOZKY_DRAHA, tridaZalozky } from "../components/ProfilKusy";
 import Ikona from "../components/Ikona";
 import { barvaAvataru } from "../components/AvatarKruh";
@@ -90,7 +91,7 @@ export default function ClenDetailPage(): JSX.Element {
   const [souhrn, setSouhrn] = useState<Souhrn>(null);
   const [vypravy, setVypravy] = useState<VypravaRadka[] | null>(null);
   const [sprava, setSprava] = useState(false);
-  const [zalozka, setZalozka] = useState<"prehled" | "vypravy">("prehled");
+  const [zalozka, setZalozka] = useStavStranky<"prehled" | "vypravy">("zalozka", "prehled");
   const zalozkaRef = useNabeh<HTMLDivElement>(zalozka);
   const navigate = useNavigate();
   useEffect(() => {

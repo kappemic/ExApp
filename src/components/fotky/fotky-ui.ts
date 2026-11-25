@@ -4,7 +4,7 @@
  */
 
 export const FOTKY_FOCUS =
-  "focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk";
+  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-smrk";
 
 /** Press feedback on buttons, tiles, disclosure rows */
 export const fotkyStisk =
@@ -77,7 +77,7 @@ export const fotkyKosAkceObal =
 
 /** Inset focus so the photo gap does not jump when a tile is focused. */
 const FOTKY_FOCUS_DLAZDICE =
-  "focus-visible:outline-[3px] focus-visible:outline-solid focus-visible:outline-offset-[-3px] focus-visible:outline-smrk";
+  "focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-smrk";
 
 /**
  * Photo tile. `bez-prejeti` opts out of the global ink-wipe hover.

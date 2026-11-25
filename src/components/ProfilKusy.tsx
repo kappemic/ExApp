@@ -54,7 +54,7 @@ function AvatarProfilu({
       {onZmenit !== undefined ? (
         <span
           className={`absolute inset-0 flex items-center justify-center bg-inkoust/55 text-povrch transition-opacity duration-150 motion-reduce:transition-none ${
-            nahrava ? "opacity-100" : "opacity-0 min-[90rem]:group-hover:opacity-100 min-[90rem]:group-focus-within:opacity-100"
+            nahrava ? "opacity-100" : "opacity-0 min-[90rem]:group-hover:opacity-100 min-[90rem]:group-has-focus-visible:opacity-100"
           }`}
         >
           <Ikona nazev={nahrava ? "upload" : "pen-line"} className={`size-5 ${nahrava ? "motion-safe:animate-pulse" : ""}`} />
@@ -65,7 +65,7 @@ function AvatarProfilu({
   if (onZmenit === undefined) return kruh;
   return (
     <div className="flex flex-col items-center gap-2">
-      <label className="group relative inline-flex cursor-pointer rounded-full focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-smrk">
+      <label className="group relative inline-flex cursor-pointer rounded-full has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-smrk">
         {kruh}
         <span
           aria-hidden="true"

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useLayoutEffect, useRef, type JSX, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType, useSearchParams } from "react-router-dom";
 import RequireAuth from "./components/Auth/RequireAuth";
+import ChybaStranky from "./components/ChybaStranky";
+import OfflinePruh from "./components/OfflinePruh";
 import StrankaKostra from "./components/StrankaKostra";
 import { ClenProfilProvider } from "./components/clen/ClenProfil";
 import DenikPlocha from "./components/denik/DenikPlocha";
@@ -35,7 +37,12 @@ const ZpevnikUpravaPage = lazy(() => import("./pages/ZpevnikUpravaPage"));
 
 /** Route chunks load after the shell. The landing page and login stay in the first script. */
 function OdlozenaStranka(props: { children: ReactNode }): JSX.Element {
-  return <Suspense fallback={<StrankaKostra vnitrni />}>{props.children}</Suspense>;
+  const { pathname } = useLocation();
+  return (
+    <ChybaStranky cesta={pathname}>
+      <Suspense fallback={<StrankaKostra vnitrni />}>{props.children}</Suspense>
+    </ChybaStranky>
+  );
 }
 
 /** Old preview URL keeps its query and lands on the journal. */
@@ -139,6 +146,7 @@ function AppObsah(): JSX.Element {
           </>
         ) : null}
         <div ref={strankaRef} className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pt-(--horni-okraj) pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
+          {prihlasen ? <OfflinePruh /> : null}
           <Routes>
             <Route path="/" element={<DomuPage />} />
             <Route

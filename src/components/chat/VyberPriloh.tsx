@@ -4,7 +4,7 @@ import Ikona from "../Ikona";
 import ZnackaSouboru from "./ZnackaSouboru";
 
 const TLACITKO =
-  "nahled-press relative inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-mech before:content-[''] hover:text-inkoust disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] min-[90rem]:size-10 min-[90rem]:bg-povrch-2 [&_svg]:size-[18px] min-[90rem]:[&_svg]:size-4";
+  "nahled-press relative inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-mech before:content-[''] hover:text-inkoust disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] min-[90rem]:size-10 min-[90rem]:bg-povrch-2 [&_svg]:size-[18px] min-[90rem]:[&_svg]:size-4";
 
 const TLACITKO_TICHE =
   "bez-prejeti inline-flex h-11 min-h-[44px] w-11 min-w-[44px] shrink-0 select-none items-center justify-center rounded-lg text-mech [-webkit-touch-callout:none] [touch-action:manipulation] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk active:scale-[0.97] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:text-inkoust";

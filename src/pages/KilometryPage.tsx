@@ -128,7 +128,7 @@ export default function KilometryPage(): JSX.Element {
       ) : (
         <>
           <div className="mt-3 flex flex-col gap-3 min-[90rem]:mt-8 min-[90rem]:flex-row min-[90rem]:items-center min-[90rem]:justify-between min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4">
-            <div ref={stitkyRef} role="group" aria-label="Období" className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
+            <div ref={stitkyRef} role="group" aria-label="Období" className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
               {volby.map((volba) => {
                 const aktivni = (vybranyRok?.rok ?? null) === volba.rok;
                 return (
@@ -140,7 +140,7 @@ export default function KilometryPage(): JSX.Element {
                     className="group flex min-h-11 shrink-0 touch-manipulation items-center focus-visible:outline-none"
                   >
                     <span
-                      className={`inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors group-focus-visible:outline-2 group-focus-visible:-outline-offset-2 group-focus-visible:outline-okr motion-reduce:transition-none min-[90rem]:h-auto min-[90rem]:px-3.5 min-[90rem]:py-2 ${
+                      className={`inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-smrk motion-reduce:transition-none min-[90rem]:h-auto min-[90rem]:px-3.5 min-[90rem]:py-2 ${
                         aktivni
                           ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
                           : "border-linka bg-povrch font-medium text-mech group-hover:bg-povrch-2 min-[90rem]:bg-transparent"

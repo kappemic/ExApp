@@ -71,10 +71,8 @@
   font-family: var(--font-sans);
 }
 
-.nocturne :focus-visible {
-  outline: 2px solid hsl(var(--ink));
-  outline-offset: 3px;
-}
+/* Rámeček fokusu je v index.css (@layer base). Pravidlo mimo vrstvu by tu
+   přebilo utility `focus-visible:*` a řádky by měly rámeček uříznutý. */
 
 /* A text field already has its own edge. The detached focus box stacked
    a second frame on it (and a square one on the borderless chat line).
@@ -220,6 +218,11 @@
 
 .nocturne .seznam-scroll :is(a, button, [role="button"]):active,
 .nocturne .kalendar-plocha :is(a, button, [role="button"]):active {
+  transform: none;
+}
+
+/* The sheet backdrop is a button, but holding it must not shrink the whole screen. */
+.nocturne button.exapp-zavoj:not(:disabled):active {
   transform: none;
 }
 

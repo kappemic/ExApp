@@ -997,8 +997,8 @@ export default function ExpeditionModal({
       }
       setOtevrenyList(null);
       onSmazana(expedice.id);
-      if (stranka) onZavrit();
-      else zavriRef.current();
+      // Stránku po smazání opouští `onSmazana`, druhý návrat by přeskočil o obrazovku dál.
+      if (!stranka) zavriRef.current();
     })();
   }
 
@@ -1169,7 +1169,7 @@ export default function ExpeditionModal({
       tabIndex={-1}
       aria-label={`Diskuze k výpravě ${expedice.nazev}`}
       data-deep-link-cil="diskuze"
-      className="scroll-mt-4 focus-visible:outline-3 focus-visible:outline-smrk focus-visible:outline-offset-2"
+      className="scroll-mt-4 rounded-2xl focus-visible:outline-2 focus-visible:outline-smrk focus-visible:outline-offset-2"
     >
       {diskuzeNeprectena && (
         <p className="mb-2 flex min-h-[24px] items-center gap-2 text-[13px] font-semibold text-akcent">
@@ -1195,7 +1195,7 @@ export default function ExpeditionModal({
         <div className="sticky top-(--stavova-lista) z-20 bg-papir/95 px-5 pb-2.5 pt-4 backdrop-blur-sm min-[90rem]:hidden [&>header]:mx-auto [&>header]:max-w-[46rem]">
           <HlavickaZpet
             zpet="/vypravy"
-            zpetPopisek="Zpět na výpravy"
+            zpetPopisek="Zpět"
             onZpet={() => onZavrit()}
             titulek="Výprava"
             akce={

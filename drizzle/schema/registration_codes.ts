@@ -28,6 +28,8 @@ export const registrationCodes = pgTable("registration_codes", {
     .defaultNow(),
   /** created_at + 10 minut. Povinné — nikdy nespoléhat na default. */
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  /** Role nového účtu (`RoleKodu`). CHECK žije v migraci 0027, `admin` nepustí. */
+  role: text("role").notNull().default("clen"),
   /** Jednorázovost: NULL = nepoužit. */
   usedAt: timestamp("used_at", { withTimezone: true }),
   usedBy: uuid("used_by").references(() => users.id, {

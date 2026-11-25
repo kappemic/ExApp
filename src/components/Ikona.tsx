@@ -48,12 +48,6 @@ const CESTY = {
   "chevron-down": <path d="m6 9 6 6 6-6" />,
   "chevron-right": <path d="m9 18 6-6-6-6" />,
   "chevron-left": <path d="m15 18-6-6 6-6" />,
-  "chevrons-up-down": (
-    <>
-      <path d="m7 15 5 5 5-5" />
-      <path d="m7 9 5-5 5 5" />
-    </>
-  ),
   search: (
     <>
       <circle cx="11" cy="11" r="8" />

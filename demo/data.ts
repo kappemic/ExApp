@@ -16,6 +16,7 @@ import type {
   ApiZprava,
   ApiZpravaPriloha,
   UserListItem,
+  ZivyKodPolozka,
 } from "../src/shared/api-types.ts";
 import type { ApiZpevnikPisen, ApiZpevnikNavrh } from "../src/shared/zpevnik.ts";
 import { ALBUM_NAHLEDY_ID, ALBUM_NAHLEDY_NAZEV } from "../src/shared/fotky-nahledy.ts";
@@ -701,7 +702,7 @@ export function zebricek(): Array<{ userId: string; jmeno: string; vypravy: numb
     .sort((a, b) => b.vypravy - a.vypravy || b.km - a.km || a.jmeno.localeCompare(b.jmeno, "cs"));
 }
 
-export const KODY = [
-  { code: "EXAPP-4K2M", expiresAt: cas(6, 23) },
+export const KODY: ZivyKodPolozka[] = [
+  { code: "EXAPP-4K2M", expiresAt: cas(6, 23), role: "aktivni-clen" },
   { code: "EXAPP-9QZP", expiresAt: cas(2, 23) },
 ];

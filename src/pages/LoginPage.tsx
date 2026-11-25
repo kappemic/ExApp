@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import AuthRozlozeni from "../components/Auth/AuthRozlozeni";
 import {
   AuthChyba,
@@ -12,6 +12,7 @@ import {
 } from "../components/Auth/authVstupy";
 import Ikona from "../components/Ikona";
 import { useAuth, type PolePrihlaseni } from "../hooks/useAuth";
+import { useSpojeni } from "../lib/spojeni";
 
 /**
  * Safe post-login redirect — internal paths only.
@@ -28,7 +29,8 @@ type ChybyPoli = Partial<Record<PolePrihlaseni, string>>;
 
 /** Email + password sign-in — logic lives in useAuth. */
 export default function LoginPage(): JSX.Element {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
+  const spojeno = useSpojeni();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const navrat = bezpecneFrom(params.get("from"));
@@ -55,9 +57,18 @@ export default function LoginPage(): JSX.Element {
     setOdesilaSe(false);
   }
 
+  // Session se mohla ověřit až tady, třeba po návratu sítě.
+  if (user !== null) return <Navigate to={navrat} replace />;
+
   return (
     <AuthRozlozeni>
       <AuthNadpis>Přihlas se do klubu</AuthNadpis>
+
+      {spojeno ? null : (
+        <p role="status" className="rounded-[10px] bg-mlha p-3 text-[13px] leading-[18px] text-inkoust">
+          Nejde se spojit se serverem. Přihlášení potřebuje připojení k internetu.
+        </p>
+      )}
 
       <form
         onSubmit={onSubmit}

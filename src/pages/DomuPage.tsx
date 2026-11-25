@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Link, Navigate } from "react-router-dom";
 import AuthRozlozeni from "../components/Auth/AuthRozlozeni";
 import { AuthNadpis } from "../components/Auth/authVstupy";
+import BezUctuOffline from "../components/Auth/BezUctuOffline";
 import Ikona from "../components/Ikona";
 import StrankaKostra from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
@@ -11,13 +12,15 @@ import { useAuth } from "../hooks/useAuth";
  * they land on /vypravy.
  */
 export default function DomuPage(): JSX.Element {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, bezOvereni } = useAuth();
 
   if (isLoading) return <StrankaKostra />;
 
   if (user !== null) {
     return <Navigate to="/vypravy" replace />;
   }
+
+  if (bezOvereni) return <BezUctuOffline />;
 
   return (
     <AuthRozlozeni>

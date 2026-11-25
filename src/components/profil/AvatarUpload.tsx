@@ -178,7 +178,7 @@ export default function AvatarUpload({
           accept="image/jpeg,image/png,image/webp"
           disabled={disabled}
           onChange={vyberSoubor}
-          className="min-h-[44px] w-full rounded border-2 border-dashed border-inkoust/40 bg-povrch px-3 py-2 text-base text-inkoust focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir file:mr-3 file:rounded file:border file:border-linka file:bg-papir file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-inkoust"
+          className="min-h-[44px] w-full rounded border-2 border-dashed border-inkoust/40 bg-povrch px-3 py-2 text-base text-inkoust focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 file:mr-3 file:rounded file:border file:border-linka file:bg-papir file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-inkoust"
         />
         <p className="text-xs text-inkoust/70">JPEG, PNG nebo WebP, nejvýš 5 MB.</p>
       </div>

@@ -267,7 +267,7 @@ export default function ZpravaBublina({
                 id={zprava.autorId}
                 jmeno={autorPopisek}
                 avatarUrl={zprava.authorAvatarUrl}
-                className="h-8 w-8 shrink-0 p-0 min-h-8!"
+                className="h-8 w-8 shrink-0 p-0 rounded-full! focus-visible:-outline-offset-2! min-h-8!"
               >
                 <AvatarVlakna jmeno={autorPopisek} url={zprava.authorAvatarUrl} />
               </TlacitkoProfilu>
@@ -379,7 +379,7 @@ export default function ZpravaBublina({
           id={zprava.autorId}
           jmeno={autorPopisek}
           avatarUrl={zprava.authorAvatarUrl}
-          className="h-8 w-8 shrink-0 self-start p-0 min-h-8! min-[90rem]:mb-4 min-[90rem]:h-[26px] min-[90rem]:w-[26px] min-[90rem]:min-h-[26px]! min-[90rem]:self-end"
+          className="h-8 w-8 shrink-0 self-start p-0 rounded-full! focus-visible:-outline-offset-2! min-h-8! min-[90rem]:mb-4 min-[90rem]:h-[26px] min-[90rem]:w-[26px] min-[90rem]:min-h-[26px]! min-[90rem]:self-end"
         >
           <AvatarBubliny jmeno={autorPopisek} url={zprava.authorAvatarUrl} />
         </TlacitkoProfilu>

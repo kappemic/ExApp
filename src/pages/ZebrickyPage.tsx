@@ -8,6 +8,7 @@ import { IkonaPohar } from "../components/SeznamIkony";
 import { KostraTabulka } from "../components/StrankaKostra";
 import Strankovani from "../components/Strankovani";
 import ZebrickyPostranni from "../components/zebricky/ZebrickyPostranni";
+import { useStavStranky } from "../hooks/useStavStranky";
 import { useStrankovani } from "../hooks/useStrankovani";
 import { RADKU_NA_STRANKU } from "../lib/strankovani";
 import { useAuth } from "../hooks/useAuth";
@@ -36,7 +37,7 @@ function volbyObdobi(): Array<{ hodnota: string; popisek: string }> {
 export default function ZebrickyPage(): JSX.Element {
   const { user } = useAuth();
   const { otevri: otevriProfil } = useClenProfil();
-  const [obdobi, setObdobi] = useState<ObdobiVolba>("celkem");
+  const [obdobi, setObdobi] = useStavStranky<ObdobiVolba>("obdobi", "celkem");
   const [radky, setRadky] = useState<ZebrickyRadek[]>([]);
   const [nacitani, setNacitani] = useState<boolean>(true);
   const [chyba, setChyba] = useState<string | null>(null);

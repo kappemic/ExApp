@@ -541,7 +541,7 @@ export default function DiskuzeBox({
           <div
             ref={vlaknoRef}
             data-vlakno-scroll="diskuze"
-            className="posuvnik min-w-0 overflow-y-auto overscroll-contain max-h-[26rem] min-[90rem]:max-h-80 min-[90rem]:px-5 min-[90rem]:py-1"
+            className="posuvnik min-w-0 overflow-y-auto overscroll-contain max-h-[26rem] max-[90rem]:-mx-1 max-[90rem]:-mt-1 max-[90rem]:px-1 max-[90rem]:pt-1 min-[90rem]:max-h-80 min-[90rem]:px-5 min-[90rem]:py-1"
           >
               {/* M2: jediná pravda pro název vlákna je popisek s názvem
                 výpravy. Odkaz na generický nadpis „Diskuze" se nesmí

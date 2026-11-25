@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import BezUctuOffline from "./BezUctuOffline";
 import Ikona from "../Ikona";
 import PrazdnyStav from "../PrazdnyStav";
 import StrankaKostra from "../StrankaKostra";
@@ -21,6 +22,7 @@ interface RequireAuthProps {
 /**
  * RequireAuth — jediný strážce privátních rout.
  * - bootstrap režim + povolitBootstrap → propustí (prvotní nastavení, česky vysvětleno na stránce)
+ * - server neodpověděl a účet v telefonu není → vysvětlení místo přihlášení
  * - bez session → redirect na /login?from=<původní cesta>
  * - bez potřebného práva (adminOnly, jenSpravceVyprav) → cedule „Nemáš přístup"
  */
@@ -30,7 +32,7 @@ export default function RequireAuth({
   jenSpravceVyprav = false,
   povolitBootstrap = false,
 }: RequireAuthProps): JSX.Element {
-  const { user, isLoading, isAdmin, isSuperadmin, muzeSpravovatVypravy, jeBootstrap } = useAuth();
+  const { user, isLoading, isAdmin, isSuperadmin, muzeSpravovatVypravy, jeBootstrap, bezOvereni } = useAuth();
   const location = useLocation();
 
   if (isLoading) return <StrankaKostra />;
@@ -40,6 +42,8 @@ export default function RequireAuth({
   if (jeBootstrap && adminOnly && povolitBootstrap) {
     return <>{children}</>;
   }
+
+  if (user === null && bezOvereni) return <BezUctuOffline />;
 
   if (user === null) {
     const from = `${location.pathname}${location.search}`;

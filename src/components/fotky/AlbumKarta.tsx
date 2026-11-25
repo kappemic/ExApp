@@ -33,13 +33,13 @@ export default function AlbumKarta({
 
   return (
     <li
-      className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border border-linka bg-povrch shadow-karta min-[90rem]:overflow-visible min-[90rem]:border-0 min-[90rem]:bg-transparent min-[90rem]:shadow-none ${
+      className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border border-linka bg-povrch shadow-karta max-[90rem]:has-[>a:focus-visible]:outline-2 max-[90rem]:has-[>a:focus-visible]:outline-offset-2 max-[90rem]:has-[>a:focus-visible]:outline-smrk min-[90rem]:overflow-visible min-[90rem]:border-0 min-[90rem]:bg-transparent min-[90rem]:shadow-none ${
         velka ? "min-[90rem]:col-span-2 min-[90rem]:row-span-2" : ""
       }`}
     >
       <Link
         to={`/fotky/${album.id}`}
-        className={`${fotkyStisk} group flex min-h-[44px] flex-1 flex-col transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none min-[90rem]:gap-3 min-[90rem]:rounded-2xl`}
+        className={`${fotkyStisk} group flex min-h-[44px] flex-1 flex-col max-[90rem]:focus-visible:outline-none transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none min-[90rem]:gap-3 min-[90rem]:rounded-2xl`}
       >
         <span className={`relative flex flex-col overflow-hidden min-[90rem]:rounded-2xl ${velka ? "min-[90rem]:grow" : ""}`}>
           <PapirObal

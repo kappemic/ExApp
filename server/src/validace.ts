@@ -19,6 +19,7 @@ export {
   validujRegistraci,
   validujPrihlaseni,
   validujOvereniKodu,
+  validujNovyKod,
   validujPoznamkuKodu,
   validujUpravuClena,
 } from "./validace-domeny/ucty";

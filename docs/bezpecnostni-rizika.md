@@ -53,6 +53,19 @@ Threat model: důvěryhodnost hranice = HTTP požadavek se session cookie
   serveru. Vite na jiném portu než 5173 bez úpravy `CLIENT_URL` dostane
   403 i u uploadů.
 
+## Offline kopie účtu v telefonu (PŘIJATÉ OMEZENÍ)
+
+- **Stav:** poslední ověřený účet je v `localStorage` (`exapp:ucet-v1`,
+  `src/lib/ulozeny-ucet.ts`). Nese jen výčet polí pro zobrazení, žádný token.
+  Session drží dál jen httpOnly cookie a role z kopie nic neotevírá, rozhoduje
+  guard na serveru. Platí nejvýš 30 dní bez ověření. Bez „Zůstat přihlášený“
+  je v `sessionStorage`.
+- **Mazání:** odhlášení, 401 z `GET /api/me` a přihlášení jiného účtu smažou
+  kopii i soukromá data. Odhlášení bez sítě se serveru dožene po připojení.
+- **Zbývá:** do připojení na telefonu zůstává platná cookie odhlášeného.
+  Obrázky (`Cache-Control: private, max-age`) drží HTTP cache prohlížeče i po
+  odhlášení.
+
 ## Ověření po opravě (must-fix 1–3)
 
 - `skola` / `trida` round-trip: `toApiUser` je vrací (`server/src/auth.ts`),

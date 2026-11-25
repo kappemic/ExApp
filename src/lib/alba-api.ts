@@ -434,14 +434,10 @@ export async function nastavNahledAlba(
   }
 }
 
-/** Czech count: 1 fotka, 2–4 fotky, 11–14 fotek, 21 fotka, … */
+/** Czech count: 1 fotka, 2–4 fotky, otherwise fotek (62 fotek too). */
 export function popisekPoctuFotek(pocet: number): string {
   const n = Math.abs(Math.trunc(pocet));
-  const konec = n % 10;
-  const sto = n % 100;
-  let tvar = "fotek";
-  if (konec === 1 && sto !== 11) tvar = "fotka";
-  else if (konec >= 2 && konec <= 4 && (sto < 12 || sto > 14)) tvar = "fotky";
+  const tvar = n === 1 ? "fotka" : n >= 2 && n <= 4 ? "fotky" : "fotek";
   return `${n} ${tvar}`;
 }
 

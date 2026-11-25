@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type JSX } from "react";
 import { Link } from "react-router-dom";
+import { useStavStranky } from "../../hooks/useStavStranky";
 import { formatKmNaDesetinu, formatKmZaokrouhlene } from "../../lib/format-cisla";
 import { formatCelyDatum } from "../../lib/expedition-utils";
 import { snizenyPohyb, useNabeh } from "../../lib/pohyb";
@@ -31,7 +32,7 @@ export default function StatistikyKlub(): JSX.Element {
     { hodnota: String(rok), popisek: String(rok) },
     { hodnota: String(rok - 1), popisek: String(rok - 1) },
   ];
-  const [obdobi, setObdobi] = useState("celkem");
+  const [obdobi, setObdobi] = useStavStranky("obdobi-klub", "celkem");
   const [stav, setStav] = useState<Stav>("nacitani");
   const [trasy, setTrasy] = useState<ZebrickyTrasa[]>([]);
   const [aktivnich, setAktivnich] = useState<number | null>(null);

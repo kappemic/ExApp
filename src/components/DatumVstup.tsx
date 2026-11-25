@@ -1,6 +1,7 @@
 import { useId, useRef, useState, useEffect, type JSX } from "react";
 import { DNY_V_TYDNU } from "./kalendar/DenKalendare";
 import Ikona from "./Ikona";
+import { TLACITKO_V_POLI } from "./formular-tridy";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 import { mesicMrizkaSKontextem, nazevMesice } from "../lib/kalendar";
 import { evropskeNaIso, isoNaEvropske, jeIsoDatum, maskaEvropskehoData } from "../lib/evropske-datum";
@@ -121,7 +122,7 @@ export default function DatumVstup({
         aria-controls={panelId}
         disabled={disabled}
         onClick={() => (otevreno ? setOtevreno(false) : otevri())}
-        className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
+        className={TLACITKO_V_POLI}
       >
         <Ikona nazev={ikona} className="size-4 min-[90rem]:size-3.5 min-[90rem]:text-ink-3" />
       </button>

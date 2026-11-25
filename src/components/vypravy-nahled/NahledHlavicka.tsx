@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { TlacitkoZpet, ZpetPocitac } from "../HlavickaZpet";
 import Ikona, { type NazevIkony } from "../Ikona";
-import type { RazeniVyprav } from "../../lib/expedice-filtr";
 
 type Zobrazeni = "seznam" | "kalendar";
 export type FiltrVypravHlavicky = "vse" | "nejblizsi" | "neuzavrene";
@@ -26,7 +25,7 @@ const FOKUS =
  * Hlavička stránky Výpravy podle ExApp.pen („Telefon · Výpravy“ a „ExApp · Výpravy“).
  * Telefon: nadpis + podtitul, vpravo lupa a „Nová“; pod tím přepínač
  * Seznam / Kalendář a řádek čipů. Počítač (1440+): nadpis 46 px, vpravo pole
- * hledání a „Nová výprava“; přepínač vlevo, čipy a řazení vpravo v jednom řádku.
+ * hledání a „Nová výprava“; přepínač vlevo, čipy vpravo v jednom řádku.
  */
 export default function NahledHlavicka({
   zobrazeni,
@@ -39,8 +38,6 @@ export default function NahledHlavicka({
   filtr,
   bezNeuzavrenych = false,
   podstranka,
-  razeni,
-  onRazeni,
   kalendarOvladani,
   mesicKalendare,
 }: {
@@ -57,8 +54,6 @@ export default function NahledHlavicka({
   bezNeuzavrenych?: boolean;
   /** Stránka jednoho druhu výprav: vlastní nadpis a návrat, bez přepínače a „Nová“. */
   podstranka?: { nadpis: string; podtitul: string; onZpet: () => void };
-  razeni: RazeniVyprav;
-  onRazeni: (razeni: RazeniVyprav) => void;
   /** Navigace měsíce a legenda, v kalendáři na počítači vpravo v liště. */
   kalendarOvladani?: ReactNode;
   /** „Prosinec 2026“ pod nadpisem kalendáře na telefonu. */
@@ -196,36 +191,25 @@ export default function NahledHlavicka({
         ) : null}
 
         {!vKalendari ? (
-          <div className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
-            <nav aria-label="Druh výprav" className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
-              {FILTRY.filter((volba) => volba.id !== "neuzavrene" || !bezNeuzavrenych).map((volba) => {
-                const vybrano = filtr === volba.id;
-                return (
-                  <Link
-                    key={volba.id}
-                    to={volba.cesta}
-                    aria-current={vybrano ? "page" : undefined}
-                    className={`nahled-press relative inline-flex h-8 shrink-0 touch-manipulation items-center rounded-full border px-3 text-[13px] before:absolute before:-inset-x-1 before:-inset-y-1.5 min-[90rem]:h-auto min-[90rem]:px-[13px] min-[90rem]:py-[7px] ${FOKUS} ${
-                      vybrano
-                        ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
-                        : "border-linka bg-povrch font-medium text-mech min-[90rem]:bg-transparent"
-                    }`}
-                  >
-                    {volba.popisek}
-                  </Link>
-                );
-              })}
-            </nav>
-            <button
-              type="button"
-              onClick={() => onRazeni(razeni === "datum" ? "nazev" : "datum")}
-              aria-label={`Řazení: ${razeni === "datum" ? "podle data" : "podle názvu"}. Změnit`}
-              className={`nahled-press hidden min-h-11 touch-manipulation items-center gap-1.5 rounded-lg py-[7px] pl-2.5 pr-1 text-[13px] font-medium text-mech min-[90rem]:inline-flex ${FOKUS}`}
-            >
-              {razeni === "datum" ? "Podle data" : "Podle názvu"}
-              <Ikona nazev="chevrons-up-down" className="size-3.5 text-ink-3" />
-            </button>
-          </div>
+          <nav aria-label="Druh výprav" className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
+            {FILTRY.filter((volba) => volba.id !== "neuzavrene" || !bezNeuzavrenych).map((volba) => {
+              const vybrano = filtr === volba.id;
+              return (
+                <Link
+                  key={volba.id}
+                  to={volba.cesta}
+                  aria-current={vybrano ? "page" : undefined}
+                  className={`nahled-press relative inline-flex h-8 shrink-0 touch-manipulation items-center rounded-full border px-3 text-[13px] before:absolute before:-inset-x-1 before:-inset-y-1.5 min-[90rem]:h-auto min-[90rem]:px-[13px] min-[90rem]:py-[7px] ${FOKUS} ${
+                    vybrano
+                      ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
+                      : "border-linka bg-povrch font-medium text-mech min-[90rem]:bg-transparent"
+                  }`}
+                >
+                  {volba.popisek}
+                </Link>
+              );
+            })}
+          </nav>
         ) : kalendarOvladani !== undefined ? (
           <div className="hidden min-[90rem]:block">{kalendarOvladani}</div>
         ) : null}

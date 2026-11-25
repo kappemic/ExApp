@@ -13,6 +13,8 @@ interface Box {
   puvod: number;
 }
 
+const KLICE_BOXU = ["top", "left", "width", "nahoru", "vyska", "puvod"] as const;
+
 /**
  * Paper popover anchored to a field. Portaled so a scrolling dialog
  * does not clip it. Escape closes only this panel.
@@ -56,34 +58,45 @@ export default function VyskakovaciPanel({
       const el = kotva.current;
       if (el === null) return;
       const rect = el.getBoundingClientRect();
-      const width = Math.max(sirka ?? rect.width, minSirka);
-      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
-      const mistoDole = window.innerHeight - rect.bottom - 14;
-      const mistoNahore = rect.top - 14;
-      const potreba = panelRef.current?.scrollHeight ?? 280;
+      const okraj = document.documentElement.clientWidth;
+      const width = Math.min(Math.max(sirka ?? rect.width, minSirka), okraj - 16);
+      // Panel ikony na konci pole se zarovná k pravému okraji, jinak k levému.
+      const zadano = puvod === "konec" ? rect.right - width : rect.left;
+      const left = Math.max(8, Math.min(zadano, okraj - width - 8));
+      // Otevřená klávesnice na telefonu zmenší jen viditelnou část okna.
+      const vyrez = window.visualViewport;
+      const horniHrana = vyrez?.offsetTop ?? 0;
+      const dolniHrana = horniHrana + (vyrez?.height ?? window.innerHeight);
+      const mistoDole = dolniHrana - rect.bottom - 14;
+      const mistoNahore = rect.top - horniHrana - 14;
+      const potreba = panelRef.current === null ? 280 : panelRef.current.scrollHeight + 2;
       const nahoru = potreba > mistoDole && mistoNahore > mistoDole;
       const stred = puvod === "konec" ? rect.right - 22 : rect.left + rect.width / 2;
-      setBox({
+      const novy: Box = {
         top: nahoru ? rect.top : rect.bottom,
         left,
         width,
         nahoru,
         vyska: Math.max(160, nahoru ? mistoNahore : mistoDole),
         puvod: Math.min(Math.max(stred - left, 16), width - 16),
-      });
+      };
+      setBox((stary) => (stary !== null && KLICE_BOXU.every((klic) => stary[klic] === novy[klic]) ? stary : novy));
     }
     mer();
-    window.addEventListener("resize", mer);
-    window.addEventListener("scroll", mer, true);
-    return () => {
-      window.removeEventListener("resize", mer);
-      window.removeEventListener("scroll", mer, true);
-    };
+    // Pole se může pohnout i bez posunu stránky (náběh, chybová hláška, klávesnice).
+    let snimek = requestAnimationFrame(function sleduj() {
+      mer();
+      snimek = requestAnimationFrame(sleduj);
+    });
+    return () => cancelAnimationFrame(snimek);
   }, [otevreno, viditelne, kotva, sirka, minSirka, puvod]);
 
   // Otevření klávesnicí: fokus do panelu, po zavření zpátky na pole.
   useEffect(() => {
     if (!viditelne) return;
+    // Na telefonu schovat klávesnici předchozího pole, jinak panel překryje.
+    const psane = document.activeElement;
+    if (psane instanceof HTMLInputElement && window.matchMedia("(pointer: coarse)").matches) psane.blur();
     const spoustec = document.activeElement;
     const panel = panelRef.current;
     if (spoustec instanceof HTMLElement && kotva.current?.contains(spoustec) && spoustec.matches("button:focus-visible")) {

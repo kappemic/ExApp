@@ -3,6 +3,7 @@
  */
 import { apiBase } from "./api-base";
 import { chybaZApiTela, ctiJsonTelo, jeRecord } from "./api-odpoved";
+import { CTENI_BEZ_SPOJENI, ZAPIS_BEZ_SPOJENI } from "./spojeni";
 import { ctiKnihu, smazKnihu, ulozKnihu } from "./zpevnik-offline";
 import type { ApiZpevnikNavrh, ApiZpevnikPisen, TeloPisne } from "../shared/zpevnik";
 
@@ -58,7 +59,7 @@ export async function nactiKnihu(): Promise<VysledekKnihy> {
     if (pisne === null) return { ok: false, chyba: "Zpěvník se nepodařilo načíst." };
     return { ok: true, pisne, zdroj: "sit" };
   } catch {
-    return knihaZTelefonu("Zpěvník se nepodařilo načíst.");
+    return knihaZTelefonu("Bez spojení se zpěvník nenačetl a v telefonu zatím není uložený.");
   }
 }
 
@@ -94,14 +95,14 @@ export function smazUlozenouKnihu(): void {
   smazKnihu(localStorage);
 }
 
-function pisenZTelefonu(id: string):
+function pisenZTelefonu(id: string, chyba = "Píseň se nepodařilo načíst."):
   | { ok: true; pisen: ApiZpevnikPisen }
   | { ok: false; chyba: string; nenalezena: boolean } {
   if (typeof localStorage !== "undefined") {
     const nalezena = ctiKnihu(localStorage)?.find((radek) => radek.id === id);
     if (nalezena !== undefined) return { ok: true, pisen: nalezena };
   }
-  return { ok: false, chyba: "Píseň se nepodařilo načíst.", nenalezena: false };
+  return { ok: false, chyba, nenalezena: false };
 }
 
 export async function nactiPisen(id: string): Promise<
@@ -129,7 +130,7 @@ export async function nactiPisen(id: string): Promise<
     }
     return { ok: true, pisen };
   } catch {
-    return pisenZTelefonu(id);
+    return pisenZTelefonu(id, "Bez spojení se píseň nenačetla a v telefonu není uložená.");
   }
 }
 
@@ -158,7 +159,7 @@ async function posliJson(
     if (!odpoved.ok) return chybaZApiTela(data, "Zpěvník se nepodařilo uložit.");
     return { ok: true, data };
   } catch {
-    return { ok: false, chyba: "Zpěvník se nepodařilo uložit." };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
 }
 
@@ -181,7 +182,7 @@ export async function nactiNavrhy(): Promise<
     if (!navrhy.every(jeNavrh)) return { ok: false, chyba: "Frontu se nepodařilo načíst." };
     return { ok: true, navrhy };
   } catch {
-    return { ok: false, chyba: "Frontu se nepodařilo načíst." };
+    return { ok: false, chyba: CTENI_BEZ_SPOJENI };
   }
 }
 
@@ -202,7 +203,7 @@ export async function nactiNavrh(id: string): Promise<
     if (!jeNavrh(navrh)) return { ok: false, chyba: "Návrh se nepodařilo načíst." };
     return { ok: true, navrh };
   } catch {
-    return { ok: false, chyba: "Návrh se nepodařilo načíst." };
+    return { ok: false, chyba: CTENI_BEZ_SPOJENI };
   }
 }
 
@@ -274,7 +275,7 @@ export async function nahrejSoubor(
     const navrhy = Array.isArray(prisle) ? prisle.filter(jeNavrh) : [];
     return { ok: true, navrhy };
   } catch {
-    return { ok: false, chyba: "Soubor se nepodařilo nahrát." };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
 }
 

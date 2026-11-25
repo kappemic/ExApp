@@ -6,6 +6,7 @@ import Ikona from "../components/Ikona";
 import PrihlaseniVypravaSheet from "../components/vypravy/PrihlaseniVypravaSheet";
 import StrankaKostra from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
+import { useZpet } from "../hooks/useZpet";
 import {
   jeBezOmezeni,
   volnaMista,
@@ -26,6 +27,8 @@ export default function KdoJedePage(): JSX.Element {
   const { id } = useParams();
   const hledaniId = useId();
   const { user } = useAuth();
+  const idVypravy = id ?? "";
+  const zpet = useZpet(`/vypravy/${idVypravy}`);
   const [expedice, setExpedice] = useState<Expedition | null>(null);
   const [ucastnici, setUcastnici] = useState<ApiUcastnik[]>([]);
   const [stav, setStav] = useState<"nacitani" | "hotovo" | "chyba">("nacitani");
@@ -35,8 +38,6 @@ export default function KdoJedePage(): JSX.Element {
   const [akceBezi, setAkceBezi] = useState(false);
   const [akceChyba, setAkceChyba] = useState<string | null>(null);
   const [filtrRole, setFiltrRole] = useState<"vsichni" | "organizuje" | "volna">("vsichni");
-
-  const idVypravy = id ?? "";
 
   useEffect(() => {
     if (idVypravy.length === 0) return;
@@ -166,11 +167,12 @@ export default function KdoJedePage(): JSX.Element {
     <main className="mx-auto w-full max-w-lg px-5 pb-6 pt-4 sm:max-w-[46rem] sm:px-6 sm:pt-8 min-[90rem]:max-w-none min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11">
       <HlavickaZpet
         zpet={detailPath}
-        zpetPopisek="Zpět na výpravu"
+        zpetPopisek="Zpět"
+        onZpet={zpet}
         titulek="Kdo jede"
         className="mb-4 min-[90rem]:hidden"
       />
-      <ZpetPocitac zpet={detailPath} popisek="Zpět na výpravu" />
+      <ZpetPocitac zpet={detailPath} popisek="Zpět" />
 
       <div className="flex flex-col min-[90rem]:flex-row min-[90rem]:items-end min-[90rem]:justify-between">
         <div className="flex min-w-0 flex-col gap-4 min-[90rem]:gap-2.5">

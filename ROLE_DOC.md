@@ -86,6 +86,9 @@ výpravy, kódy, schůzky a fotky; cizí profily neupravuje a admina neuděluje.
 Hlavní admin to smí a může povýšit člena na admina i na hlavního admina
 (`vyzadujSuperadmina` na `PATCH /api/users/:id`, `PATCH /api/clenove/:id`,
 `DELETE /api/users/:id`).
+Pozvánkový kód nese roli nového účtu (`ROLE_KODU`, migrace 0027): běžný admin
+smí jen `clen`, hlavní admin i `aktivni-clen`, `clen-rady` a `vedeni`. Admin
+z kódu vzniknout nemůže.
 
 | Hodnost (`Role`) | Auth role | Poznámka |
 |------------------|-----------|----------|

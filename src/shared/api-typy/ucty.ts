@@ -2,7 +2,7 @@
  * Codes, registration, login, profile, and member contracts.
  */
 
-import type { Clenstvi, Funkce, Role } from "../../config/roles";
+import type { Clenstvi, Funkce, Role, RoleKodu } from "../../config/roles";
 import type { UserId, ApiUser, RegistrationCodeId } from "./spolecne";
 
 
@@ -13,10 +13,12 @@ import type { UserId, ApiUser, RegistrationCodeId } from "./spolecne";
 
 export const ADMIN_CODES_PATH = "/api/admin/codes" as const;
 
-/** Vstup je záměrně prázdný: expirace je fixně 10 minut (PRD 2.1). */
+/** Expirace je fixně 10 minut (PRD 2.1). */
 export interface VytvoritKodRequest {
   /** Volitelná poznámka pro admina. Max 120 znaků. Nikdy povinná. */
   poznamka?: string;
+  /** Role nového účtu. Chybějící = `clen`. Vyšší smí jen hlavní admin (jinak 403). */
+  role?: RoleKodu;
 }
 
 export interface VytvoritKodResponse {
@@ -26,12 +28,16 @@ export interface VytvoritKodResponse {
   createdAt: string;
   /** createdAt + 10 minut. Klient odpočítává podle této hodnoty. */
   expiresAt: string;
+  /** Role, se kterou se podle kódu založí účet. Chybí = `clen` (starší server). */
+  role?: RoleKodu;
 }
 
 /** Live invite code. Never carries usedBy, a hash, or a webhook. */
 export interface ZivyKodPolozka {
   code: string;
   expiresAt: string;
+  /** Chybí = `clen` (starší server). */
+  role?: RoleKodu;
 }
 
 /** GET /api/admin/codes — non-expired rows only. Admin guard stays on the route. */

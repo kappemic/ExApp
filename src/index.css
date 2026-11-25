@@ -131,9 +131,23 @@
   }
 
   :focus-visible {
-    outline: 3px solid var(--color-smrk);
+    outline: 2px solid var(--color-smrk);
     outline-offset: 2px;
-    border-radius: 2px;
+  }
+
+  /* Prvek bez vlastních rohů (textový odkaz). Nulová specificita, ostatní si drží tvar. */
+  :where(a:focus-visible) {
+    border-radius: 4px;
+  }
+
+  /* Řádky karet mají rámeček uvnitř. Rohy jako karta, jinak je první a poslední řádek uřízne. */
+  [class*="focus-visible:-outline-offset"]:focus-visible {
+    border-radius: 14px;
+  }
+
+  /* Položky vyskakovacích nabídek leží u okraje posuvného seznamu, rámeček venku by se uřízl. */
+  :is(.vyskakovaci-panel, .vyskakovaci-menu, .nabidka-seznam, .registrace-nabidka) :is([role="option"], [role="menuitem"]):focus-visible {
+    outline-offset: -2px;
   }
 
   @media (prefers-reduced-motion: reduce) {

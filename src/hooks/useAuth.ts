@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type JSX,
   type ReactNode,
@@ -17,7 +18,13 @@ import type {
   Funkce,
   Role,
 } from "../config/roles";
-import { mapujRoliNaProfil, smiNaVypravy } from "../config/roles";
+import {
+  mapujRoliNaProfil,
+  roleKoduNeboClen,
+  smiNastavitRoliKodu,
+  smiNaVypravy,
+  type RoleKodu,
+} from "../config/roles";
 import {
   jeAuthAdmin,
   type ApiErrorBody,
@@ -36,18 +43,35 @@ import {
   normalizujKod,
 } from "../shared/api-types";
 import { normalizujTelefon } from "../shared/telefon";
+import { vyhodnotSession, type OdpovedBackendu } from "../lib/session-overeni";
+import { maSpojeni, oznamSpojeni, sledujSpojeni } from "../lib/spojeni";
+import {
+  KLIC_UCTU,
+  cekaOdhlaseni,
+  jeApiUser,
+  nactiUcet,
+  nastavCekaOdhlaseni,
+  nastavTrvalost,
+  prevezmiData,
+  smazSoukromaData,
+  smazUcet,
+  ulozUcet,
+} from "../lib/ulozeny-ucet";
 
 /**
  * useAuth — auth vrstva nad tenkým BFF (kontrakt dle src/shared/api-types.ts).
  *
- * Fetch-first s offline fallbackem:
  * - Je-li nastaveno `VITE_API_BASE_URL`, jde register / login / me /
- *   generujKod nejdřív na backend (`POST /api/register`, `POST /api/login`,
+ *   generujKod na backend (`POST /api/register`, `POST /api/login`,
  *   `GET /api/me`, `POST /api/admin/codes`, `POST /api/logout`).
  *   Session drží httpOnly cookie (credentials: include) — zdrojem pravdy
- *   je server, localStorage je jen cache/offline záloha, ne zdroj pravdy.
- * - Když backend neběží (fetch selže na síti) nebo není nakonfigurován,
- *   padá vše zpět na lokální demo úložiště:
+ *   je server.
+ * - Výpadek není odhlášení. Když backend neodpoví (síť, timeout, 5xx), platí
+ *   naposledy ověřený účet z telefonu (`lib/ulozeny-ucet.ts`), session se
+ *   ověří po návratu spojení a odhlásí až skutečná 401. Kopie slouží jen
+ *   k zobrazení, práva drží guard na serveru. Přihlášení, registrace a kódy
+ *   bez spojení nejdou.
+ * - Jen bez nakonfigurovaného backendu jede vše z lokálního demo úložiště:
  *   - uživatelé → `exapp-demo-uzivatele` (vč. hesla — jen demo, server hashuje)
  *   - session → `exapp-demo-session` (userId, obdoba GET /me)
  *   - kódy → `exapp-demo-kody` (kod, createdAt, expiresAt = +10 min)
@@ -63,6 +87,8 @@ export interface DemoKod {
   createdAt: string;
   expiresAt: string;
   poznamka: string | null;
+  /** Role, se kterou se podle kódu založí účet. */
+  role: RoleKodu;
 }
 
 export interface RegistraceVstup {
@@ -233,6 +259,7 @@ function ctiKodyRaw(): DemoKod[] {
         createdAt?: unknown;
         expiresAt?: unknown;
         poznamka?: unknown;
+        role?: unknown;
       };
       if (
         typeof kandidat.id !== "string" ||
@@ -252,6 +279,7 @@ function ctiKodyRaw(): DemoKod[] {
         expiresAt: kandidat.expiresAt,
         poznamka:
           typeof kandidat.poznamka === "string" ? kandidat.poznamka : null,
+        role: roleKoduNeboClen(kandidat.role),
       });
     }
     return vysledek;
@@ -483,11 +511,6 @@ function validujTvarKodu(kod: string): string | null {
 /** Základ BFF z veřejného `VITE_API_BASE_URL`. Prázdný = offline/demo režim. */
 
 
-interface BackendOdpoved {
-  status: number;
-  telo: unknown;
-}
-
 function jeOvereniKodu(
   telo: unknown,
 ): telo is { platny: true; expiresAt: string } {
@@ -503,18 +526,35 @@ function hlaskaOvereni(telo: unknown): string {
   return telo.error.message;
 }
 
+/** Po téhle době se start bez odpovědi opře o uložený účet, ověření běží dál. */
+const CEKANI_NA_OVERENI_MS = 4000;
+/** Visící `GET /api/me` se vzdá, aby se dalo zkusit znovu. */
+const LIMIT_OVERENI_MS = 15_000;
+/** Jak často se bez spojení zkouší session ověřit. */
+const OPAKOVANI_OVERENI_MS = 20_000;
+
+const BEZ_SPOJENI_PRIHLASENI =
+  "Nejde se spojit se serverem. Přihlášení potřebuje připojení k internetu.";
+const BEZ_SPOJENI_REGISTRACE =
+  "Nejde se spojit se serverem. Registrace potřebuje připojení k internetu.";
+const BEZ_SPOJENI_KOD =
+  "Nejde se spojit se serverem. Kód ověřím, až budeš online.";
+const BEZ_SPOJENI_NOVY_KOD =
+  "Nejde se spojit se serverem. Kód půjde vytvořit, až budeš online.";
+
 /**
- * Jednotné volání BFF se session cookie. Vrací `null` pouze když backend
- * není nakonfigurován nebo je síťově nedostupný → volající padá na demo.
- * API odpověď (i chybová) znamená „server je zdrojem pravdy".
+ * Jednotné volání BFF se session cookie. Rozlišuje „backend není nastavený“
+ * (demo) od „nastavený je, ale neodpověděl“. Odpověď i chybová znamená,
+ * že zdrojem pravdy je server.
  */
 async function volejBackend(
   cesta: string,
   metoda: "GET" | "POST",
   payload?: Record<string, unknown>,
-): Promise<BackendOdpoved | null> {
+  signal?: AbortSignal,
+): Promise<OdpovedBackendu> {
   const zaklad = apiBase();
-  if (zaklad.length === 0) return null;
+  if (zaklad.length === 0) return { druh: "neni" };
   try {
     const odpoved = await fetch(`${zaklad}${cesta}`, {
       method: metoda,
@@ -527,29 +567,45 @@ async function volejBackend(
               Accept: "application/json",
             },
       body: payload === undefined ? undefined : JSON.stringify(payload),
+      signal,
     });
     const telo = await ctiJsonTelo(odpoved);
-    return { status: odpoved.status, telo };
+    return { druh: "odpoved", status: odpoved.status, telo };
   } catch {
-    return null;
+    return { druh: "sit" };
   }
 }
 
-/** Validace uživatele z backendu na hranici (api-types: veřejný profil). */
-function jeApiUser(hodnota: unknown): hodnota is ApiUser {
-  if (typeof hodnota !== "object" || hodnota === null) return false;
-  const kandidat = hodnota as Record<string, unknown>;
-  return (
-    typeof kandidat["id"] === "string" &&
-    typeof kandidat["email"] === "string" &&
-    typeof kandidat["jmeno"] === "string" &&
-    typeof kandidat["role"] === "string" &&
-    (kandidat["authRole"] === "USER" ||
-      kandidat["authRole"] === "ADMIN" ||
-      kandidat["authRole"] === "SUPERADMIN") &&
-    (kandidat["isSuperadmin"] === undefined ||
-      typeof kandidat["isSuperadmin"] === "boolean")
-  );
+/** Volání bez těla s časovým limitem, vypršení se bere jako výpadek sítě. */
+async function volejSLimitem(
+  cesta: string,
+  metoda: "GET" | "POST",
+): Promise<OdpovedBackendu> {
+  const zruseni = new AbortController();
+  const casovac = setTimeout(() => zruseni.abort(), LIMIT_OVERENI_MS);
+  try {
+    return await volejBackend(cesta, metoda, undefined, zruseni.signal);
+  } finally {
+    clearTimeout(casovac);
+  }
+}
+
+let probihajiciOdhlaseni: Promise<boolean> | null = null;
+
+/**
+ * Smaže serverovou cookie. Bez spojení to zůstane na později. Běží nejvýš
+ * jednou: opožděná odpověď by jinak smazala cookie nového přihlášení.
+ */
+function dokonciOdhlaseni(): Promise<boolean> {
+  probihajiciOdhlaseni ??= (async (): Promise<boolean> => {
+    const odpoved = await volejSLimitem("/api/logout", "POST");
+    const hotovo = odpoved.druh === "odpoved" && odpoved.status === 200;
+    if (hotovo) nastavCekaOdhlaseni(false);
+    return hotovo;
+  })().finally(() => {
+    probihajiciOdhlaseni = null;
+  });
+  return probihajiciOdhlaseni;
 }
 
 /**
@@ -613,6 +669,7 @@ function ctiKod(telo: unknown, poznamka: string | null): DemoKod | null {
     createdAt: kandidat["createdAt"] as string,
     expiresAt: kandidat["expiresAt"] as string,
     poznamka,
+    role: roleKoduNeboClen(kandidat["role"]),
   };
 }
 
@@ -698,11 +755,15 @@ function mapaChybyPrihlaseni(
  */
 function vytvorLokalniKod(
   poznamkaCista: string,
+  role: RoleKodu,
   authRole: AuthRole | null,
   maAdmina: boolean,
 ): DemoKod {
   if (maAdmina && !jeAuthAdmin(authRole)) {
     throw new Error("Generovat kódy může jen admin.");
+  }
+  if (!smiNastavitRoliKodu(role, authRole === "SUPERADMIN")) {
+    throw new Error("Kód s vyšší rolí než člen smí vytvořit jen hlavní admin.");
   }
   const vsechny = purgeExpirovanychKodu();
   const ted = Date.now();
@@ -712,6 +773,7 @@ function vytvorLokalniKod(
     createdAt: new Date(ted).toISOString(),
     expiresAt: new Date(ted + DESET_MINUT_MS).toISOString(),
     poznamka: poznamkaCista.length === 0 ? null : poznamkaCista,
+    role,
   };
   const next = [novy, ...vsechny];
   bezpecnePis(CODES_KEY, JSON.stringify(next));
@@ -738,6 +800,10 @@ interface AuthKontext {
    * (`smiNaVypravy`), samotný admin příznak nestačí.
    */
   muzeSpravovatVypravy: boolean;
+  /** Server zatím neodpověděl: `user` je kopie z telefonu, nebo není známý. */
+  bezOvereni: boolean;
+  /** Zkusí session ověřit hned (tlačítko „Zkusit znovu“). */
+  overZnovu: () => Promise<void>;
   /** True, dokud v systému není žádný ADMIN — probíhá prvotní nastavení. */
   jeBootstrap: boolean;
   kody: DemoKod[];
@@ -747,10 +813,10 @@ interface AuthKontext {
   odhlasit: () => void;
   /**
    * Obdoba POST /api/admin/codes — expirace fixně +10 minut.
-   * S backendem jde na server, bez spojení padá na lokální demo.
+   * S backendem jde na server a bez spojení se odmítne.
    * Zamítnutí (ne-admin) vyhazuje česky (konzumuje CodesPanel).
    */
-  generujKod: (poznamka: string) => Promise<DemoKod>;
+  generujKod: (poznamka: string, role: RoleKodu) => Promise<DemoKod>;
 }
 
 const AuthContext = createContext<AuthKontext | null>(null);
@@ -767,60 +833,165 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const [kody, setKody] = useState<DemoKod[]>([]);
   const [jeBootstrap, setJeBootstrap] = useState<boolean>(false);
 
+  const [bezOvereni, setBezOvereni] = useState<boolean>(false);
+  /** Přihlášení a odhlášení zneplatní ověření, které zrovna běží. */
+  const generaceRef = useRef<number>(0);
+  const probihaRef = useRef<Promise<void> | null>(null);
+  const posledniPokusRef = useRef<number>(0);
+
+  /** Ověřený účet: cizí data pryč, kopie do telefonu, pak teprve na obrazovku. */
+  const prijmiUcet = useCallback((uzivatel: ApiUser): void => {
+    prevezmiData(uzivatel.id);
+    ulozUcet(uzivatel);
+    setUser((predchozi) =>
+      predchozi !== null && JSON.stringify(predchozi) === JSON.stringify(uzivatel)
+        ? predchozi
+        : uzivatel,
+    );
+    setBezOvereni(false);
+  }, []);
+
+  const zahodUcet = useCallback((iZpevnik: boolean): void => {
+    smazUcet();
+    smazSoukromaData({ iZpevnik });
+    setUser(null);
+    setKody([]);
+    setBezOvereni(false);
+  }, []);
+
+  /** Server neodpověděl: zůstane zobrazený účet, jinak naposledy ověřený. */
+  const pouzijUlozenyUcet = useCallback((): void => {
+    const ulozeny = nactiUcet();
+    setUser((predchozi) => predchozi ?? (ulozeny === null ? null : doplnTrio(ulozeny)));
+    setBezOvereni(true);
+  }, []);
+
+  const overZnovu = useCallback((): Promise<void> => {
+    if (probihaRef.current !== null) return probihaRef.current;
+    const beh = (async (): Promise<void> => {
+      posledniPokusRef.current = Date.now();
+      const generace = generaceRef.current;
+      if (cekaOdhlaseni() && !(await dokonciOdhlaseni())) {
+        // Odhlášený na tomhle telefonu je, jen o tom server ještě neví.
+        return;
+      }
+      const stav = vyhodnotSession(await volejSLimitem(ME_PATH, "GET"), ctiUsera);
+      if (generace !== generaceRef.current) return;
+      if (stav.druh === "prihlasen") prijmiUcet(stav.user);
+      else if (stav.druh === "odhlasen") zahodUcet(false);
+      else {
+        oznamSpojeni(false);
+        pouzijUlozenyUcet();
+      }
+    })().finally(() => {
+      probihaRef.current = null;
+    });
+    probihaRef.current = beh;
+    return beh;
+  }, [prijmiUcet, zahodUcet, pouzijUlozenyUcet]);
+
+  /* Start: s backendem ověření session, bez něj lokální demo účty. */
   useEffect(() => {
     let zive = true;
-
-    // Obdoba GET /api/me — s backendem je zdrojem pravdy cookie session,
-    // bez spojení padáme na lokální demo session (cache, ne zdroj pravdy).
-    void (async (): Promise<void> => {
-      const odpoved = await volejBackend(ME_PATH, "GET");
-      if (!zive) return;
-      if (odpoved !== null) {
-        // Bootstrap vlastní server (první kód i první admin bez session);
-        // klientský banner proto neukazujeme — jeBootstrap drží server.
-        const uzivatel = ctiUsera(odpoved.telo);
-        setUser(odpoved.status === 200 ? uzivatel : null);
-        setJeBootstrap(false);
+    if (apiBase().length === 0) {
+      const nactiDemo = (): void => {
+        const uzivatele = parseUzivatele();
+        const sid = bezpecneCti(SESSION_KEY);
+        const zaznam = sid === null ? undefined : uzivatele.find((u) => u.id === sid);
+        setUser(zaznam === undefined ? null : verejnyProfil(zaznam));
+        setJeBootstrap(!maSystemAdmina(uzivatele));
         setKody(purgeExpirovanychKodu());
-        setIsLoading(false);
-        return;
-      }
-      const uzivatele = parseUzivatele();
-      const sessionId = bezpecneCti(SESSION_KEY);
-      const nalezen =
-        sessionId === null
-          ? undefined
-          : uzivatele.find((u) => u.id === sessionId);
-      setUser(nalezen === undefined ? null : verejnyProfil(nalezen));
-      setJeBootstrap(!maSystemAdmina(uzivatele));
-      setKody(purgeExpirovanychKodu());
+      };
+      nactiDemo();
       setIsLoading(false);
-    })();
+      window.addEventListener("storage", nactiDemo);
+      return () => {
+        window.removeEventListener("storage", nactiDemo);
+      };
+    }
 
-    const sync = (): void => {
-      // S backendem je zdrojem pravdy cookie session (GET /me) — storage
-      // event tu smí sáhnout jen na cache kódů, nikdy na uživatele.
-      if (apiBase().length > 0) {
-        setKody(purgeExpirovanychKodu());
-        return;
-      }
-      const aktualni = parseUzivatele();
-      const sid = bezpecneCti(SESSION_KEY);
-      const zaznam =
-        sid === null ? undefined : aktualni.find((u) => u.id === sid);
-      setUser(zaznam === undefined ? null : verejnyProfil(zaznam));
-      setJeBootstrap(!maSystemAdmina(aktualni));
-      setKody(purgeExpirovanychKodu());
+    // Bootstrap vlastní server (první kód i první admin bez session);
+    // klientský banner proto neukazujeme — jeBootstrap drží server.
+    setKody(purgeExpirovanychKodu());
+    const start = (): void => {
+      if (zive) setIsLoading(false);
     };
+    // Slabý signál nesmí držet přihlášeného u kostry: po chvíli se ukáže
+    // uložený účet a ověření doběhne na pozadí.
+    const netrpelive = (): void => {
+      if (!zive || nactiUcet() === null) return;
+      oznamSpojeni(false);
+      pouzijUlozenyUcet();
+      start();
+    };
+    const casovac = window.setTimeout(
+      netrpelive,
+      navigator.onLine === false ? 0 : CEKANI_NA_OVERENI_MS,
+    );
+    void overZnovu().then(() => {
+      window.clearTimeout(casovac);
+      start();
+    });
+    return () => {
+      zive = false;
+      window.clearTimeout(casovac);
+    };
+  }, [overZnovu, pouzijUlozenyUcet]);
+
+  /* Návrat spojení: session se ověří sama, při 401 se uživatel odhlásí. */
+  useEffect(() => {
+    if (apiBase().length === 0) return;
+    const jeCoOverit = (): boolean => bezOvereni || !maSpojeni() || cekaOdhlaseni();
+    const zkus = (): void => {
+      if (document.hidden || !jeCoOverit()) return;
+      void overZnovu();
+    };
+    const online = (): void => {
+      void overZnovu();
+    };
+    const offline = (): void => oznamSpojeni(false);
+    // Jiné volání prošlo. Odstup brání smyčce, když padá jen `GET /api/me`.
+    const zmenaSpojeni = (): void => {
+      if (!maSpojeni() || !bezOvereni) return;
+      if (Date.now() - posledniPokusRef.current < OPAKOVANI_OVERENI_MS / 4) return;
+      void overZnovu();
+    };
+    const casovac = window.setInterval(zkus, OPAKOVANI_OVERENI_MS);
+    const zrusSledovani = sledujSpojeni(zmenaSpojeni);
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
+    document.addEventListener("visibilitychange", zkus);
+    return () => {
+      window.clearInterval(casovac);
+      zrusSledovani();
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
+      document.removeEventListener("visibilitychange", zkus);
+    };
+  }, [bezOvereni, overZnovu]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       setKody(purgeExpirovanychKodu());
     }, 15000);
+    // Druhé okno téže aplikace: odhlášení platí hned, jiný účet se ověří.
+    const sync = (udalost: StorageEvent): void => {
+      if (apiBase().length === 0) return;
+      setKody(purgeExpirovanychKodu());
+      if (udalost.key !== KLIC_UCTU && udalost.key !== null) return;
+      if (udalost.newValue === null) {
+        generaceRef.current += 1;
+        setUser(null);
+        setBezOvereni(false);
+      }
+      void overZnovu();
+    };
     window.addEventListener("storage", sync);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("storage", sync);
     };
-  }, []);
+  }, [overZnovu]);
 
   const register = useCallback(
     async (vstup: RegistraceVstup): Promise<AuthVysledek<PoleRegistrace>> => {
@@ -851,8 +1022,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         };
       }
 
-      // Backend-first: server je zdrojem pravdy (i chybové odpovědi).
-      // Jen síťový výpadek (null) padá na lokální demo níže.
+      // Server je zdrojem pravdy (i chybové odpovědi). Lokální demo níže
+      // jede jen bez nastaveného backendu, výpadek registraci odmítne.
       const payload: Record<string, unknown> = {
         jmeno: vstup.jmeno.trim(),
         email: vstup.email.trim().toLowerCase(),
@@ -871,14 +1042,21 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       if (discordNick !== null) payload["discordNick"] = discordNick;
       payload["skola"] = skola;
       payload["trida"] = trida;
+      if (cekaOdhlaseni()) await dokonciOdhlaseni();
       const backend = await volejBackend(REGISTER_PATH, "POST", payload);
-      if (backend !== null) {
+      if (backend.druh === "sit") {
+        return { uspech: false, chyba: BEZ_SPOJENI_REGISTRACE, chybyPoli: {} };
+      }
+      if (backend.druh === "odpoved") {
         const uzivatel = ctiUsera(backend.telo);
         if (
           (backend.status === 201 || backend.status === 200) &&
           uzivatel !== null
         ) {
-          setUser(uzivatel);
+          generaceRef.current += 1;
+          nastavCekaOdhlaseni(false);
+          nastavTrvalost(true);
+          prijmiUcet(uzivatel);
           setJeBootstrap(false);
           return { uspech: true, chyba: null, chybyPoli: {} };
         }
@@ -919,6 +1097,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       // Bootstrap: pokud ještě neexistuje žádný ADMIN, první registrovaný
       // uživatel se stane adminem (role admin / authRole ADMIN).
       const jePrvniAdmin = !maSystemAdmina(uzivatele);
+      const profilKodu = mapujRoliNaProfil(kod.role);
       const ted = new Date().toISOString();
       const novy: DemoUserRecord = {
         id: noveId(),
@@ -930,10 +1109,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         skola: (vstup.skola ?? "").trim(),
         trida: (vstup.trida ?? "").trim(),
         heslo: await hashDemoHesla(vstup.heslo),
-        role: jePrvniAdmin ? "admin" : "clen",
+        role: jePrvniAdmin ? "admin" : kod.role,
         authRole: jePrvniAdmin ? "SUPERADMIN" : "USER",
-        clenstvi: jePrvniAdmin ? "aktivni_clen" : "clen",
-        funkce: null,
+        clenstvi: jePrvniAdmin ? "aktivni_clen" : profilKodu.clenstvi,
+        funkce: jePrvniAdmin ? null : profilKodu.funkce,
         isAdmin: jePrvniAdmin,
         isSuperadmin: jePrvniAdmin,
         createdAt: ted,
@@ -953,7 +1132,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       }
       return { uspech: true, chyba: null, chybyPoli: {} };
     },
-    [],
+    [prijmiUcet],
   );
 
   const overKod = useCallback(
@@ -963,7 +1142,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         return { ok: false, chyba: VALIDACNI_ZPRAVY.kodNeplatnyTvar };
       }
       const odpoved = await volejBackend(OVERENI_KODU_PATH, "POST", { kod: cisty });
-      if (odpoved !== null) {
+      if (odpoved.druh === "sit") return { ok: false, chyba: BEZ_SPOJENI_KOD };
+      if (odpoved.druh === "odpoved") {
         if (odpoved.status === 200 && jeOvereniKodu(odpoved.telo)) {
           return { ok: true, expiresAt: odpoved.telo.expiresAt };
         }
@@ -996,15 +1176,22 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 
       // Backend-first: server je zdrojem pravdy. Pozor: demo-účty
       // z offline režimu v DB nejsou → 401 znamená přeregistrovat se.
+      if (cekaOdhlaseni()) await dokonciOdhlaseni();
       const odpoved = await volejBackend(LOGIN_PATH, "POST", {
         email: vstup.email.trim().toLowerCase(),
         heslo: vstup.heslo,
         zustat: vstup.zustat === true,
       });
-      if (odpoved !== null) {
+      if (odpoved.druh === "sit") {
+        return { uspech: false, chyba: BEZ_SPOJENI_PRIHLASENI, chybyPoli: {} };
+      }
+      if (odpoved.druh === "odpoved") {
         const uzivatel = ctiUsera(odpoved.telo);
         if (odpoved.status === 200 && uzivatel !== null) {
-          setUser(uzivatel);
+          generaceRef.current += 1;
+          nastavCekaOdhlaseni(false);
+          nastavTrvalost(vstup.zustat === true);
+          prijmiUcet(uzivatel);
           setJeBootstrap(false);
           return { uspech: true, chyba: null, chybyPoli: {} };
         }
@@ -1035,23 +1222,28 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setUser(verejnyProfil(zaznam));
       return { uspech: true, chyba: null, chybyPoli: {} };
     },
-    [],
+    [prijmiUcet],
   );
 
   const odhlasit = useCallback((): void => {
-    // Serverovou cookie mažeme fire-and-forget; lokální stav čistíme hned.
-    void volejBackend("/api/logout", "POST");
+    generaceRef.current += 1;
+    if (apiBase().length > 0) {
+      // Cookie je httpOnly, smazat ji umí jen server. Bez spojení se odhlášení
+      // zapíše a dokončí po připojení, do té doby se účet neobnoví.
+      nastavCekaOdhlaseni(true);
+      void dokonciOdhlaseni();
+    }
     try {
       window.localStorage.removeItem(SESSION_KEY);
     } catch {
       // Bez storage prostě zahodíme stav v paměti.
     }
-    setUser(null);
-  }, []);
+    zahodUcet(true);
+  }, [zahodUcet]);
 
   /** Obdoba POST /api/admin/codes — expirace fixně +10 minut. */
   const generujKod = useCallback(
-    async (poznamka: string): Promise<DemoKod> => {
+    async (poznamka: string, role: RoleKodu): Promise<DemoKod> => {
       const cista =
         poznamka.trim().length === 0
           ? null
@@ -1062,9 +1254,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const odpoved = await volejBackend(
         ADMIN_CODES_PATH,
         "POST",
-        cista === null ? {} : { poznamka: cista },
+        cista === null ? { role } : { poznamka: cista, role },
       );
-      if (odpoved !== null) {
+      if (odpoved.druh === "sit") throw new Error(BEZ_SPOJENI_NOVY_KOD);
+      if (odpoved.druh === "odpoved") {
         if (odpoved.status === 201) {
           const kod = ctiKod(odpoved.telo, cista);
           if (kod === null) {
@@ -1079,19 +1272,18 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           setKody(next);
           return kod;
         }
-        if (odpoved.status === 401 || odpoved.status === 403) {
-          throw new Error("Generovat kódy může jen admin.");
-        }
+        // 403 má dva důvody (ne-admin, vyšší role), rozliší je hláška serveru.
         if (jeApiChyba(odpoved.telo)) {
           throw new Error(odpoved.telo.error.message);
         }
         throw new Error("Kód se nepodařilo vygenerovat. Zkus to znovu.");
       }
-      // Offline/demo fallback: původní lokální generování.
+      // Demo bez backendu: původní lokální generování.
       // Bootstrap: dokud neexistuje žádný admin, jde vygenerovat první kód
       // bez přihlášení; po vytvoření prvního admina už jen ADMIN.
       const novy = vytvorLokalniKod(
         cista ?? "",
+        role,
         user?.authRole ?? null,
         maSystemAdmina(parseUzivatele()),
       );
@@ -1128,6 +1320,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       isSuperadmin: superadminPriznak,
       muzeSpravovatVypravy:
         profil === null ? false : smiNaVypravy(profil),
+      bezOvereni,
+      overZnovu,
       jeBootstrap,
       kody,
       register,
@@ -1136,7 +1330,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       odhlasit,
       generujKod,
     };
-  }, [user, isLoading, jeBootstrap, kody, register, login, overKod, odhlasit, generujKod]);
+  }, [user, isLoading, bezOvereni, overZnovu, jeBootstrap, kody, register, login, overKod, odhlasit, generujKod]);
 
   return createElement(AuthContext.Provider, { value: hodnota }, children);
 }

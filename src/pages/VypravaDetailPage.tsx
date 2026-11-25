@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState, type JSX } from "react";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import ExpeditionModal from "../components/expeditions/ExpeditionModal";
 import StrankaKostra from "../components/StrankaKostra";
 import { useKonverzacePrehled } from "../hooks/useKonverzacePrehled";
+import { useZpet } from "../hooks/useZpet";
 import { apiBase } from "../lib/api-base";
-import { getExpeditionsSync } from "../lib/expeditions-api";
+import { getExpeditions, getExpeditionsSync } from "../lib/expeditions-api";
 import type { Expedition } from "../lib/mock-expeditions";
+import { useSpojeni } from "../lib/spojeni";
 import { parseVypravaId, VYPRAVA_PARAM } from "../lib/vyprava-deep-link";
 import { expediceDetailPath, jeApiExpedice, type ApiExpedice } from "../shared/api-types";
 
@@ -45,7 +47,10 @@ async function nactiDetailVypravy(id: string): Promise<Expedition | null> {
     if (!jeApiExpedice(expedice)) return null;
     return prevedApiExpedici(expedice);
   } catch {
-    return null;
+    // Bez sítě: detail otevřený není, ale výprava bývá v uloženém seznamu.
+    const seznam = await getExpeditions();
+    if (seznam.source !== "db") return null;
+    return seznam.data.find((polozka) => polozka.id === id) ?? null;
   }
 }
 
@@ -53,7 +58,6 @@ async function nactiDetailVypravy(id: string): Promise<Expedition | null> {
 export default function VypravaDetailPage(): JSX.Element {
   const { id: paramId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const idZParam = parseVypravaId(searchParams.get(VYPRAVA_PARAM));
   const idVypravy = parseVypravaId(paramId ?? null) ?? idZParam;
   const startNaDiskuzi =
@@ -69,6 +73,7 @@ export default function VypravaDetailPage(): JSX.Element {
   const [expedice, setExpedice] = useState<Expedition | null>(() =>
     idVypravy !== null ? (mapaLokalni.get(idVypravy) ?? null) : null,
   );
+  const spojeno = useSpojeni();
   const [stav, setStav] = useState<"idle" | "nacteni" | "hotovo" | "chyba">(
     () => (expedice !== null ? "hotovo" : "idle"),
   );
@@ -106,12 +111,17 @@ export default function VypravaDetailPage(): JSX.Element {
     }
   }, [idZParam, paramId, searchParams, setSearchParams]);
 
-  const zpet = useCallback((): void => {
-    const zobrazeni = searchParams.get("zobrazeni");
-  const qs =
-      zobrazeni === "kalendar" ? "?zobrazeni=kalendar" : "";
-    navigate(`/vypravy${qs}`);
-  }, [navigate, searchParams]);
+  // Přihlášení se otevře jednou. Bez úklidu by naskočilo znovu po návratu z „Kdo jede“.
+  useEffect(() => {
+    if (!startNaPrihlaseni || stav === "nacteni" || expedice === null) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("prihlasit");
+    setSearchParams(next, { replace: true });
+  }, [startNaPrihlaseni, stav, expedice, searchParams, setSearchParams]);
+
+  const zpet = useZpet(
+    searchParams.get("zobrazeni") === "kalendar" ? "/vypravy?zobrazeni=kalendar" : "/vypravy",
+  );
 
   if (idVypravy === null) {
     return <Navigate to="/vypravy" replace />;
@@ -120,13 +130,13 @@ export default function VypravaDetailPage(): JSX.Element {
   if (stav === "nacteni" || expedice === null) {
     return stav === "chyba" ? (
       <main className="mx-auto max-w-lg px-4 py-10">
-        <p className="text-base text-inkoust">Výpravu se nepodařilo načíst.</p>
+        <p className="text-base text-inkoust">{spojeno ? "Výpravu se nepodařilo načíst." : "Bez spojení se výprava nenačetla a v telefonu není uložená."}</p>
         <button
           type="button"
-          onClick={() => navigate("/vypravy")}
+          onClick={zpet}
           className="nahled-press mt-4 inline-flex min-h-11 items-center rounded-xl bg-smrk px-5 text-sm font-semibold text-papir"
         >
-          Zpět na výpravy
+          Zpět
         </button>
       </main>
     ) : (
@@ -141,7 +151,7 @@ export default function VypravaDetailPage(): JSX.Element {
       expedice={expedice}
       onZavrit={zpet}
       onAktualizace={(nova) => setExpedice(nova)}
-      onSmazana={() => navigate("/vypravy")}
+      onSmazana={zpet}
       neprectenaDiskuze={neprecteneVypravy.get(expedice.id) === true}
       startNaDiskuzi={startNaDiskuzi}
       startNaPrihlaseni={startNaPrihlaseni}

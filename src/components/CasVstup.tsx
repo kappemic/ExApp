@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type JSX } from "react";
 import { evropskyNaIsoCas, isoCasNaEvropsky, maskaEvropskehoCasu } from "../lib/evropsky-cas";
 import Ikona from "./Ikona";
+import { TLACITKO_V_POLI } from "./formular-tridy";
 import VyskakovaciPanel from "./VyskakovaciPanel";
 
 const CAS_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -147,7 +148,7 @@ export default function CasVstup({
         aria-controls={panelId}
         disabled={disabled}
         onClick={() => setOtevreno((stav) => !stav)}
-        className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-lg text-mech hover:bg-mlha hover:text-inkoust disabled:cursor-not-allowed disabled:opacity-40"
+        className={TLACITKO_V_POLI}
       >
         <Ikona nazev={ikona} className="size-4 min-[90rem]:size-3.5 min-[90rem]:text-ink-3" />
       </button>

@@ -17,3 +17,10 @@ export const OBLAST_FORMULARE =
 
 /** Popisek nad polem. */
 export const POPISEK_POLE = "text-[11.5px] font-semibold text-mech min-[90rem]:text-[11px]";
+
+/**
+ * Ikonové tlačítko uvnitř pole (kalendář, hodiny). Zvýraznění leží celé v poli,
+ * odsazené od okraje, rohy jsou soustředné s polem. Dotyková plocha je větší (44 px).
+ */
+export const TLACITKO_V_POLI =
+  "absolute inset-y-1 right-1 flex w-9 items-center justify-center rounded-[7px] text-mech before:absolute before:-inset-1 before:content-[''] hover:bg-mlha hover:text-inkoust focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk aria-expanded:bg-mlha aria-expanded:text-smrk disabled:cursor-not-allowed disabled:opacity-40 min-[90rem]:rounded-md";

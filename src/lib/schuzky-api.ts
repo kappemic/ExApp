@@ -1,5 +1,6 @@
 import { apiBase } from "./api-base";
 import { OBECNA_CHYBA, chybaZApiTela, ctiJsonTelo, jeRecord } from "./api-odpoved";
+import { ZAPIS_BEZ_SPOJENI } from "./spojeni";
 /**
  * Tenká read + write vrstva pro schůzky (Fáze 3).
  *
@@ -156,7 +157,7 @@ export async function vytvorSchuzku(
       body: JSON.stringify(payload),
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -195,7 +196,7 @@ export async function upravSchuzku(
       body: JSON.stringify(payload),
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) {
@@ -242,7 +243,7 @@ export async function smazSchuzku(
       credentials: "include",
     });
   } catch {
-    return { ok: false, chyba: OBECNA_CHYBA };
+    return { ok: false, chyba: ZAPIS_BEZ_SPOJENI };
   }
   const telo = await ctiJsonTelo(odpoved);
   if (!odpoved.ok) return chybaZApiTela(telo);

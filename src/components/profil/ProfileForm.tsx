@@ -426,7 +426,7 @@ export default function ProfileForm({
   const potrebaHesla = form.email.trim() !== pocatecni.email.trim() || chyby.soucasneHeslo !== undefined;
   const vstupTrida = radky
     ? "h-[46px] w-full rounded-[11px] border border-pole bg-povrch px-3.5 text-base text-inkoust placeholder:text-ink-4 focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 disabled:opacity-50 min-[90rem]:h-[42px] min-[90rem]:rounded-[10px] min-[90rem]:bg-pole-podklad min-[90rem]:px-3 min-[90rem]:text-[13.5px]"
-    : "min-h-[44px] w-full rounded border border-pole bg-white px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir disabled:opacity-50";
+    : "min-h-[44px] w-full rounded border border-pole bg-white px-3 py-2 text-base text-inkoust placeholder:text-inkoust/40 focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25 disabled:opacity-50";
 
   function onInput(poleJmeno: FormPole) {
     return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
@@ -792,7 +792,7 @@ export default function ProfileForm({
             className={
               radky
                 ? "nahled-press inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-smrk px-[18px] text-sm font-semibold text-povrch disabled:opacity-50 sm:w-auto min-[90rem]:h-[46px]"
-                : "nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inkoust focus-visible:ring-offset-2 focus-visible:ring-offset-papir"
+                : "nahled-press nahled-prejeti min-h-[44px] min-w-[44px] touch-manipulation rounded border border-linka bg-papir px-6 py-2.5 text-base font-bold text-inkoust select-none disabled:opacity-50 focus:border-smrk focus:outline-none focus-visible:ring-2 focus-visible:ring-smrk/25"
             }
           >
             {radky ? <Ikona nazev="check" className="hidden size-4 min-[90rem]:block" /> : null}

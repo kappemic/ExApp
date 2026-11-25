@@ -9,7 +9,9 @@ import {
 import {
   chybaKombinaceRole,
   isKnownRole,
+  jeRoleKodu,
   type Role,
+  type RoleKodu,
 } from "../../../src/config/roles";
 import type { ChybyPoli, VysledekValidace } from "./spolecne";
 import { overDiscordNick, overPrijmeni, ctiString, telefonNaE164, EMAIL_REGEX, pridej, overSkolaTrida, overTvarKodu, overTelefon, overHeslo, overEmail, overJmeno, jeRecord } from "./spolecne";
@@ -144,7 +146,7 @@ export function validujOvereniKodu(
   return { uspech: true, data: { kod }, chybyPoli: {} };
 }
 
-/** Validace POST /api/admin/codes — vstup je záměrně jen nepovinná poznámka. */
+/** Nepovinná poznámka z POST /api/admin/codes. */
 export function validujPoznamkuKodu(
   telo: unknown,
 ): VysledekValidace<{ poznamka: string | null }> {
@@ -177,6 +179,25 @@ export function validujPoznamkuKodu(
     };
   }
   return { uspech: true, data: { poznamka: cista }, chybyPoli: {} };
+}
+
+/** Validace POST /api/admin/codes: nepovinná poznámka a role (chybějící = `clen`). */
+export function validujNovyKod(
+  telo: unknown,
+): VysledekValidace<{ poznamka: string | null; role: RoleKodu }> {
+  const poznamka = validujPoznamkuKodu(telo);
+  const roleRaw = jeRecord(telo) ? (telo["role"] ?? "clen") : "clen";
+  if (!jeRoleKodu(roleRaw)) {
+    return {
+      uspech: false,
+      data: null,
+      chybyPoli: { ...poznamka.chybyPoli, role: [VALIDACNI_ZPRAVY.kodRoleNeplatna] },
+    };
+  }
+  if (!poznamka.uspech || poznamka.data === null) {
+    return { uspech: false, data: null, chybyPoli: poznamka.chybyPoli };
+  }
+  return { uspech: true, data: { poznamka: poznamka.data.poznamka, role: roleRaw }, chybyPoli: {} };
 }
 
 /* ------------------------------------------------------------------ */

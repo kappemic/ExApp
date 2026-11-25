@@ -182,14 +182,16 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             <label htmlFor={`${idPrefix}-datum`} className={`block ${POPISEK_POLE}`}>
               Den
             </label>
-            <DatumVstup
-              id={`${idPrefix}-datum`}
-              value={datum}
-              onChange={setDatum}
-              ikona="chevron-down"
-              ariaInvalid={chybaPole("datum") !== undefined}
-              className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(chybaPole("datum") !== undefined)}`}
-            />
+            <div className="mt-1.5 min-[90rem]:mt-[5px]">
+              <DatumVstup
+                id={`${idPrefix}-datum`}
+                value={datum}
+                onChange={setDatum}
+                ikona="chevron-down"
+                ariaInvalid={chybaPole("datum") !== undefined}
+                className={tridyPole(chybaPole("datum") !== undefined)}
+              />
+            </div>
             {chybaPole("datum") !== undefined && (
               <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
                 {chybaPole("datum")}
@@ -200,14 +202,16 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             <label htmlFor={`${idPrefix}-cas`} className={`block ${POPISEK_POLE}`}>
               Čas
             </label>
-            <CasVstup
-              id={`${idPrefix}-cas`}
-              value={cas}
-              onChange={setCas}
-              ikona="chevron-down"
-              ariaInvalid={chybaPole("cas") !== undefined}
-              className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(chybaPole("cas") !== undefined)}`}
-            />
+            <div className="mt-1.5 min-[90rem]:mt-[5px]">
+              <CasVstup
+                id={`${idPrefix}-cas`}
+                value={cas}
+                onChange={setCas}
+                ikona="chevron-down"
+                ariaInvalid={chybaPole("cas") !== undefined}
+                className={tridyPole(chybaPole("cas") !== undefined)}
+              />
+            </div>
             {chybaPole("cas") !== undefined && (
               <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-akcent">
                 {chybaPole("cas")}
@@ -221,19 +225,21 @@ export default function SchuzkaForm(props: SchuzkaFormProps): JSX.Element {
             Opakování
           </label>
           {/* Konec řady backend neukládá. OpakovaniSchuzky je jednorazova | tydenni. */}
-          <VyberPole
-            id={`${idPrefix}-opakovani`}
-            value={opakovani}
-            onChange={(dalsi) =>
-              setOpakovani(dalsi === "tydenni" ? "tydenni" : "jednorazova")
-            }
-            ikona="repeat"
-            className={`mt-1.5 min-[90rem]:mt-[5px] ${tridyPole(false)}`}
-            volby={[
-              { value: "jednorazova", popisek: "Jednorázově" },
-              { value: "tydenni", popisek: "Každý týden" },
-            ]}
-          />
+          <div className="mt-1.5 min-[90rem]:mt-[5px]">
+            <VyberPole
+              id={`${idPrefix}-opakovani`}
+              value={opakovani}
+              onChange={(dalsi) =>
+                setOpakovani(dalsi === "tydenni" ? "tydenni" : "jednorazova")
+              }
+              ikona="repeat"
+              className={tridyPole(false)}
+              volby={[
+                { value: "jednorazova", popisek: "Jednorázově" },
+                { value: "tydenni", popisek: "Každý týden" },
+              ]}
+            />
+          </div>
         </div>
 
         <div>

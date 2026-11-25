@@ -67,7 +67,7 @@ import {
 import { rozhodniOvereniKodu } from "./overeni-kodu";
 import {
   validujOvereniKodu,
-  validujPoznamkuKodu,
+  validujNovyKod,
   validujPrihlaseni,
   validujProfilUpdate,
   validujRegistraci,
@@ -77,7 +77,11 @@ import {
 } from "./prihlaseni-limit";
 import { smiUpravitProfil } from "./profil-limit";
 import {
+  mapujRoliNaProfil,
+  roleKoduNeboClen,
+  smiNastavitRoliKodu,
   type ClenskyProfil,
+  type RoleKodu,
 } from "../../src/config/roles";
 import {
   registrationCodes,
@@ -118,7 +122,7 @@ export function registrujUcty(app: Express): void {
   }
 
   /* ------------------------------------------------------------------ */
-  /* GET /api/admin/codes — jen ADMIN. Živé řádky, jen code a expiresAt. */
+  /* GET /api/admin/codes — jen ADMIN. Živé řádky: code, expiresAt, role.  */
   /* ------------------------------------------------------------------ */
 
   app.get("/api/admin/codes", (req: Request, res: Response) => {
@@ -130,6 +134,7 @@ export function registrujUcty(app: Express): void {
             .select({
               code: registrationCodes.code,
               expiresAt: registrationCodes.expiresAt,
+              role: registrationCodes.role,
             })
             .from(registrationCodes)
             .where(gt(registrationCodes.expiresAt, new Date()))
@@ -138,6 +143,7 @@ export function registrujUcty(app: Express): void {
             kody: radky.map((radek) => ({
               code: radek.code,
               expiresAt: radek.expiresAt.toISOString(),
+              role: roleKoduNeboClen(radek.role),
             })),
           };
           res.status(200).json(telo);
@@ -153,28 +159,33 @@ export function registrujUcty(app: Express): void {
   /* ------------------------------------------------------------------ */
   /* POST /api/admin/codes — jen ADMIN. Bez admina v DB kód nevznikne;   */
   /* prvního hlavního admina založí `npm run seed:superadmin`.          */
-  /* Expirace fixně +10 minut.                                            */
+  /* Expirace fixně +10 minut. Vyšší roli než člen smí jen hlavní admin.  */
   /* ------------------------------------------------------------------ */
 
   app.post("/api/admin/codes", (req: Request, res: Response) => {
     void (async (): Promise<void> => {
-      const overeni = validujPoznamkuKodu(req.body as unknown);
+      const overeni = validujNovyKod(req.body as unknown);
       if (!overeni.uspech || overeni.data === null) {
         posliChybu(res, "VALIDATION_ERROR", "Zkontroluj zvýrazněná pole.", overeni.chybyPoli);
         return;
       }
 
-      // Poznámka se validuje na hranici, ale nemá kam se uložit
-      // (tabulka registration_codes ji nemá) — vědomě se zahazuje.
-      void overeni.data.poznamka;
+      // Poznámka se na hranici jen ověří, tabulka registration_codes ji
+      // nemá kam uložit. Ukládá se role.
+      const { role } = overeni.data;
 
       vyzadujAdmina(req, res, () => {
-        void vytvorKod(res, (req as AutentizovanyRequest).uzivatel.id);
+        const { id, isSuperadmin } = (req as AutentizovanyRequest).uzivatel;
+        if (!smiNastavitRoliKodu(role, isSuperadmin)) {
+          posliChybu(res, "ZAKAZANO", "Kód s vyšší rolí než člen smí vytvořit jen hlavní admin.");
+          return;
+        }
+        void vytvorKod(res, id, role);
       });
     })();
   });
 
-  async function vytvorKod(res: Response, createdBy: string | null): Promise<void> {
+  async function vytvorKod(res: Response, createdBy: string | null, role: RoleKodu): Promise<void> {
     try {
       await smazExpirovaneKody();
     } catch {
@@ -192,6 +203,7 @@ export function registrujUcty(app: Express): void {
             code: kod,
             createdBy,
             expiresAt: new Date(ted + DESET_MINUT_MS),
+            role,
           })
           .returning({
             id: registrationCodes.id,
@@ -205,6 +217,7 @@ export function registrujUcty(app: Express): void {
           kod,
           createdAt: radek.createdAt.toISOString(),
           expiresAt: radek.expiresAt.toISOString(),
+          role,
         };
         res.status(201).json(telo);
         return;
@@ -309,10 +322,10 @@ export function registrujUcty(app: Express): void {
 
         const passwordHash = await hashHesla(vstup.heslo);
         // Dual-write: trio je zdroj pravdy, `role` je mirror (trioNaRoli).
-        // The first admin comes only from the seed script.
+        // Roli určuje kód. Admin z něj vzniknout nemůže (roleKoduNeboClen),
+        // the first admin comes only from the seed script.
         const noveTrio: ClenskyProfil = {
-          clenstvi: "clen",
-          funkce: null,
+          ...mapujRoliNaProfil(roleKoduNeboClen(kod.role)),
           isAdmin: false,
         };
         const vlozeni = await db

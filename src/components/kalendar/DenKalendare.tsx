@@ -177,7 +177,7 @@ export function DenKalendare({
       aria-current={jeDnes ? "date" : undefined}
       onClick={() => onDen(den)}
       className={`bez-prejeti relative flex min-h-11 min-w-0 flex-col transition-colors motion-reduce:transition-none [touch-action:pan-y] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk max-[90rem]:rounded-xl ${
-        vybrano ? "max-[90rem]:bg-smrk" : "max-[90rem]:hover:bg-povrch-2"
+        vybrano ? "max-[90rem]:bg-smrk max-[90rem]:focus-visible:outline-povrch" : "max-[90rem]:hover:bg-povrch-2"
       } min-[90rem]:h-32 min-[90rem]:gap-[5px] min-[90rem]:py-[9px] ${
         vybrano
           ? "min-[90rem]:bg-[#f8e9df]"
