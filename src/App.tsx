@@ -102,6 +102,16 @@ function usePosunStranky(): void {
   }, [pathname, key, typ]);
 }
 
+/** Obloha pod stavovým řádkem telefonu a hřebeny pod ní. iOS píše čas bíle, potřebuje tmavý podklad. */
+function Vrsek(): JSX.Element {
+  return (
+    <div aria-hidden="true">
+      <div className="vrsek-hreben" />
+      <div className="vrsek-pruh" />
+    </div>
+  );
+}
+
 /** Vnitřek pod AuthProviderem — umí podmínit Navbar podle session (varianta A). */
 function AppObsah(): JSX.Element {
   const { user, isLoading } = useAuth();
@@ -112,7 +122,8 @@ function AppObsah(): JSX.Element {
   if (isLoading) {
     return (
       <DenikPlocha>
-        <div className="min-h-dvh bg-papir pt-[env(safe-area-inset-top,0px)] text-inkoust">
+        <div className="relative min-h-dvh bg-papir pt-(--horni-okraj) text-inkoust">
+          <Vrsek />
           <StrankaKostra />
         </div>
       </DenikPlocha>
@@ -120,14 +131,10 @@ function AppObsah(): JSX.Element {
   }
   return (
     <DenikPlocha>
-      <div className="flex min-h-dvh flex-col bg-papir text-inkoust">
+      <div className="relative flex min-h-dvh flex-col bg-papir text-inkoust">
         {prihlasen ? (
           <>
-            {/* iOS píše čas bíle přes stránku, na krémové by nebyl vidět. */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none fixed inset-x-0 top-0 z-[45] h-[env(safe-area-inset-top,0px)] bg-smrk"
-            />
+            <Vrsek />
             <Navbar />
           </>
         ) : null}

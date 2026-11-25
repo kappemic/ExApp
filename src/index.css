@@ -62,14 +62,18 @@
     "Segoe UI", system-ui, sans-serif;
 }
 
-/* Místo pod stavovým řádkem telefonu (čas, baterie), když aplikace běží z plochy. */
+/* Vršek na telefonu: pod stavovým řádkem (čas, baterie) je tmavá obloha a z ní
+   vystupují hřebeny, poslední v barvě stránky. Viz `.vrsek-hreben`. */
 :root {
-  --horni-okraj: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  --stavova-lista: env(safe-area-inset-top, 0px);
+  --hreben: 32px;
+  --horni-okraj: calc(var(--stavova-lista) + var(--hreben));
 }
 
 @media (width >= 90rem) {
   :root {
-    --horni-okraj: 0px;
+    --stavova-lista: 0px;
+    --hreben: 0px;
   }
 }
 
@@ -489,10 +493,40 @@ input[type="file"]:active::-webkit-file-upload-button {
   opacity: 1;
 }
 
-@media (width >= 90rem) {
+/* Na telefonu karta vyjede za okraj displeje, na počítači posuvník není. */
+@media (width < 48rem) or (width >= 90rem) {
   .posuvnik-karet::before,
   .posuvnik-karet::after {
     content: none;
+  }
+}
+
+/* Pevný pruh pod časem drží na místě, hřeben pod ním odjede se stránkou.
+   Vzor se opakuje po 420 px a navazuje, proto sedí i na tabletu. */
+.vrsek-pruh {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 45;
+  height: var(--stavova-lista);
+  background: var(--color-smrk);
+  pointer-events: none;
+}
+
+.vrsek-hreben {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--horni-okraj);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 32' preserveAspectRatio='none'%3E%3Cpath fill='%234b5f3b' d='M0 17C14 14 26 8 38 8S62 14 74 14 100 3 114 3 146 15 162 15 192 9 206 9 236 17 250 17 284 5 300 5 334 14 348 14 372 10 384 11 408 18 420 17V32H0Z'/%3E%3Cpath fill='%238a9b76' d='M0 23C40 15 84 13 124 19S204 27 246 19 330 12 366 18 408 25 420 23V32H0Z'/%3E%3Cpath fill='%23f7f4eb' d='M0 29C50 23 96 22 146 26S234 32 284 27 376 23 420 29V32H0Z'/%3E%3C/svg%3E")
+      left bottom / 420px 32px repeat-x,
+    var(--color-smrk);
+  pointer-events: none;
+}
+
+@media (width >= 90rem) {
+  .vrsek-pruh,
+  .vrsek-hreben {
+    display: none;
   }
 }
 

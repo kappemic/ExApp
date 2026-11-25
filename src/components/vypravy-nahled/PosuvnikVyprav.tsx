@@ -13,9 +13,10 @@ export const VYPRAV_V_KATEGORII = 3;
    táhnout prstem. Nulová šířka, okraj 8 px s mezerou 12 px dá kraj stránky 20 px. */
 const MISTO_SIPKY = "sticky z-[2] w-0 shrink-0 min-[90rem]:hidden";
 const SIPKA =
-  "bez-prejeti group/sipka absolute top-[86px] flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] disabled:invisible";
-const KOLECKO =
-  "flex size-8 items-center justify-center rounded-full border border-linka bg-povrch/90 text-inkoust shadow-[0_1px_2px_rgb(28_38_21/0.10),0_4px_12px_rgb(28_38_21/0.12)] transition-transform duration-150 ease-out group-active/sipka:scale-90 motion-reduce:transition-none";
+  "bez-prejeti group/sipka absolute top-[86px] flex h-14 w-11 -translate-y-1/2 items-center bg-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] disabled:invisible";
+/** Ouško přisazené ke kraji: sedí v okraji stránky a z fotky skoro nic nezakryje. */
+const OUSKO =
+  "flex h-11 w-[26px] items-center justify-center bg-povrch text-smrk shadow-[0_1px_6px_rgb(28_38_21/0.14)] transition-[width] duration-150 ease-out group-active/sipka:w-8 motion-reduce:transition-none [@media(hover:hover)_and_(pointer:fine)]:group-hover/sipka:w-[30px]";
 
 /**
  * Proběhlé výpravy. Do 1440 px posuvník karet se šipkami: pohyb řeší
@@ -54,10 +55,10 @@ export default function PosuvnikVyprav({
             disabled={!vlevo}
             onClick={() => posun(-1)}
             aria-label="Předchozí proběhlé výpravy"
-            className={`${SIPKA} left-0.5`}
+            className={`${SIPKA} left-0 justify-start`}
           >
-            <span className={KOLECKO}>
-              <Ikona nazev="chevron-left" className="size-4 -translate-x-px" />
+            <span className={`${OUSKO} rounded-r-xl`}>
+              <Ikona nazev="chevron-left" className="size-[18px]" />
             </span>
           </button>
         </li>
@@ -82,10 +83,10 @@ export default function PosuvnikVyprav({
             disabled={!vpravo}
             onClick={() => posun(1)}
             aria-label="Další proběhlé výpravy"
-            className={`${SIPKA} right-0.5`}
+            className={`${SIPKA} right-0 justify-end`}
           >
-            <span className={KOLECKO}>
-              <Ikona nazev="chevron-right" className="size-4 translate-x-px" />
+            <span className={`${OUSKO} rounded-l-xl`}>
+              <Ikona nazev="chevron-right" className="size-[18px]" />
             </span>
           </button>
         </li>

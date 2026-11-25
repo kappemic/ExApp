@@ -69,7 +69,7 @@ export const fotkyNahravaciObalRozbaleny = "flex flex-col gap-2";
 
 /** Album grid toolbar — a phone has no app header, the computer one is 76 px tall. */
 export const fotkyAlbumToolbarZaklad =
-  "sticky top-(--horni-okraj) z-30 mb-4 flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border bg-povrch min-[90rem]:top-[84px] transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2";
+  "sticky top-[calc(var(--stavova-lista)+0.5rem)] z-30 mb-4 flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border bg-povrch min-[90rem]:top-[84px] transition-[transform,opacity] duration-[160ms] ease-out motion-reduce:transition-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2";
 
 /** Action clusters inside album toolbars (restore / delete / download) */
 export const fotkyAkceSkupina = "flex flex-wrap items-center gap-1.5 sm:gap-2";
