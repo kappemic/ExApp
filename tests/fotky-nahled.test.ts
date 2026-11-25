@@ -81,7 +81,7 @@ describe("FotkaDialog — a11y a mazací režim", () => {
     expect(dialog).toContain("stopPropagation");
     expect(dialog).toContain("overscroll-contain");
     expect(dialog).toContain("safe-area-inset");
-    expect(dialog).toContain("FotkyLightboxNav");
+    expect(dialog).toContain("LightboxPas");
     expect(dialog).toContain("fotkyTlacitkoZaklad");
     const ui = cti("src/components/fotky/fotky-ui.ts");
     expect(ui).toContain("fotkyLightboxNavTlacitko");
@@ -105,7 +105,7 @@ describe("highlight a mazání jen pro admina", () => {
     expect(lightbox).toContain("addEventListener(\"keydown\", naStiskKlavesy, true)");
     expect(lightbox).toContain("overscroll-contain");
     expect(lightbox).toContain("safe-area-inset");
-    expect(lightbox).toContain("FotkyLightboxNav");
+    expect(lightbox).toContain("LightboxPas");
     const ui = cti("src/components/fotky/fotky-ui.ts");
     expect(ui).toContain("fotkyLightboxNavTlacitko");
     expect(ui).toContain("motion-reduce:active:scale-100");

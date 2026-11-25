@@ -64,7 +64,7 @@ describe("ExpeditionPhotos delete-mode gallery header", () => {
 
   it("lightbox má navigaci a mazací hlavičku bez Zavřít v mazání", () => {
     const nav = cti("src/components/fotky/FotkyLightboxNav.tsx");
-    expect(lightbox).toContain("FotkyLightboxNav");
+    expect(lightbox).toContain("LightboxPas");
     expect(nav).toContain('aria-label="Předchozí fotka"');
     expect(nav).toContain('aria-label="Další fotka"');
     expect(lightbox).toContain("FotkyMazaciHlavicka");

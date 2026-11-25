@@ -538,7 +538,6 @@ export default function AlbumFotky({
 
       <FotkyRadkovaMrizka
         fotky={fotky}
-        album
         className="w-full"
         render={(fotka, _rozmer, nahlasRozmer) => {
           const src = srcFotkyAlba(album, fotka);

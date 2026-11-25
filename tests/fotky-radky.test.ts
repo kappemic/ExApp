@@ -84,8 +84,9 @@ describe("slozRadkyFotek", () => {
   });
 
   it("volí nižší řádek na telefonu a vyšší od zlomu", () => {
-    expect(cilovaVyskaRadku(390)).toBe(128);
-    expect(cilovaVyskaRadku(640)).toBe(180);
+    expect(cilovaVyskaRadku(390)).toBe(180);
+    expect(cilovaVyskaRadku(640)).toBe(220);
+    expect(cilovaVyskaRadku(900)).toBe(260);
   });
 });
 

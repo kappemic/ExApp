@@ -83,7 +83,7 @@ export function useFotkaProhlizeni(
       }
       return;
     }
-    const obrazek = document.querySelector("[data-lightbox-jeviste] img");
+    const obrazek = document.querySelector("[data-lightbox-aktualni] img");
     const bod = kurzor ?? kurzorRef.current;
     if (!(obrazek instanceof HTMLElement) || bod === null) {
       meritkoRef.current = s2;

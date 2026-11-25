@@ -158,10 +158,9 @@ describe("photo surfaces use the preview first", () => {
   it("grids, covers and lightboxes render PostupnaFotka", () => {
     for (const soubor of [
       "src/components/fotky/AlbumFotky.tsx",
-      "src/components/fotky/FotkaDialog.tsx",
+      "src/components/fotky/LightboxPas.tsx",
       "src/components/fotky/PapirObal.tsx",
       "src/components/expeditions/ExpeditionPhotos.tsx",
-      "src/components/expeditions/FotkyLightbox.tsx",
       "src/components/expeditions/VypravaNahled.tsx",
       "src/components/AvatarKruh.tsx",
       "src/components/clen/ClenProfil.tsx",

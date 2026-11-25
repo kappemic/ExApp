@@ -1,8 +1,6 @@
 import {
-  useEffect,
   useLayoutEffect,
   useRef,
-  useState,
   type JSX,
   type MouseEvent,
 } from "react";
@@ -15,9 +13,8 @@ import {
   type ApiFotkaAlba,
 } from "../../lib/alba-api";
 import { nazevSouboruAlba, nazevSouboruVypravy } from "../../lib/stahni-fotku";
-import FotkyLightboxNav from "./FotkyLightboxNav";
+import LightboxPas from "./LightboxPas";
 import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "./LightboxProhlizeni";
-import PostupnaFotka from "./PostupnaFotka";
 import StahniFotkuTlacitko from "./StahniFotkuTlacitko";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "./fotky-ui";
 import { zamkniPosuv } from "../../lib/zamek-posuvu";
@@ -71,7 +68,6 @@ export default function FotkaDialog({
   const indexRef = useRef(index);
   const delkaRef = useRef(fotky.length);
   const drzOtevreneRef = useRef(drzOtevrene);
-  const [rozbita, setRozbita] = useState<boolean>(false);
   const fotka = fotky[index];
   const srcProhlizeni = fotka === undefined ? "" : srcFotkyAlba(album, fotka);
   const prohlizeni = useFotkaProhlizeni(srcProhlizeni, fotka?.createdAt ?? null);
@@ -83,10 +79,6 @@ export default function FotkaDialog({
   const zavriRef = useRef<() => void>(() => {});
   zavriRef.current = () => onZavritRef.current();
   useOdchod(dialogRef, fotka !== undefined, zmizeniDialogu);
-
-  useEffect(() => {
-    setRozbita(false);
-  }, [index, fotka?.id]);
 
   useLayoutEffect(() => {
     zavritRef.current?.focus();
@@ -146,15 +138,17 @@ export default function FotkaDialog({
 
   if (fotka === undefined || typeof document === "undefined") return null;
 
-  const src = srcProhlizeni;
   const streamAlbum = album.druh === "kos" ? albumProFotku(fotka) : album;
   const urlStahnuti = urlSouboruAlba(streamAlbum, fotka.id);
   const nazevStahnuti =
     streamAlbum.druh === "vyprava" && streamAlbum.expeditionId !== null
       ? nazevSouboruVypravy(streamAlbum.expeditionId, fotka.id)
       : nazevSouboruAlba(streamAlbum.id, fotka.id);
-  const maPredchozi = index > 0;
-  const maDalsi = index < fotky.length - 1;
+  const snimky = fotky.map((polozka, poradi) => ({
+    id: polozka.id,
+    src: srcFotkyAlba(album, polozka),
+    alt: `Fotka ${poradi + 1} z ${fotky.length}, album ${album.nazev}`,
+  }));
   const tlacitkoAkce = `${fotkyTlacitkoZaklad} bez-prejeti nahled-press border-0 bg-transparent px-2 text-sm font-bold text-papir shadow-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] disabled:opacity-40`;
 
   function zastav(udalost: MouseEvent): void {
@@ -239,44 +233,16 @@ export default function FotkaDialog({
       </div>
       <div
         data-lightbox-jeviste
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-16"
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
         onMouseDown={naPozadi}
       >
-        {rozbita || src.length === 0 ? (
-          <p
-            role="status"
-            onMouseDown={zastav}
-            className="rounded-md border border-linka bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
-          >
-            Fotku se nepodařilo načíst.
-          </p>
-        ) : (
-          <PostupnaFotka
-            prednost
-            zamlzeni
-            src={src}
-            alt={`Fotka ${index + 1} z ${fotky.length}, album ${album.nazev}`}
-            className={`max-h-full max-w-full object-contain ${prohlizeni.zoom ? "touch-none cursor-grab active:cursor-grabbing" : ""}`}
-            style={prohlizeni.stylObrazku}
-            onMouseDown={zastav}
-            onPointerDown={prohlizeni.naPointerDown}
-            onPointerMove={prohlizeni.naPointerMove}
-            onPointerUp={prohlizeni.naPointerUp}
-            onPointerCancel={prohlizeni.naPointerUp}
-            onError={() => {
-              setRozbita(true);
-            }}
-          />
-        )}
-        <FotkyLightboxNav
-          maPredchozi={maPredchozi}
-          maDalsi={maDalsi}
-          onMouseDownZastav={zastav}
-          onPredchozi={() => {
-            onIndex(index - 1);
-          }}
-          onDalsi={() => {
-            onIndex(index + 1);
+        <LightboxPas
+          snimky={snimky}
+          index={index}
+          prohlizeni={prohlizeni}
+          onIndex={onIndex}
+          onPozadi={() => {
+            if (!drzOtevrene) zavriRef.current();
           }}
         />
       </div>

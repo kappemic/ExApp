@@ -49,6 +49,10 @@ type FotkyStav = "nacitani" | "hotovo" | "chyba";
 const FOCUSOVATELNE =
   'a[href], button:not([disabled]), textarea, input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Ukázka v detailu výpravy: první řady alba, stejně složené jako celé album. */
+const RADKU_UKAZKY = 2;
+const FOTEK_UKAZKY = 12;
+
 /**
  * Closed expedition shows one highlight photo. That preview is not a control.
  * The gallery sheet lists every photo, uploads, and (admin only) deletes.
@@ -296,7 +300,7 @@ export default function ExpeditionPhotos({
               aria-modal="true"
               aria-labelledby={dialogNadpisId}
               onMouseDown={(e) => e.stopPropagation()}
-              className="max-h-[92vh] w-full max-w-lg touch-manipulation overflow-y-auto overscroll-contain rounded-lg border border-linka bg-papir shadow-denik"
+              className="max-h-[92vh] w-full max-w-lg touch-manipulation lg:max-w-4xl min-[90rem]:max-w-6xl overflow-y-auto overscroll-contain rounded-lg border border-linka bg-papir shadow-denik"
             >
               <div
                 className={`sticky top-0 z-10 flex gap-2 border-b-2 bg-papir/95 px-3 py-2.5 shadow-denik backdrop-blur-sm sm:px-4 sm:py-3 ${
@@ -364,7 +368,6 @@ export default function ExpeditionPhotos({
                 ) : (
                   <FotkyRadkovaMrizka
                     fotky={fotky}
-                    className="-mx-3 w-[calc(100%+1.5rem)]"
                     render={(fotka, _rozmer, nahlasRozmer) => {
                       const poradi = fotky.findIndex((polozka) => polozka.id === fotka.id);
                       const jeNahled: boolean = fotka.jeNahled;
@@ -523,8 +526,7 @@ export default function ExpeditionPhotos({
     setGalerieZavira(false);
     setGalerieOtevrena(true);
   };
-  // Titulní fotka je v návrhu nahoře na stránce, v mřížce jdou první čtyři.
-  const prvniCtyri = stav === "hotovo" ? fotky.slice(0, 4) : [];
+  const ukazka = stav === "hotovo" ? fotky.slice(0, FOTEK_UKAZKY) : [];
   const popisekPoctu = `${pocet} ${fotky.length === 1 ? "fotka" : fotky.length >= 2 && fotky.length <= 4 ? "fotky" : "fotek"}`;
 
   return (
@@ -553,24 +555,26 @@ export default function ExpeditionPhotos({
         </div>
       )}
 
-      {prvniCtyri.length > 0 && (
-        <div className="grid grid-cols-2 gap-1.5 min-[90rem]:grid-cols-4">
-          {prvniCtyri.map((fotka) => (
+      {ukazka.length > 0 && (
+        <FotkyRadkovaMrizka
+          fotky={ukazka}
+          radku={RADKU_UKAZKY}
+          render={(fotka, _rozmer, nahlasRozmer) => (
             <button
-              key={fotka.id}
               type="button"
               onClick={otevriGalerii}
               aria-label="Otevřít album výpravy"
-              className="bez-prejeti relative aspect-[3/2] overflow-hidden rounded-xl bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+              className={`${fotkyMrizkaDlazdice} bg-mlha`}
             >
               <PostupnaFotka
                 src={urlSouboruFotky(expeditionId, fotka.id)}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
+                onRozmer={nahlasRozmer}
               />
             </button>
-          ))}
-        </div>
+          )}
+        />
       )}
 
       {stav === "hotovo" && (

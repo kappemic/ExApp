@@ -5,13 +5,15 @@
  * cannot swallow the row or leave a tile under the touch target.
  */
 
-export const FOTKY_RADEK_MEZERA_PX = 2;
+export const FOTKY_RADEK_MEZERA_PX = 4;
 export const FOTKY_RADEK_MIN_POMER = 0.4;
 export const FOTKY_RADEK_MAX_POMER = 2.5;
 export const FOTKY_RADEK_MIN_SIRKA_PX = 44;
-export const FOTKY_RADEK_VYSKA_MOBIL_PX = 128;
-export const FOTKY_RADEK_VYSKA_DESKTOP_PX = 180;
+export const FOTKY_RADEK_VYSKA_MOBIL_PX = 180;
+export const FOTKY_RADEK_VYSKA_TABLET_PX = 220;
+export const FOTKY_RADEK_VYSKA_DESKTOP_PX = 260;
 export const FOTKY_RADEK_ZLOM_PX = 640;
+export const FOTKY_RADEK_ZLOM_DESKTOP_PX = 900;
 
 export interface VstupFotkyRadku {
   id: string;
@@ -33,9 +35,8 @@ export interface RadekFotek {
 }
 
 export function cilovaVyskaRadku(sirkaKontejneru: number): number {
-  return sirkaKontejneru >= FOTKY_RADEK_ZLOM_PX
-    ? FOTKY_RADEK_VYSKA_DESKTOP_PX
-    : FOTKY_RADEK_VYSKA_MOBIL_PX;
+  if (sirkaKontejneru >= FOTKY_RADEK_ZLOM_DESKTOP_PX) return FOTKY_RADEK_VYSKA_DESKTOP_PX;
+  return sirkaKontejneru >= FOTKY_RADEK_ZLOM_PX ? FOTKY_RADEK_VYSKA_TABLET_PX : FOTKY_RADEK_VYSKA_MOBIL_PX;
 }
 
 export function orezPomerFotky(pomer: number): number {

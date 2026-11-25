@@ -11,28 +11,13 @@ import { pomerZRozmeru } from "../../lib/fotky-rozmery";
 const VIDITELNE_RADKY_MOBIL = 4;
 const VIDITELNE_RADKY_DESKTOP = 5;
 
-/* Album jako v Google Fotkách: řady na celou šířku, fotky v původním poměru a úzké mezery. */
-const ALBUM_MEZERA_PX = 4;
-const ALBUM_RADEK_TELEFON_PX = 180;
-const ALBUM_RADEK_TABLET_PX = 220;
-const ALBUM_RADEK_POCITAC_PX = 260;
-const ALBUM_POCITAC_PX = 900;
-
-function vyskaRadkuAlba(sirka: number): number {
-  if (sirka >= ALBUM_POCITAC_PX) return ALBUM_RADEK_POCITAC_PX;
-  return sirka >= FOTKY_RADEK_ZLOM_PX ? ALBUM_RADEK_TABLET_PX : ALBUM_RADEK_TELEFON_PX;
-}
-
 interface FotkyRadkovaMrizkaProps<
   T extends { id: string; sirka?: number | null; vyska?: number | null },
 > {
   fotky: readonly T[];
   className?: string;
-  /**
-   * Stěna alba: vyšší řady, mezery 4 px a zaoblený jen vnější obrys.
-   * Bez něj zůstanou dlaždice od kraje ke kraji s 2px mezerou.
-   */
-  album?: boolean;
+  /** Ukázka: jen tolik prvních řad. Bez něj celé album. */
+  radku?: number;
   render: (
     fotka: T,
     rozmer: DlazdiceRadku,
@@ -41,7 +26,7 @@ interface FotkyRadkovaMrizkaProps<
 }
 
 /**
- * Justified photo rows. Tiles keep the measured aspect ratio
+ * Photo wall shared by albums and trips, in the Google Photos sense. Tiles keep the measured aspect ratio
  * and carry no frame of their own.
  */
 export default function FotkyRadkovaMrizka<
@@ -49,7 +34,7 @@ export default function FotkyRadkovaMrizka<
 >({
   fotky,
   className = "",
-  album = false,
+  radku,
   render,
 }: FotkyRadkovaMrizkaProps<T>): JSX.Element {
   const obalRef = useRef<HTMLDivElement>(null);
@@ -91,10 +76,9 @@ export default function FotkyRadkovaMrizka<
           pomer: pomery[fotka.id] ?? pomerZRozmeru(fotka.sirka, fotka.vyska),
         })),
         sirka,
-        album ? vyskaRadkuAlba(sirka) : cilovaVyskaRadku(sirka),
-        album ? ALBUM_MEZERA_PX : undefined,
+        cilovaVyskaRadku(sirka),
       ),
-    [fotky, album, pomery, sirka],
+    [fotky, pomery, sirka],
   );
 
   const podleId = useMemo(() => {
@@ -107,8 +91,8 @@ export default function FotkyRadkovaMrizka<
 
   return (
     <div ref={obalRef} className={`min-w-0 ${className.length > 0 ? className : "w-full"}`}>
-      <ul className={`m-0 flex list-none flex-wrap p-0 ${album ? "gap-1 overflow-hidden rounded-2xl" : "gap-[2px]"}`}>
-        {radky.map((radek, indexRadku) =>
+      <ul className="m-0 flex list-none flex-wrap gap-1 overflow-hidden rounded-2xl p-0">
+        {(radku === undefined ? radky : radky.slice(0, radku)).map((radek, indexRadku) =>
           radek.dlazdice.map((dlazdice) => {
             const fotka = podleId.get(dlazdice.id);
             if (fotka === undefined) return null;

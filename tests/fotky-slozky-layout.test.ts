@@ -122,10 +122,10 @@ describe("Fotky master–detail layout", () => {
     expect(nav).not.toContain("‹");
 
     const dialog = cti("src/components/fotky/FotkaDialog.tsx");
-    expect(dialog).toContain("FotkyLightboxNav");
+    expect(dialog).toContain("LightboxPas");
 
     const lightbox = cti("src/components/expeditions/FotkyLightbox.tsx");
-    expect(lightbox).toContain("FotkyLightboxNav");
+    expect(lightbox).toContain("LightboxPas");
     expect(lightbox).not.toContain("‹");
   });
 });

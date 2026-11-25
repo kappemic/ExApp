@@ -75,6 +75,8 @@ export default function PostupnaFotka({
     urlNahleduFotky(src) === src || uzKDispozici(src) ? "plna" : "nahled",
   );
   const [nahledHotovy, setNahledHotovy] = useState(false);
+  /** Náhled už byl vidět bez závoje (soused v lightboxu), teď se nezamlží. */
+  const [bezZavoje, setBezZavoje] = useState(false);
   const [nahledPovolen, setNahledPovolen] = useState(
     () =>
       prednost ||
@@ -97,6 +99,7 @@ export default function PostupnaFotka({
   if (sledovane !== src) {
     setSledovane(src);
     setNahledHotovy(false);
+    setBezZavoje(false);
     setFaze(stejnySoubor || uzKDispozici(src) ? "plna" : "nahled");
     setNahledPovolen(chcePlnou || stejnySoubor || uzKDispozici(src) || uzKDispozici(nahled));
   }
@@ -108,7 +111,11 @@ export default function PostupnaFotka({
   }
 
   useLayoutEffect(() => {
-    if (src.length === 0 || stejnySoubor || chcePlnou) return;
+    if (src.length === 0 || stejnySoubor) return;
+    if (chcePlnou) {
+      setNahledPovolen(true);
+      return;
+    }
     // The photo may have arrived between the render and this effect, e.g. for another copy of the list.
     if (uzKDispozici(src) || uzKDispozici(nahled)) {
       setNahledPovolen(true);
@@ -154,7 +161,7 @@ export default function PostupnaFotka({
 
   const ukazovany =
     src.length === 0 || !nahledPovolen ? undefined : faze === "plna" || stejnySoubor ? src : nahled;
-  const zakryt = chcePlnou && faze !== "plna" && !stejnySoubor && src.length > 0 && !bezPohybu();
+  const zakryt = chcePlnou && !bezZavoje && faze !== "plna" && !stejnySoubor && src.length > 0 && !bezPohybu();
   const styl: CSSProperties = {
     ...style,
     filter: zakryt ? (zamlzeni ? MLHA : JEMNY_BLUR) : style?.filter,
@@ -169,10 +176,13 @@ export default function PostupnaFotka({
       pamatuj(obrazek.currentSrc || ukazovany || "");
       onRozmerRef.current?.(obrazek.naturalWidth, obrazek.naturalHeight);
     }
-    if (faze === "nahled" && !stejnySoubor && chcePlnou) {
-      uvolniSlot();
+    if (faze === "nahled" && !stejnySoubor) {
       setNahledHotovy(true);
-      return;
+      if (chcePlnou) {
+        uvolniSlot();
+        return;
+      }
+      setBezZavoje(true);
     }
     uvolniSlot();
     onLoad?.(udalost);

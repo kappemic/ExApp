@@ -138,7 +138,7 @@ describe("obálka a lightbox — zdroj", () => {
   it("lightbox má zavření, předchozí a další fotku a aplikační URL", () => {
     const nav = cti("src/components/fotky/FotkyLightboxNav.tsx");
     expect(lightbox).toContain('aria-label="Zavřít fotku"');
-    expect(lightbox).toContain("FotkyLightboxNav");
+    expect(lightbox).toContain("LightboxPas");
     expect(nav).toContain('aria-label="Předchozí fotka"');
     expect(nav).toContain('aria-label="Další fotka"');
     expect(nav).toContain("fotkyLightboxNavTlacitko");
@@ -146,7 +146,9 @@ describe("obálka a lightbox — zdroj", () => {
     expect(lightbox).toContain("bg-papir");
     expect(lightbox).toContain("text-inkoust");
     expect(lightbox).toContain("urlSouboruFotky");
-    expect(lightbox).toContain("Fotku se nepodařilo načíst.");
+    const pas = cti("src/components/fotky/LightboxPas.tsx");
+    expect(pas).toContain("FotkyLightboxNav");
+    expect(pas).toContain("Fotku se nepodařilo načíst.");
     expect(fotky).toContain("aria-label={popisekFotky}");
     expect(fotky).not.toContain('aria-label="Zvětšit náhledovou fotku"');
     expect(fotky).toContain("<FotkyLightbox");

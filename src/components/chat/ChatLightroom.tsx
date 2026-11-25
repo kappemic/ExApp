@@ -3,9 +3,8 @@ import { createPortal } from "react-dom";
 import type { ChatFotka } from "../../lib/chat-fotky";
 import { formatCasKratce } from "../../lib/format-cas";
 import { urlPrilohyZpravy } from "../../lib/prilohy-zpravy";
-import FotkyLightboxNav from "../fotky/FotkyLightboxNav";
+import LightboxPas from "../fotky/LightboxPas";
 import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "../fotky/LightboxProhlizeni";
-import PostupnaFotka from "../fotky/PostupnaFotka";
 import StahniFotkuTlacitko from "../fotky/StahniFotkuTlacitko";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek } from "../fotky/fotky-ui";
 import { zamkniPosuv } from "../../lib/zamek-posuvu";
@@ -80,14 +79,9 @@ export default function ChatLightroom({
   onZavrit,
 }: ChatLightroomProps): JSX.Element | null {
   const [index, setIndex] = useState<number | null>(null);
-  const [rozbita, setRozbita] = useState(false);
   const fotka = index === null ? undefined : fotky[index];
   const src = fotka === undefined ? "" : urlPrilohyZpravy(fotka.id);
   const prohlizeni = useFotkaProhlizeni(src, fotka?.createdAt ?? null, false);
-
-  useEffect(() => {
-    setRozbita(false);
-  }, [index, fotka?.id]);
 
   useEffect(() => {
     if (fotky.length === 0) {
@@ -153,9 +147,7 @@ export default function ChatLightroom({
         ? "Načítám fotky z chatu…"
         : fotky.length === 0
           ? "V tomhle chatu zatím není žádná fotka."
-          : rozbita || src.length === 0
-            ? "Fotku se nepodařilo načíst."
-            : null;
+          : null;
 
   return createPortal(
     <div
@@ -195,12 +187,12 @@ export default function ChatLightroom({
       </div>
       <div
         data-lightbox-jeviste
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-16"
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
         onMouseDown={(udalost) => {
           if (udalost.target === udalost.currentTarget) onZavrit();
         }}
       >
-        {hlaska !== null || !maFotku || fotka === undefined || index === null ? (
+        {hlaska !== null || !maFotku || index === null ? (
           <p
             role={chyba !== null ? "alert" : "status"}
             onMouseDown={zastav}
@@ -209,32 +201,18 @@ export default function ChatLightroom({
             {hlaska ?? "Načítám fotky z chatu…"}
           </p>
         ) : (
-          <PostupnaFotka
-            prednost
-            zamlzeni
-            src={src}
-            alt={`Fotka ${index + 1} z ${fotky.length}, chat ${nazev}`}
-            className={`max-h-full max-w-full object-contain ${prohlizeni.zoom ? "touch-none cursor-grab active:cursor-grabbing" : ""}`}
-            style={prohlizeni.stylObrazku}
-            onMouseDown={zastav}
-            onPointerDown={prohlizeni.naPointerDown}
-            onPointerMove={prohlizeni.naPointerMove}
-            onPointerUp={prohlizeni.naPointerUp}
-            onPointerCancel={prohlizeni.naPointerUp}
-            onError={() => {
-              setRozbita(true);
-            }}
+          <LightboxPas
+            snimky={fotky.map((polozka, poradi) => ({
+              id: polozka.id,
+              src: urlPrilohyZpravy(polozka.id),
+              alt: `Fotka ${poradi + 1} z ${fotky.length}, chat ${nazev}`,
+            }))}
+            index={index}
+            prohlizeni={prohlizeni}
+            onIndex={setIndex}
+            onPozadi={onZavrit}
           />
         )}
-        {maFotku && index !== null ? (
-          <FotkyLightboxNav
-            maPredchozi={index > 0}
-            maDalsi={index < fotky.length - 1}
-            onMouseDownZastav={zastav}
-            onPredchozi={() => setIndex(index - 1)}
-            onDalsi={() => setIndex(index + 1)}
-          />
-        ) : null}
       </div>
     </div>,
     document.body,

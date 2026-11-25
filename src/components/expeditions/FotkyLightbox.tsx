@@ -10,8 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { nactiFotky, urlSouboruFotky, type ApiFotka } from "../../lib/expedition-fotky";
 import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
-import PostupnaFotka from "../fotky/PostupnaFotka";
-import FotkyLightboxNav from "../fotky/FotkyLightboxNav";
+import LightboxPas from "../fotky/LightboxPas";
 import { LightboxInfo, LightboxNastroje, useFotkaProhlizeni } from "../fotky/LightboxProhlizeni";
 import { fotkyLightboxIkona, fotkyLightboxPocet, fotkyLightboxRadek, fotkyTlacitkoZaklad } from "../fotky/fotky-ui";
 import { zamkniPosuv } from "../../lib/zamek-posuvu";
@@ -90,7 +89,6 @@ export default function FotkyLightbox({
   const [index, setIndex] = useState<number>(() =>
     indexFotky(fotky === null ? [pocatecniId] : fotky.map((fotka) => fotka.id), pocatecniId),
   );
-  const [rozbita, setRozbita] = useState<boolean>(false);
   /** Photo kept in view when the parent refreshes the list (highlight, delete). */
   const drzenaIdRef = useRef<string>(pocatecniId);
   const viditelna = seznam[index];
@@ -205,10 +203,6 @@ export default function FotkyLightbox({
     }
   }, [mazaciRezim]);
 
-  useEffect(() => {
-    setRozbita(false);
-  }, [index]);
-
   const aktualniPred = seznam[index];
   const srcProhlizeni =
     aktualniPred === undefined ? "" : urlSouboruFotky(expeditionId, aktualniPred.id);
@@ -221,8 +215,6 @@ export default function FotkyLightbox({
   const aktualni: ApiFotka | undefined = aktualniPred;
   if (aktualni === undefined) return null;
   const pocet: number = seznam.length;
-  const maPredchozi: boolean = index > 0;
-  const maDalsi: boolean = index < pocet - 1;
 
   function zastav(udalost: MouseEvent): void {
     udalost.stopPropagation();
@@ -315,43 +307,19 @@ export default function FotkyLightbox({
       ) : null}
       <div
         data-lightbox-jeviste
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-16"
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
         onMouseDown={zavrit}
       >
-        {rozbita ? (
-          <p
-            role="status"
-            onMouseDown={zastav}
-            className="rounded-md border border-linka bg-papir px-4 py-3 text-sm font-semibold text-inkoust"
-          >
-            Fotku se nepodařilo načíst.
-          </p>
-        ) : (
-          <PostupnaFotka
-            prednost
-            zamlzeni
-            src={srcProhlizeni}
-            alt="Fotka z výpravy"
-            className={`max-h-full max-w-full object-contain ${prohlizeni.zoom ? "touch-none cursor-grab active:cursor-grabbing" : ""}`}
-            style={prohlizeni.stylObrazku}
-            onMouseDown={zastav}
-            onPointerDown={prohlizeni.naPointerDown}
-            onPointerMove={prohlizeni.naPointerMove}
-            onPointerUp={prohlizeni.naPointerUp}
-            onPointerCancel={prohlizeni.naPointerUp}
-            onError={() => setRozbita(true)}
-          />
-        )}
-        <FotkyLightboxNav
-          maPredchozi={maPredchozi}
-          maDalsi={maDalsi}
-          onMouseDownZastav={zastav}
-          onPredchozi={() => {
-            setIndex((aktualniIndex) => aktualniIndex - 1);
-          }}
-          onDalsi={() => {
-            setIndex((aktualniIndex) => aktualniIndex + 1);
-          }}
+        <LightboxPas
+          snimky={seznam.map((polozka) => ({
+            id: polozka.id,
+            src: urlSouboruFotky(expeditionId, polozka.id),
+            alt: "Fotka z výpravy",
+          }))}
+          index={index}
+          prohlizeni={prohlizeni}
+          onIndex={setIndex}
+          onPozadi={zavrit}
         />
       </div>
     </div>,
