@@ -112,7 +112,7 @@ function AppObsah(): JSX.Element {
   if (isLoading) {
     return (
       <DenikPlocha>
-        <div className="min-h-dvh bg-papir text-inkoust">
+        <div className="min-h-dvh bg-papir pt-[env(safe-area-inset-top,0px)] text-inkoust">
           <StrankaKostra />
         </div>
       </DenikPlocha>
@@ -121,8 +121,17 @@ function AppObsah(): JSX.Element {
   return (
     <DenikPlocha>
       <div className="flex min-h-dvh flex-col bg-papir text-inkoust">
-        {prihlasen ? <Navbar /> : null}
-        <div ref={strankaRef} className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
+        {prihlasen ? (
+          <>
+            {/* iOS píše čas bíle přes stránku, na krémové by nebyl vidět. */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed inset-x-0 top-0 z-[45] h-[env(safe-area-inset-top,0px)] bg-smrk"
+            />
+            <Navbar />
+          </>
+        ) : null}
+        <div ref={strankaRef} className={`exapp-vstup w-full min-w-0 flex-1 ${prihlasen ? "pt-(--horni-okraj) pb-[calc(76px+env(safe-area-inset-bottom,0px))] min-[90rem]:pb-8" : ""}`}>
           <Routes>
             <Route path="/" element={<DomuPage />} />
             <Route

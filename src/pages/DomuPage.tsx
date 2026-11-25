@@ -18,7 +18,7 @@ export default function DomuPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-8 sm:px-6 sm:pt-14">
+    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-[calc(2rem+env(safe-area-inset-top,0px))] sm:px-6 sm:pt-14">
       <div className="flex items-center gap-4">
         <LogoKlubu velikost="lg" />
         <div className="min-w-0">

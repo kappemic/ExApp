@@ -504,7 +504,7 @@ export default function ChatPage(): JSX.Element {
     <main
       className={
         vlaknoOtevrene
-          ? "nocturne mx-auto flex h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px))] min-h-0 w-full min-w-0 max-w-[46rem] flex-col overflow-hidden px-5 pb-3 pt-3 lg:h-[calc(100dvh-4rem-2rem)] lg:max-h-[calc(100dvh-4rem-2rem)] lg:max-w-none lg:px-8 lg:pb-2 lg:pt-4 min-[90rem]:h-[calc(100dvh-76px)] min-[90rem]:max-h-[calc(100dvh-76px)] min-[90rem]:px-10 min-[90rem]:pb-10 min-[90rem]:pt-11"
+          ? "nocturne mx-auto flex h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px)-var(--horni-okraj))] max-h-[calc(100dvh-76px-env(safe-area-inset-bottom,0px)-var(--horni-okraj))] min-h-0 w-full min-w-0 max-w-[46rem] flex-col overflow-hidden px-5 pb-3 pt-3 lg:h-[calc(100dvh-4rem-2rem-var(--horni-okraj))] lg:max-h-[calc(100dvh-4rem-2rem-var(--horni-okraj))] lg:max-w-none lg:px-8 lg:pb-2 lg:pt-4 min-[90rem]:h-[calc(100dvh-76px)] min-[90rem]:max-h-[calc(100dvh-76px)] min-[90rem]:px-10 min-[90rem]:pb-10 min-[90rem]:pt-11"
           : "nocturne mx-auto w-full min-w-0 max-w-[46rem] px-5 pb-6 pt-4 sm:px-6 sm:pt-8 lg:max-w-none lg:px-8 min-[90rem]:px-10 min-[90rem]:pb-14 min-[90rem]:pt-11"
       }
     >

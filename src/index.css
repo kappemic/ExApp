@@ -62,6 +62,17 @@
     "Segoe UI", system-ui, sans-serif;
 }
 
+/* Místo pod stavovým řádkem telefonu (čas, baterie), když aplikace běží z plochy. */
+:root {
+  --horni-okraj: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+}
+
+@media (width >= 90rem) {
+  :root {
+    --horni-okraj: 0px;
+  }
+}
+
 @layer base {
   html {
     /* mobile-native §2+§6: žádný šedý flash po tapu, žádný pull-to-refresh přes aplikaci */
@@ -441,9 +452,9 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 }
 
-/* Posuvník karet: karty za krajem zaplouvají do ztracena. Přechody leží nad
-   kartami jako pevné pruhy. Maska na rolovaném obsahu se při posunu
-   překreslovala a na telefonu sekala. */
+/* Posuvník karet: ztrácí se jen v okraji stránky (20 px), karta ve sloupci
+   zůstává čistá. Pruhy leží nad kartami, maska na rolovaném obsahu se při
+   posunu překreslovala a na telefonu sekala. */
 .posuvnik-karet {
   position: relative;
   isolation: isolate;
@@ -463,14 +474,14 @@ input[type="file"]:active::-webkit-file-upload-button {
 
 .posuvnik-karet::before {
   left: 0;
-  width: 44px;
-  background: linear-gradient(to right, var(--color-papir), transparent);
+  width: 20px;
+  background: linear-gradient(to right, var(--color-papir), rgb(247 244 235 / 0.6) 45%, rgb(247 244 235 / 0));
 }
 
 .posuvnik-karet::after {
   right: 0;
-  width: 44px;
-  background: linear-gradient(to left, var(--color-papir), transparent);
+  width: 20px;
+  background: linear-gradient(to left, var(--color-papir), rgb(247 244 235 / 0.6) 45%, rgb(247 244 235 / 0));
 }
 
 .posuvnik-karet[data-vlevo]::before,

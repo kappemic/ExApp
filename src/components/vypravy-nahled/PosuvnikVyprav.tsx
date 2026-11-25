@@ -13,12 +13,13 @@ export const VYPRAV_V_KATEGORII = 3;
    táhnout prstem. Nulová šířka, okraj 8 px s mezerou 12 px dá kraj stránky 20 px. */
 const MISTO_SIPKY = "sticky z-[2] w-0 shrink-0 min-[90rem]:hidden";
 const SIPKA =
-  "bez-prejeti absolute top-1/2 flex h-16 w-11 -translate-y-1/2 items-center rounded-xl bg-transparent text-inkoust [touch-action:manipulation] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk disabled:invisible";
-const IKONA_SIPKY = "size-6 [filter:drop-shadow(0_0_3px_var(--color-papir))]";
+  "bez-prejeti group/sipka absolute top-[86px] flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-smrk [touch-action:manipulation] disabled:invisible";
+const KOLECKO =
+  "flex size-8 items-center justify-center rounded-full border border-linka bg-povrch/90 text-inkoust shadow-[0_1px_2px_rgb(28_38_21/0.10),0_4px_12px_rgb(28_38_21/0.12)] transition-transform duration-150 ease-out group-active/sipka:scale-90 motion-reduce:transition-none";
 
 /**
  * Proběhlé výpravy. Do 1440 px posuvník karet se šipkami: pohyb řeší
- * `usePosuvnikKaret`, karty za krajem mizí do ztracena. Počítač: mřížka tří karet.
+ * `usePosuvnikKaret`, karty mizí až v okraji stránky. Počítač: mřížka tří karet.
  */
 export default function PosuvnikVyprav({
   polozky,
@@ -44,7 +45,7 @@ export default function PosuvnikVyprav({
     >
       <ul
         ref={posuvnikRef}
-        className="group/posuvnik relative m-0 flex list-none select-none snap-x snap-mandatory scroll-pl-8 gap-3 overflow-x-auto overscroll-x-contain px-0 py-1.5 [scrollbar-width:none] data-[tazeno]:cursor-grabbing min-[90rem]:grid min-[90rem]:snap-none min-[90rem]:grid-cols-3 min-[90rem]:gap-5 min-[90rem]:overflow-visible [&::-webkit-scrollbar]:hidden"
+        className="group/posuvnik relative m-0 flex list-none select-none snap-x snap-mandatory scroll-pl-5 gap-3 overflow-x-auto overscroll-x-contain px-0 py-1.5 [scrollbar-width:none] data-[tazeno]:cursor-grabbing min-[90rem]:grid min-[90rem]:snap-none min-[90rem]:grid-cols-3 min-[90rem]:gap-5 min-[90rem]:overflow-visible [&::-webkit-scrollbar]:hidden"
       >
         <li role="none" className={`${MISTO_SIPKY} left-0 mr-2`}>
           <button
@@ -53,9 +54,11 @@ export default function PosuvnikVyprav({
             disabled={!vlevo}
             onClick={() => posun(-1)}
             aria-label="Předchozí proběhlé výpravy"
-            className={`${SIPKA} left-0 justify-start pl-1`}
+            className={`${SIPKA} left-0.5`}
           >
-            <Ikona nazev="chevron-left" className={IKONA_SIPKY} />
+            <span className={KOLECKO}>
+              <Ikona nazev="chevron-left" className="size-4 -translate-x-px" />
+            </span>
           </button>
         </li>
         {viditelne.map((polozka, poradi) => (
@@ -79,9 +82,11 @@ export default function PosuvnikVyprav({
             disabled={!vpravo}
             onClick={() => posun(1)}
             aria-label="Další proběhlé výpravy"
-            className={`${SIPKA} right-0 justify-end pr-1`}
+            className={`${SIPKA} right-0.5`}
           >
-            <Ikona nazev="chevron-right" className={IKONA_SIPKY} />
+            <span className={KOLECKO}>
+              <Ikona nazev="chevron-right" className="size-4 translate-x-px" />
+            </span>
           </button>
         </li>
       </ul>

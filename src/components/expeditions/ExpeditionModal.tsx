@@ -1192,7 +1192,7 @@ export default function ExpeditionModal({
   const vnitrek = (
     <>
       {stranka ? (
-        <div className="sticky top-0 z-20 bg-papir/95 px-5 pb-2.5 pt-4 backdrop-blur-sm min-[90rem]:hidden [&>header]:mx-auto [&>header]:max-w-[46rem]">
+        <div className="sticky top-[env(safe-area-inset-top,0px)] z-20 bg-papir/95 px-5 pb-2.5 pt-4 backdrop-blur-sm min-[90rem]:hidden [&>header]:mx-auto [&>header]:max-w-[46rem]">
           <HlavickaZpet
             zpet="/vypravy"
             zpetPopisek="Zpět na výpravy"
