@@ -8,6 +8,7 @@ import FotkyMazaciHlavicka from "./FotkyMazaciHlavicka";
 import FotkyStahovaciHlavicka from "./FotkyStahovaciHlavicka";
 import FotkyNahravaciIkona from "./FotkyNahravaciIkona";
 import FotkaDialog from "./FotkaDialog";
+import ListaVyberu, { TlacitkoVyberu } from "./ListaVyberu";
 import MazaniVyberVrstva from "./MazaniVyberVrstva";
 import StahovaniVyberVrstva from "./StahovaniVyberVrstva";
 import { useFotkyMazani } from "../../hooks/useFotkyMazani";
@@ -36,6 +37,7 @@ import {
   type ApiAlbum,
   type ApiFotkaAlba,
 } from "../../lib/alba-api";
+import { useNahravaniAlba } from "../../lib/nahravani-fotek";
 import FotkyStavPanel from "./FotkyStavPanel";
 import FotkyRadkovaMrizka from "./FotkyRadkovaMrizka";
 import PostupnaFotka from "./PostupnaFotka";
@@ -49,11 +51,12 @@ import {
   nazevZipAlba,
 } from "../../lib/stahni-fotku";
 import { jeVybranoVse } from "../../lib/fotky-stahovani";
+import { useSledovaniNovych } from "../../hooks/useSledovaniNovych";
 import { popisekStahovaneFotky, useFotkyStahovani } from "../../hooks/useFotkyStahovani";
 
-export interface AkceStahovaniAlba {
-  stahniVse: () => void;
+export interface AkceAlba {
   vyberFotky: () => void;
+  odstranFotky: () => void;
 }
 
 interface AlbumFotkyProps {
@@ -68,10 +71,12 @@ interface AlbumFotkyProps {
   /** Pen layout: toolbar icons hidden; actions live in the page header. */
   skrytVychoziAkce?: boolean;
   onNahrati?: () => void;
-  /** Hands the download actions to the page header. */
-  onPripravStahovani?: (akce: AkceStahovaniAlba) => void;
-  /** Selection mode on or off, so the page header can step aside. */
-  onVyberovyRezim?: (aktivni: boolean) => void;
+  /** Hands the album actions to the page header. */
+  onPripravAkce?: (akce: AkceAlba) => void;
+  /** Prompt of the selection mode for the page header, null when it is off. */
+  onVyberovyRezim?: (popisek: string | null) => void;
+  /** Place in the page header where the selection buttons go. Null until it mounts. */
+  cilVyberu?: HTMLElement | null;
 }
 
 type Stav = "nacitani" | "hotovo" | "chyba";
@@ -93,8 +98,9 @@ export default function AlbumFotky({
   denik = false,
   skrytVychoziAkce = false,
   onNahrati,
-  onPripravStahovani,
+  onPripravAkce,
   onVyberovyRezim,
+  cilVyberu,
 }: AlbumFotkyProps): JSX.Element {
   const jeKos = album.druh === "kos";
   const [fotky, setFotky] = useState<ApiFotkaAlba[]>([]);
@@ -106,11 +112,28 @@ export default function AlbumFotky({
   const [obnovujeSe, setObnovujeSe] = useState<boolean>(false);
   const [obnovaChyba, setObnovaChyba] = useState<string | null>(null);
 
-  const nacist = useCallback(async (): Promise<ApiFotkaAlba[] | null> => {
-    setStav("nacitani");
-    setChyba(null);
+  const nahravani = useNahravaniAlba(album.id);
+  const prvniObnova = useRef(obnova);
+  const posledniNacteni = useRef(0);
+  const konecRef = useRef<HTMLDivElement>(null);
+
+  /** Tiché načtení nechá na místě současné fotky, dokud nepřijdou nové. */
+  const nacist = useCallback(async (tise = false): Promise<ApiFotkaAlba[] | null> => {
+    if (!tise) {
+      setStav("nacitani");
+      setChyba(null);
+    }
+    posledniNacteni.current += 1;
+    const poradi = posledniNacteni.current;
     const vysledek = await nactiFotkyAlba(album.id);
+    // Během nahrávání se načítá po každé fotce, starší odpověď nesmí přepsat novější.
+    if (poradi !== posledniNacteni.current) return null;
     if (!vysledek.ok) {
+      if (tise) {
+        setStav((aktualni) => (aktualni === "hotovo" ? "hotovo" : "chyba"));
+        setChyba(vysledek.chyba);
+        return null;
+      }
       setFotky([]);
       setChyba(vysledek.chyba);
       setStav("chyba");
@@ -124,7 +147,7 @@ export default function AlbumFotky({
   useEffect(() => {
     let zive = true;
     void (async (): Promise<void> => {
-      await nacist();
+      await nacist(obnova !== prvniObnova.current);
       if (!zive) return;
     })();
     return () => {
@@ -196,8 +219,6 @@ export default function AlbumFotky({
 
   const stahovani = useFotkyStahovani(fotky, pripravStahovani);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const stahniVseRef = useRef(stahovani.provedStahovani);
-  stahniVseRef.current = stahovani.provedStahovani;
 
   const vyberovyRezim = mazani.mazaciRezim || (!jeKos && stahovani.stahovaciRezim);
 
@@ -276,36 +297,54 @@ export default function AlbumFotky({
 
   const zacniStahovaniRef = useRef(zacniStahovani);
   zacniStahovaniRef.current = zacniStahovani;
+  const zacniMazaniRef = useRef(zacniMazani);
+  zacniMazaniRef.current = zacniMazani;
 
   useEffect(() => {
-    if (onPripravStahovani === undefined) return;
+    if (onPripravAkce === undefined) return;
     const maFotky = stav === "hotovo" && fotky.length > 0;
-    onPripravStahovani({
-      stahniVse: () => {
-        void stahniVseRef.current("vse");
-      },
+    onPripravAkce({
       vyberFotky: () => {
         if (maFotky) zacniStahovaniRef.current();
       },
+      odstranFotky: () => {
+        if (maFotky) zacniMazaniRef.current();
+      },
     });
-  }, [onPripravStahovani, stav, fotky.length]);
+  }, [onPripravAkce, stav, fotky.length]);
+
+  const popisekRezimu = !vyberovyRezim
+    ? null
+    : mazani.mazaciRezim
+      ? popisekVyberu(mazani.vybrane.size, "Vyber fotky ke smazání.")
+      : stahovani.galeriePripravena
+        ? "Fotky jsou připravené. Ulož je do galerie telefonu."
+        : popisekVyberu(stahovani.vybrane.size, "Vyber fotky ke stažení.");
 
   useEffect(() => {
-    if (!vyberovyRezim) return;
-    onVyberovyRezim?.(true);
+    onVyberovyRezim?.(popisekRezimu);
+  }, [onVyberovyRezim, popisekRezimu]);
+
+  useEffect(
+    () => () => {
+      onVyberovyRezim?.(null);
+    },
+    [onVyberovyRezim],
+  );
+
+  useEffect(() => {
     // The button that started the mode leaves the page with the header actions.
-    toolbarRef.current?.focus({ preventScroll: true });
-    return () => {
-      onVyberovyRezim?.(false);
-    };
-  }, [onVyberovyRezim, vyberovyRezim]);
+    if (vyberovyRezim) toolbarRef.current?.focus({ preventScroll: true });
+  }, [vyberovyRezim]);
 
   useEffect(() => {
     setIndex(null);
     resetKosPotvrzeni();
     mazani.resetMazani();
     stahovani.resetStahovani();
-  }, [album.id, obnova]);
+  }, [album.id]);
+
+  useSledovaniNovych(konecRef, fotky.length, nahravani !== null && index === null && !vyberovyRezim);
 
   const aktualniFotkaId = index !== null ? (fotky[index]?.id ?? null) : null;
   const lightboxOtevren = index !== null;
@@ -369,6 +408,7 @@ export default function AlbumFotky({
   }
 
   if (fotky.length === 0) {
+    if (nahravani !== null) return <></>;
     return (
       <PrazdnyStav
         ikona={<IkonaObrazek />}
@@ -463,7 +503,63 @@ export default function AlbumFotky({
 
   return (
     <>
-      {index === null && (!skrytVychoziAkce || vyberovyRezim) ? (
+      {cilVyberu !== undefined && vyberovyRezim && !jeKos ? (
+        cilVyberu === null ? null : mazani.mazaciRezim ? (
+          <ListaVyberu
+            cil={cilVyberu}
+            popisek="Mazání fotek"
+            vybranoVse={jeVybranoVse(fotky, mazani.vybrane)}
+            probiha={mazani.mazeSe}
+            onZrusit={mazani.zrusMazani}
+            onPrepnoutVse={mazani.prepniVyberVse}
+          >
+            <TlacitkoVyberu
+              druh="smazat"
+              disabled={mazani.vybrane.size === 0 || mazani.mazeSe}
+              onClick={() => {
+                mazani.otevriPotvrzeni("vybrane");
+              }}
+            >
+              {mazani.vybrane.size > 0 ? `Smazat ${mazani.vybrane.size}` : "Smazat"}
+            </TlacitkoVyberu>
+          </ListaVyberu>
+        ) : (
+          <ListaVyberu
+            cil={cilVyberu}
+            popisek="Stahování fotek"
+            vybranoVse={jeVybranoVse(fotky, stahovani.vybrane)}
+            probiha={stahovani.stahujeSe}
+            onZrusit={stahovani.zrusStahovani}
+            onPrepnoutVse={stahovani.prepniVyberVse}
+          >
+            {stahovani.galeriePripravena ? (
+              <TlacitkoVyberu
+                druh="stahnout"
+                disabled={stahovani.stahujeSe}
+                onClick={() => {
+                  void stahovani.ulozDoGalerie();
+                }}
+              >
+                Do galerie
+              </TlacitkoVyberu>
+            ) : (
+              <TlacitkoVyberu
+                druh="stahnout"
+                disabled={stahovani.vybrane.size === 0 || stahovani.stahujeSe}
+                onClick={() => {
+                  void stahovani.provedStahovani("vybrane");
+                }}
+              >
+                {stahovani.stahujeSe
+                  ? "Stahuji…"
+                  : stahovani.vybrane.size > 0
+                    ? `Stáhnout ${stahovani.vybrane.size}`
+                    : "Stáhnout"}
+              </TlacitkoVyberu>
+            )}
+          </ListaVyberu>
+        )
+      ) : index === null && (!skrytVychoziAkce || vyberovyRezim) ? (
         <>
           <div
             className={`${fotkyAlbumToolbarZaklad} p-3 outline-none! ${toolbarRezimTrida} ${vyberovyRezim ? "" : "max-sm:flex-row max-sm:items-center max-sm:justify-between"}`}
@@ -530,7 +626,7 @@ export default function AlbumFotky({
         </>
       ) : null}
 
-      {stahovani.stahovatChyba !== null && !stahovani.stahovaciRezim ? (
+      {stahovani.stahovatChyba !== null && (!stahovani.stahovaciRezim || cilVyberu !== undefined) ? (
         <p role="alert" className="mb-3 text-sm font-semibold text-inkoust">
           {stahovani.stahovatChyba}
         </p>
@@ -598,17 +694,12 @@ export default function AlbumFotky({
         }}
       />
 
-      {isAdmin && !jeKos && !vyberovyRezim && index === null && fotky.length > 0 ? (
-        <div className="mt-8 hidden justify-end min-[90rem]:flex">
-          <button
-            type="button"
-            onClick={mazani.zacniMazani}
-            className="nahled-press inline-flex h-[46px] items-center rounded-xl px-2.5 text-sm font-semibold text-mech hover:text-akcent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
-          >
-            Odstranit
-          </button>
-        </div>
-      ) : null}
+      {/* Panel průběhu leží dole přes stránku, nové fotky zůstanou nad ním. */}
+      <div
+        ref={konecRef}
+        aria-hidden="true"
+        className={`scroll-mb-24 min-[90rem]:scroll-mb-6 ${nahravani !== null ? "h-[min(52vh,20rem)]" : ""}`}
+      />
 
       {mazani.mazatChyba !== null ? (
         <p role="alert" className="mt-3 text-sm font-semibold text-inkoust">

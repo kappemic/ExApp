@@ -22,9 +22,6 @@ export const fotkyHoverBgPapir =
 export const fotkyHoverBgSmrk =
   "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-smrk/10";
 
-export const fotkyHoverBgOkrPlne =
-  "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-okr-tmavy";
-
 export const fotkyTlacitkoZaklad = `${fotkyStisk} inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${FOTKY_FOCUS}`;
 
 /** Primary action — Nahrát (pen brand / smrk). */

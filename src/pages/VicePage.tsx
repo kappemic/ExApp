@@ -83,13 +83,13 @@ export default function VicePage(): JSX.Element {
 
       <section className="mt-6" aria-labelledby="vice-sprava">
         <h2 id="vice-sprava" className={NADPIS_SEKCE}>
-          {isAdmin || isSuperadmin ? "Správa klubu" : "Nastavení"}
+          {smiFrontu ? "Správa klubu" : "Nastavení"}
         </h2>
         <SeznamKarta className="mt-2">
           {(isAdmin || isSuperadmin) ? (
             <SeznamRadek odkaz="/admin/kody" vlevo={<SeznamIkona><Ikona nazev="key-round" className="size-4" /></SeznamIkona>} nazev={<span className="text-[15px] font-medium">Pozvánkové kódy</span>} />
           ) : null}
-          {(isAdmin || isSuperadmin) && smiFrontu ? (
+          {smiFrontu ? (
             <SeznamRadek
               odkaz="/zpevnik/fronta"
               vlevo={<SeznamIkona><Ikona nazev="music" className="size-4" /></SeznamIkona>}

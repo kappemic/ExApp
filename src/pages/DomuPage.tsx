@@ -1,6 +1,8 @@
 import type { JSX } from "react";
 import { Link, Navigate } from "react-router-dom";
-import LogoKlubu from "../components/LogoKlubu";
+import AuthRozlozeni from "../components/Auth/AuthRozlozeni";
+import { AuthNadpis } from "../components/Auth/authVstupy";
+import Ikona from "../components/Ikona";
 import StrankaKostra from "../components/StrankaKostra";
 import { useAuth } from "../hooks/useAuth";
 
@@ -18,38 +20,30 @@ export default function DomuPage(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 pb-16 pt-[calc(2rem+env(safe-area-inset-top,0px))] sm:px-6 sm:pt-14">
-      <div className="flex items-center gap-4">
-        <LogoKlubu velikost="lg" />
-        <div className="min-w-0">
-          <p className="font-condensed text-sm font-medium text-mech">ExApp</p>
-          <h1 className="font-expanded mt-0.5 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Kronika výprav klubu
-          </h1>
-        </div>
+    <AuthRozlozeni>
+      <AuthNadpis>Kronika výprav klubu</AuthNadpis>
+      <div className="flex flex-col gap-3 text-[15px] leading-[23px] text-mech">
+        <p>
+          Plánujeme výpravy, hlídáme srazy a schováváme fotky na jedno místo. Kilometry se počítají do žebříčku.
+          Před odjezdem se domlouváme v chatu.
+        </p>
+        <p>Účet založíš kódem od vedoucí. Kód platí deset minut.</p>
       </div>
-      <p className="mt-3 text-base leading-relaxed text-inkoust/80">
-        Plánujeme výpravy, hlídáme srazy a schováváme fotky na jedno místo.
-        Kilometry se počítají do žebříčku. Před odjezdem se domlouváme v chatu.
-      </p>
-      <p className="mt-3 text-base leading-relaxed text-inkoust/80">
-        Účet založíš kódem od vedoucí. Kód platí deset minut.
-      </p>
-
-      <div className="mt-8 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-auto flex flex-col gap-2.5 lg:mt-2">
         <Link
           to="/login"
-          className="nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border-2 border-okr bg-okr px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          className="nahled-press inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-smrk px-5 text-sm font-semibold text-papir hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
         >
           Přihlásit se
+          <Ikona nazev="arrow-right" className="size-4" />
         </Link>
         <Link
           to="/register"
-          className="nahled-press inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-linka bg-papir px-4 py-2 text-sm font-bold transition-colors hover:bg-linka focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+          className="nahled-press inline-flex h-12 items-center justify-center rounded-xl border border-linka bg-povrch px-5 text-sm font-semibold text-inkoust hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
         >
           Registrace s kódem
         </Link>
       </div>
-    </main>
+    </AuthRozlozeni>
   );
 }

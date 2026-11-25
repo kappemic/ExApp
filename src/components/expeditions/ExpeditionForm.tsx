@@ -1,6 +1,7 @@
 import Ikona from "../Ikona";
+import PoleFotek from "../fotky/PoleFotek";
 import { OBLAST_FORMULARE, POLE_STRANKY, POPISEK_POLE } from "../formular-tridy";
-import { useEffect, useId, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
+import { useEffect, useId, useState, type FormEvent, type JSX } from "react";
 import {
   VALIDACE,
   VALIDACNI_ZPRAVY,
@@ -304,8 +305,7 @@ function VyberSnimku({
   soubory,
   ulozene,
   disabled,
-  onVyber,
-  onPretazeni,
+  onPridat,
   onOdebrat,
   onSmazatUlozeny,
 }: {
@@ -315,9 +315,7 @@ function VyberSnimku({
   soubory: readonly File[];
   ulozene: readonly UlozenySnimekCesty[];
   disabled: boolean;
-  onVyber: (udalost: ChangeEvent<HTMLInputElement>) => void;
-  /** Fotky přetažené myší do plochy. */
-  onPretazeni: (soubory: File[]) => void;
+  onPridat: (soubory: File[]) => void;
   onOdebrat: (index: number) => void;
   onSmazatUlozeny?: (id: string) => void;
 }): JSX.Element {
@@ -326,64 +324,24 @@ function VyberSnimku({
       <p className={`mb-2 ${POPISEK_POLE}`}>
         {nadpis} (nepovinné)
       </p>
-      <label
-        htmlFor={id}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (!disabled) onPretazeni([...e.dataTransfer.files]);
-        }}
-        className={`flex h-24 cursor-pointer flex-col items-center justify-center gap-[5px] rounded-[11px] border border-linka bg-pole-podklad text-mech transition-colors motion-reduce:transition-none hover:bg-povrch-2 focus-within:border-smrk min-[90rem]:bg-[#f6f2e6] ${disabled ? "pointer-events-none opacity-60" : ""}`}
+      <PoleFotek
+        id={id}
+        soubory={soubory}
+        ulozene={ulozene}
+        disabled={disabled}
+        accept="image/jpeg,image/png,image/webp"
+        popisek={`${nadpis}. ${napoveda}`}
+        className="rounded-[11px] border border-linka bg-pole-podklad text-mech min-[90rem]:bg-[#f6f2e6]"
+        tridaPrazdne="h-24 gap-[5px] transition-colors motion-reduce:transition-none hover:bg-povrch-2"
+        onPridat={onPridat}
+        onOdebrat={onOdebrat}
+        onSmazatUlozenou={onSmazatUlozeny}
       >
         <Ikona nazev="image-plus" className="size-[17px] text-ink-3 min-[90rem]:hidden" />
         <Ikona nazev="upload" className="hidden size-[17px] text-ink-3 min-[90rem]:block" />
         <span className="text-[11.5px] font-medium min-[90rem]:hidden">Vyber fotky</span>
         <span className="hidden text-[11.5px] font-medium min-[90rem]:inline">Přetáhni fotky nebo vyber</span>
-        <input
-          id={id}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          disabled={disabled}
-          onChange={onVyber}
-          aria-label={`${nadpis}. ${napoveda}`}
-          className="sr-only"
-        />
-      </label>
-      {(ulozene.length > 0 || soubory.length > 0) && (
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {ulozene.map((snimek) => (
-            <li key={snimek.id} className="relative">
-              <img src={snimek.url} alt="" className="h-16 w-16 rounded-xl object-cover" />
-              {onSmazatUlozeny !== undefined && (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onSmazatUlozeny(snimek.id)}
-                  aria-label="Odebrat snímek"
-                  className="absolute -top-2 -right-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-papir shadow-razitko text-sm font-bold"
-                >
-                  ×
-                </button>
-              )}
-            </li>
-          ))}
-          {soubory.map((soubor, index) => (
-            <li key={`${soubor.name}-${soubor.size}-${index}`} className="flex max-w-full items-center gap-1 rounded-full border border-linka bg-povrch py-0.5 pl-2.5 pr-1">
-              <span className="max-w-full truncate text-[13px] font-medium">{soubor.name}</span>
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onOdebrat(index)}
-                aria-label={`Odebrat ${soubor.name}`}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-base"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      </PoleFotek>
     </div>
   );
 }
@@ -472,12 +430,6 @@ export default function ExpeditionForm({
       kapacitaCelkem: vysledek.hodnoty.kapacitaCelkem,
     };
     onSubmit(payload, { tam: snimkyTam, zpet: snimkyZpet });
-  }
-
-  function pridejSoubory(smer: "tam" | "zpet", udalost: ChangeEvent<HTMLInputElement>): void {
-    const seznam = udalost.target.files === null ? [] : Array.from(udalost.target.files);
-    udalost.target.value = "";
-    pridejPole(smer, seznam);
   }
 
   function pridejPole(smer: "tam" | "zpet", nove: File[]): void {
@@ -767,8 +719,7 @@ export default function ExpeditionForm({
           soubory={snimkyTam}
           ulozene={ulozeneTam}
           disabled={odesilaSe}
-          onVyber={(e) => pridejSoubory("tam", e)}
-          onPretazeni={(nove) => pridejPole("tam", nove)}
+          onPridat={(nove) => pridejPole("tam", nove)}
           onOdebrat={(index) => setSnimkyTam((prev) => prev.filter((_, i) => i !== index))}
           onSmazatUlozeny={onSmazatSnimek}
         />
@@ -779,8 +730,7 @@ export default function ExpeditionForm({
           soubory={snimkyZpet}
           ulozene={ulozeneZpet}
           disabled={odesilaSe}
-          onVyber={(e) => pridejSoubory("zpet", e)}
-          onPretazeni={(nove) => pridejPole("zpet", nove)}
+          onPridat={(nove) => pridejPole("zpet", nove)}
           onOdebrat={(index) => setSnimkyZpet((prev) => prev.filter((_, i) => i !== index))}
           onSmazatUlozeny={onSmazatSnimek}
         />

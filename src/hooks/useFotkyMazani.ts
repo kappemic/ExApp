@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { prepniVyberVsech } from "../lib/fotky-stahovani";
 import {
   idAktualniFotkyProPotvrzeni,
   idsFotekKeSmazani,
@@ -16,6 +17,8 @@ export interface UseFotkyMazaniVysledek {
   zacniMazani: () => void;
   zrusMazani: () => void;
   prepniVyber: (fotkaId: string) => void;
+  /** Marks every photo, or clears the marks when all are marked already. */
+  prepniVyberVse: () => void;
   otevriPotvrzeni: (druh: PotvrzeniMazaniFotek, aktualniId?: string | null) => void;
   /** Id of the photo when `potvrzeni === "aktualni"` was opened (survives lightbox close). */
   potvrzeniAktualniId: string | null;
@@ -72,6 +75,10 @@ export function useFotkyMazani(
       return dalsi;
     });
   }, []);
+
+  const prepniVyberVse = useCallback((): void => {
+    setVybrane((prev) => prepniVyberVsech(fotky, prev));
+  }, [fotky]);
 
   const otevriPotvrzeni = useCallback(
     (druh: PotvrzeniMazaniFotek, aktualniId?: string | null): void => {
@@ -146,6 +153,7 @@ export function useFotkyMazani(
     zacniMazani,
     zrusMazani,
     prepniVyber,
+    prepniVyberVse,
     otevriPotvrzeni,
     zavriPotvrzeni,
     provedMazani,

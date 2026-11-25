@@ -1,5 +1,7 @@
 import type { JSX, ReactNode } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
+import Ikona from "../Ikona";
+import PrazdnyStav from "../PrazdnyStav";
 import StrankaKostra from "../StrankaKostra";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -7,6 +9,8 @@ interface RequireAuthProps {
   children: ReactNode;
   /** Jen pro vedoucí. `isAdmin` zahrnuje i hlavního admina (SUPERADMIN). */
   adminOnly?: boolean;
+  /** Jen pro toho, kdo smí spravovat výpravy (vedoucí a aktivní členové). */
+  jenSpravceVyprav?: boolean;
   /**
    * V bootstrap režimu (ještě neexistuje žádný ADMIN) propustí i bez přihlášení.
    * Používat jen pro /admin/kody — prvotní nastavení systému.
@@ -18,14 +22,15 @@ interface RequireAuthProps {
  * RequireAuth — jediný strážce privátních rout.
  * - bootstrap režim + povolitBootstrap → propustí (prvotní nastavení, česky vysvětleno na stránce)
  * - bez session → redirect na /login?from=<původní cesta>
- * - adminOnly bez admina ani hlavního admina → cedule „Nemáš přístup"
+ * - bez potřebného práva (adminOnly, jenSpravceVyprav) → cedule „Nemáš přístup"
  */
 export default function RequireAuth({
   children,
   adminOnly = false,
+  jenSpravceVyprav = false,
   povolitBootstrap = false,
 }: RequireAuthProps): JSX.Element {
-  const { user, isLoading, isAdmin, isSuperadmin, jeBootstrap } = useAuth();
+  const { user, isLoading, isAdmin, isSuperadmin, muzeSpravovatVypravy, jeBootstrap } = useAuth();
   const location = useLocation();
 
   if (isLoading) return <StrankaKostra />;
@@ -41,29 +46,24 @@ export default function RequireAuth({
     return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />;
   }
 
-  if (adminOnly && !isAdmin && !isSuperadmin) {
-    return (
-      <main className="mx-auto w-full px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8 xl:px-12">
-        <div
-          role="alert"
-          className="rounded-lg border border-linka bg-povrch p-6 text-center shadow-denik"
-        >
-          <h1 className="text-2xl font-extrabold tracking-tight">
-            Nemáš přístup
-          </h1>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-inkoust/70">
-            Tato stránka je jen pro vedoucí (admin).
-          </p>
-          <Link
-            to="/vypravy"
-            className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md border-2 border-okr bg-okr px-4 py-2 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy"
-          >
-            <span aria-hidden="true">←</span> Výpravy
-          </Link>
-        </div>
-      </main>
-    );
+  const admin = isAdmin || isSuperadmin;
+  if (adminOnly && !admin) return <NemasPristup text="Tahle stránka je jen pro vedoucí." />;
+  if (jenSpravceVyprav && !admin && !muzeSpravovatVypravy) {
+    return <NemasPristup text="Výpravy zakládají a uzavírají vedoucí a aktivní členové." />;
   }
 
   return <>{children}</>;
+}
+
+function NemasPristup({ text }: { text: string }): JSX.Element {
+  return (
+    <main className="mx-auto w-full max-w-[46rem] px-5 pb-8 pt-4 sm:px-6 sm:pt-8 min-[90rem]:pt-11">
+      <PrazdnyStav
+        ikona={<Ikona nazev="lock" className="size-[18px]" />}
+        nadpis="Nemáš přístup"
+        text={text}
+        akce={{ popisek: "Zpět na výpravy", odkaz: "/vypravy" }}
+      />
+    </main>
+  );
 }

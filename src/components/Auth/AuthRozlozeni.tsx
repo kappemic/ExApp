@@ -15,7 +15,7 @@ export default function AuthRozlozeni({ children }: { children: ReactNode }): JS
         </div>
         <div className="relative flex h-full flex-col justify-between px-5 pb-5 pt-[calc(18px+env(safe-area-inset-top,0px))] lg:p-12">
           <div className="flex items-center gap-2.5 lg:gap-[11px]">
-            <img src="/logo-klubu.png" alt="" className="h-9 w-[22px] object-contain lg:h-[57px] lg:w-[35px]" />
+            <img src="/logo-klubu.png" alt="" className="h-9 w-[22px] object-contain brightness-0 invert lg:h-[57px] lg:w-[35px]" />
             <div className="flex flex-col gap-px lg:flex-row lg:items-center lg:gap-[11px]">
               <p className="font-display text-lg font-bold tracking-[-0.2px] text-povrch lg:text-2xl lg:tracking-[-0.3px]">ExApp</p>
               <p className="text-xs font-medium text-[#d5dcc6] lg:text-[17px] lg:tracking-[0.3px]">Školní expediční klub</p>

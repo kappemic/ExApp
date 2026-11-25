@@ -214,7 +214,7 @@ export default function ExpeditionCard({
               type="button"
               onClick={() => onDetail(expedice)}
               aria-label={`Detail výpravy ${expedice.nazev}`}
-              className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-md border-2 border-okr bg-okr px-4 py-1.5 text-sm font-bold text-inkoust transition-colors hover:bg-okr-tmavy"
+              className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-xl bg-smrk px-4 py-1.5 text-sm font-semibold text-papir transition-opacity hover:opacity-90"
             >
               Detail
               <span aria-hidden="true">→</span>

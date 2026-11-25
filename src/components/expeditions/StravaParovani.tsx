@@ -555,7 +555,7 @@ export default function StravaParovani({
                       onClick={() => void potvrdit(navrh)}
                       disabled={potvrzujeSe !== null}
                       title="Potvrdit spárování aktivity k výpravě"
-                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:opacity-60"
+                      className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-smrk px-5 text-sm font-semibold text-papir hover:opacity-90 disabled:opacity-60"
                     >
                       {potvrzujeSe === navrh.id ? "Páruji…" : "Potvrdit"}
                     </button>
@@ -634,7 +634,7 @@ export default function StravaParovani({
         onClick={() => void ulozitRucne()}
         disabled={ukladaSe}
         title="Uložit kilometry bez Stravy"
-        className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:opacity-60"
+        className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-smrk px-5 text-sm font-semibold text-papir hover:opacity-90 disabled:opacity-60"
       >
         {ukladaSe ? "Ukládám…" : "Uložit bez Stravy"}
       </button>

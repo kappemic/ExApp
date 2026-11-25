@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import ConfirmDialog from "../components/kalendar/ConfirmDialog";
-import AlbumFotky, { type AkceStahovaniAlba } from "../components/fotky/AlbumFotky";
+import AlbumFotky, { type AkceAlba } from "../components/fotky/AlbumFotky";
 import { KostraAlba, KostraFotky } from "../components/StrankaKostra";
 import AlbumKarta from "../components/fotky/AlbumKarta";
 import FotkyNahravaciPanel from "../components/fotky/FotkyNahravaciPanel";
@@ -22,6 +22,8 @@ import { KARET_NA_DAVKU } from "../lib/strankovani";
 import { IkonaLupa, IkonaObrazek } from "../components/SeznamIkony";
 import HlavickaZpet, { ZpetPocitac } from "../components/HlavickaZpet";
 import Ikona from "../components/Ikona";
+import NahravaniVAlbu from "../components/fotky/NahravaniVAlbu";
+import { poNahraniFotek } from "../lib/nahravani-fotek";
 import { zneplatniBazenZastupnych } from "../lib/zastupne-fotky";
 import { jeAlbumNahledu, smiNahratDoAlba } from "../shared/fotky-nahledy";
 import { velikostiAlb } from "../lib/alba-prehled";
@@ -114,10 +116,12 @@ export default function FotkyPage(): JSX.Element {
   const prihlasen = user !== null;
   const [nahravaniOtevreno, setNahravaniOtevreno] = useState(false);
   const [albumFormOtevreno, setAlbumFormOtevreno] = useState(false);
-  const stahovaniAlbaRef = useRef<AkceStahovaniAlba | null>(null);
-  const [vyberFotek, setVyberFotek] = useState(false);
-  const pripravStahovani = useCallback((akce: AkceStahovaniAlba): void => {
-    stahovaniAlbaRef.current = akce;
+  const akceAlbaRef = useRef<AkceAlba | null>(null);
+  /** Výzva režimu výběru (stahování, mazání), jinak null. */
+  const [vyberFotek, setVyberFotek] = useState<string | null>(null);
+  const [cilVyberu, setCilVyberu] = useState<HTMLDivElement | null>(null);
+  const pripravAkce = useCallback((akce: AkceAlba): void => {
+    akceAlbaRef.current = akce;
   }, []);
   const [alba, setAlba] = useState<ApiAlbum[]>([]);
   const [datumVyprav, setDatumVyprav] = useState<ReadonlyMap<string, string>>(
@@ -150,8 +154,13 @@ export default function FotkyPage(): JSX.Element {
   };
   const navratPoSmazaniAlbaRef = useRef<HTMLElement | null>(null);
 
+  const posledniNacteni = useRef(0);
   const nacti = useCallback(async (): Promise<ApiAlbum[] | null> => {
+    posledniNacteni.current += 1;
+    const poradi = posledniNacteni.current;
     const vysledek = await nactiAlba();
+    // Během nahrávání se načítá po každé fotce, starší odpověď nesmí přepsat novější.
+    if (poradi !== posledniNacteni.current) return vysledek.ok ? vysledek.data : null;
     if (!vysledek.ok) {
       setChyba(vysledek.chyba);
       setStav((aktualni) => (aktualni === "hotovo" ? "hotovo" : "chyba"));
@@ -228,10 +237,18 @@ export default function FotkyPage(): JSX.Element {
           ) ?? null)
         : null;
 
-  function poNahrani(): void {
-    zneplatniBazenZastupnych();
-    setObnova((hodnota) => hodnota + 1);
-    void nacti();
+  useEffect(
+    () =>
+      poNahraniFotek(() => {
+        setObnova((hodnota) => hodnota + 1);
+        void nacti();
+      }),
+    [nacti],
+  );
+
+  /** Průběh nahrávání ukazuje album, takže se na něj z přehledu i jiného alba přejde. */
+  function ukazNahravani(id: string): void {
+    if (id !== albumId) void navigate(`/fotky/${id}`);
   }
 
   function otevriSmazaniAlba(album: ApiAlbum, spoustec: HTMLElement): void {
@@ -404,8 +421,13 @@ export default function FotkyPage(): JSX.Element {
             <h2 className="font-display text-[22px] font-bold tracking-[-0.3px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
               {otevrene.nazev}
             </h2>
-            <p className="text-[13px] text-ink-3 min-[90rem]:text-[15px] min-[90rem]:leading-[23px] min-[90rem]:text-mech">
-              {metaAlbaDetail(otevrene, datumOtevreneho)}
+            <p
+              aria-live={vyberFotek !== null ? "polite" : undefined}
+              className="text-[13px] text-ink-3 min-[90rem]:text-[15px] min-[90rem]:leading-[23px] min-[90rem]:text-mech"
+            >
+              {otevrene.druh !== "kos" && vyberFotek !== null
+                ? vyberFotek
+                : metaAlbaDetail(otevrene, datumOtevreneho)}
             </p>
             {jeAlbumNahledu(otevrene.id) ? (
               <p className="max-w-prose text-[13px] leading-[19px] text-mech min-[90rem]:text-[15px] min-[90rem]:leading-[23px]">
@@ -413,7 +435,10 @@ export default function FotkyPage(): JSX.Element {
               </p>
             ) : null}
           </div>
-          {otevrene.druh !== "kos" && !vyberFotek ? (
+          {otevrene.druh !== "kos" && vyberFotek !== null ? (
+            // Pevná výška drží místo, když lišta odroluje k hornímu okraji.
+            <div ref={setCilVyberu} className="flex h-11 min-[90rem]:h-[46px] min-[90rem]:shrink-0" />
+          ) : otevrene.druh !== "kos" ? (
             <div className="flex gap-2 min-[90rem]:shrink-0 min-[90rem]:flex-row-reverse min-[90rem]:gap-2.5">
               {prihlasen && smiNahratDoAlba(otevrene.id, isAdmin) ? (
                 <button
@@ -433,27 +458,29 @@ export default function FotkyPage(): JSX.Element {
                 <>
                   <button
                     type="button"
-                    onClick={() => {
-                      stahovaniAlbaRef.current?.stahniVse();
-                    }}
-                    className={`${fotkyTlacitkoSekundarni} h-[46px] gap-2 px-[18px] max-[90rem]:hidden`}
-                  >
-                    <Ikona nazev="download" className="size-4 text-mech" />
-                    Stáhnout album
-                  </button>
-                  <button
-                    type="button"
                     data-fotky-vybrat-ke-stazeni
                     onClick={() => {
-                      stahovaniAlbaRef.current?.vyberFotky();
+                      akceAlbaRef.current?.vyberFotky();
                     }}
                     className={`${fotkyTlacitkoSekundarni} h-11 flex-1 text-[13.5px] min-[90rem]:h-[46px] min-[90rem]:flex-none min-[90rem]:gap-2 min-[90rem]:px-[18px] min-[90rem]:text-sm`}
                   >
-                    <Ikona nazev="download" className="size-4 min-[90rem]:hidden" />
-                    <Ikona nazev="check" className="hidden size-4 text-mech min-[90rem]:block" />
-                    <span className="min-[90rem]:hidden">Stáhnout</span>
-                    <span className="hidden min-[90rem]:inline">Vybrat fotky</span>
+                    <Ikona nazev="download" className="size-4 min-[90rem]:text-mech" />
+                    Stáhnout
                   </button>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      data-fotky-odstranit
+                      aria-label="Odstranit fotky"
+                      title="Odstranit fotky"
+                      onClick={() => {
+                        akceAlbaRef.current?.odstranFotky();
+                      }}
+                      className={`${fotkyTlacitkoSekundarni} !px-0 size-11 shrink-0 hover:text-akcent min-[90rem]:size-[46px]`}
+                    >
+                      <Ikona nazev="trash-2" className="size-[17px]" />
+                    </button>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -468,7 +495,7 @@ export default function FotkyPage(): JSX.Element {
           alba={albaKNahrani}
           vybraneId={vybraneKNahrani}
           onVyber={setVybraneId}
-          onNahrano={poNahrani}
+          onZacato={ukazNahravani}
           onVytvoreno={poNovemAlbu}
           rozbalitSekci={rozbalitNahravani}
           onRozbaleno={() => {
@@ -509,8 +536,9 @@ export default function FotkyPage(): JSX.Element {
               onNahrati={() => {
                 setNahravaniOtevreno(true);
               }}
-              onPripravStahovani={pripravStahovani}
+              onPripravAkce={pripravAkce}
               onVyberovyRezim={setVyberFotek}
+              cilVyberu={cilVyberu}
             />
           ) : (
             <>
@@ -735,8 +763,9 @@ function DetailAlba({
   onZmenaAlba,
   onZnovu,
   onNahrati,
-  onPripravStahovani,
+  onPripravAkce,
   onVyberovyRezim,
+  cilVyberu,
 }: {
   albumId: string;
   album: ApiAlbum | null;
@@ -747,8 +776,9 @@ function DetailAlba({
   onZmenaAlba: () => void;
   onZnovu: () => void;
   onNahrati: () => void;
-  onPripravStahovani: (akce: AkceStahovaniAlba) => void;
-  onVyberovyRezim: (aktivni: boolean) => void;
+  onPripravAkce: (akce: AkceAlba) => void;
+  onVyberovyRezim: (popisek: string | null) => void;
+  cilVyberu: HTMLElement | null;
 }): JSX.Element {
   if (stavSeznamu === "nacitani" && album === null) {
     return (
@@ -768,23 +798,22 @@ function DetailAlba({
 
   if (album === null) {
     return (
-      <div role="status" className="rounded-lg border border-linka bg-povrch p-5 text-center shadow-denik">
-        <h2 className="text-base font-bold tracking-tight">Tohle album tu není</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-inkoust/70">
-          Zkontroluj odkaz, nebo se vrať na všechna alba.
-        </p>
-        <Link
-          to="/fotky"
-          className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} mt-4 rounded-md border border-linka bg-papir px-4 text-sm font-bold lg:hidden`}
-        >
-          Všechna alba
-        </Link>
-      </div>
+      <>
+        <HlavickaZpet zpet="/fotky" zpetPopisek="Zpět na přehled alb" titulek="Album" className="mb-5 min-[90rem]:hidden" />
+        <ZpetPocitac zpet="/fotky" popisek="Zpět na alba" />
+        <PrazdnyStav
+          ikona={<IkonaObrazek />}
+          nadpis="Tohle album tu není"
+          text="Zkontroluj odkaz, nebo se vrať na všechna alba."
+          akce={{ popisek: "Všechna alba", odkaz: "/fotky", varianta: "vedlejsi" }}
+        />
+      </>
     );
   }
 
   return (
     <>
+      {album.druh !== "kos" ? <NahravaniVAlbu albumId={album.id} /> : null}
       <AlbumFotky
         key={albumId}
         album={album}
@@ -793,8 +822,9 @@ function DetailAlba({
         onZmenaAlba={onZmenaAlba}
         skrytVychoziAkce={album.druh !== "kos"}
         onNahrati={onNahrati}
-        onPripravStahovani={onPripravStahovani}
+        onPripravAkce={onPripravAkce}
         onVyberovyRezim={onVyberovyRezim}
+        cilVyberu={cilVyberu}
       />
     </>
   );

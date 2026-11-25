@@ -17,6 +17,7 @@ import { chybaZApiTela, ctiJsonTelo } from "./api-odpoved";
 import {
   albumFotkaSouborPath,
   fotkaSouborPath,
+  jeApiChyba,
   type ApiAlbum,
   type ApiAlbumFotka,
   type DruhAlba,
@@ -367,8 +368,30 @@ export async function smazFotkuAlba(
   }
 }
 
-/** One file per request. Content-Type is left to the browser (FormData boundary). */
-export async function nahrajFotku(albumId: string, soubor: File): Promise<AlbaVysledek<null>> {
+/** Id první fotky z odpovědi `{ fotky: [...] }`. */
+function idNahraneFotky(telo: unknown): string | null {
+  if (typeof telo !== "object" || telo === null) return null;
+  const fotky: unknown = (telo as Record<string, unknown>)["fotky"];
+  const prvni: unknown = Array.isArray(fotky) ? fotky[0] : undefined;
+  if (typeof prvni !== "object" || prvni === null) return null;
+  const id: unknown = (prvni as Record<string, unknown>)["id"];
+  return typeof id === "string" ? id : null;
+}
+
+/** Hláška k souboru (velikost, formát) je přesnější než obecná chyba validace. */
+function chybaNahrani(telo: unknown): AlbaVysledek<never> {
+  if (jeApiChyba(telo)) {
+    const detail = telo.error.details?.["soubor"]?.[0];
+    if (detail !== undefined) return { ok: false, chyba: detail };
+  }
+  return chybaZTela(telo, "Fotku se nepodařilo nahrát.");
+}
+
+/**
+ * One file per request. Content-Type is left to the browser (FormData boundary).
+ * Returns the new photo id, or null when the body does not carry it.
+ */
+export async function nahrajFotku(albumId: string, soubor: File): Promise<AlbaVysledek<string | null>> {
   const zaklad = apiBase();
   if (zaklad.length === 0) {
     return { ok: false, chyba: "Bez připojení fotku nahrát nejde." };
@@ -382,9 +405,9 @@ export async function nahrajFotku(albumId: string, soubor: File): Promise<AlbaVy
       headers: { Accept: "application/json" },
       body: telo,
     });
-    if (odpoved.ok) return { ok: true, data: null };
     const json = await ctiJsonTelo(odpoved);
-    return chybaZTela(json, "Fotku se nepodařilo nahrát.");
+    if (odpoved.ok) return { ok: true, data: idNahraneFotky(json) };
+    return chybaNahrani(json);
   } catch {
     return { ok: false, chyba: "Bez připojení fotku nahrát nejde." };
   }

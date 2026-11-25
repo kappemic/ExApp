@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   nadpisOperaceFotek,
@@ -16,6 +16,10 @@ interface FotkyStavPanelProps {
   /** When false, nothing is rendered (no empty chrome). */
   viditelny: boolean;
   probiha?: boolean;
+  /** Panel nad otevřenou galerií výpravy (dialog z-80). */
+  nadDialogem?: boolean;
+  /** Tlačítka pod seznamem, třeba po chybě. */
+  paticka?: ReactNode;
 }
 
 /**
@@ -27,6 +31,8 @@ export default function FotkyStavPanel({
   polozky,
   viditelny,
   probiha = true,
+  nadDialogem = false,
+  paticka,
 }: FotkyStavPanelProps): JSX.Element | null {
   if (!viditelny || polozky.length === 0) return null;
 
@@ -42,10 +48,10 @@ export default function FotkyStavPanel({
       aria-busy={probiha}
       data-fotky-stav-panel
       data-rezim={rezim}
-      className="fotky-stav-panel pointer-events-none fixed z-50 max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-lg border border-linka bg-papir/95 shadow-denik backdrop-blur-sm"
-      style={{ backgroundImage: LINIE }}
+      className="fotky-stav-panel pointer-events-none fixed z-50 flex max-h-[min(52vh,20rem)] w-[min(calc(100vw-1.5rem),20rem)] flex-col overflow-hidden rounded-lg border border-linka bg-papir/95 shadow-denik backdrop-blur-sm"
+      style={{ backgroundImage: LINIE, ...(nadDialogem ? { zIndex: 85 } : {}) }}
     >
-      <div className="border-b border-inkoust/15 bg-papir/90 px-3 py-2.5">
+      <div className="shrink-0 border-b border-inkoust/15 bg-papir/90 px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-2">
           <p className="text-sm font-bold tracking-tight text-inkoust">{nadpis}</p>
           <p className="shrink-0 text-xs font-semibold text-inkoust/65">
@@ -62,7 +68,7 @@ export default function FotkyStavPanel({
           />
         </div>
       </div>
-      <ul className="max-h-[calc(min(52vh,20rem)-4.5rem)] overflow-y-auto overscroll-contain px-2 py-2">
+      <ul className="min-h-0 overflow-y-auto overscroll-contain px-2 py-2">
         {polozky.map((polozka) => (
           <li
             key={polozka.id}
@@ -81,6 +87,11 @@ export default function FotkyStavPanel({
           </li>
         ))}
       </ul>
+      {paticka !== undefined ? (
+        <div className="pointer-events-auto flex shrink-0 flex-wrap gap-2 border-t border-inkoust/15 bg-papir/90 px-3 py-2.5">
+          {paticka}
+        </div>
+      ) : null}
     </aside>
   );
 

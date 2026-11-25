@@ -1343,7 +1343,7 @@ export default function ExpeditionModal({
                   className={
                     stranka
                       ? "nahled-press inline-flex h-12 w-full items-center justify-center rounded-xl border border-linka bg-povrch px-6 text-sm font-semibold text-inkoust hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 min-[90rem]:h-[46px] min-[90rem]:w-auto min-[90rem]:px-[18px]"
-                      : "inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust hover:bg-okr-tmavy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:w-auto"
+                      : "inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-linka bg-povrch px-6 text-base font-semibold text-inkoust hover:bg-povrch-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk disabled:opacity-60 sm:w-auto"
                   }
                 >
                   {akceBezi ? "Odhlašuji…" : "Odhlásit se"}
@@ -1871,7 +1871,7 @@ export default function ExpeditionModal({
                               ? "Nejdřív vyber uživatele"
                               : "Přidat uživatele do kroniky"
                           }
-                          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-okr px-6 text-base font-semibold text-inkoust motion-safe:transition-colors motion-safe:hover:bg-okr-tmavy disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-smrk px-6 text-base font-semibold text-papir hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Přidat do kroniky
                         </button>

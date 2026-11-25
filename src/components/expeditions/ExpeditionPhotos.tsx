@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import {
   nactiFotky,
   nastavNahledFotky,
-  pridejFotkuSouborem,
   smazFotku,
   urlSouboruFotky,
   vyberNahledFotky,
@@ -15,7 +14,12 @@ import FotkyMazaciHlavicka from "../fotky/FotkyMazaciHlavicka";
 import MazaniVyberVrstva from "../fotky/MazaniVyberVrstva";
 import Ikona from "../Ikona";
 import FotkyRadkovaMrizka from "../fotky/FotkyRadkovaMrizka";
+import NahravaciFormular from "../fotky/NahravaciFormular";
+import NahravaniVAlbu from "../fotky/NahravaniVAlbu";
 import PostupnaFotka from "../fotky/PostupnaFotka";
+import SpodniSheet from "../shell/SpodniSheet";
+import { nahrajDoAlba, poNahraniFotek, useNahravaniAlba } from "../../lib/nahravani-fotek";
+import { useSledovaniNovych } from "../../hooks/useSledovaniNovych";
 import { useFotkyMazani } from "../../hooks/useFotkyMazani";
 import {
   idsFotekKeSmazani,
@@ -25,9 +29,9 @@ import {
 import FotkyLightbox, { jeFotkyLightboxOtevreny } from "./FotkyLightbox";
 import {
   fotkyHoverBgLinka,
-  fotkyHoverBgOkrPlne,
   fotkyHoverOpacity,
   fotkyMrizkaDlazdice,
+  fotkyTlacitkoPrimarni,
   fotkyTlacitkoZaklad,
 } from "../fotky/fotky-ui";
 
@@ -77,20 +81,22 @@ export default function ExpeditionPhotos({
   const [galerieOtevrena, setGalerieOtevrena] = useState<boolean>(false);
   const [galerieZavira, setGalerieZavira] = useState<boolean>(false);
 
-  const souborRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const zavritRef = useRef<HTMLButtonElement>(null);
   const galerieZaviraRef = useRef(false);
-  const [soubory, setSoubory] = useState<File[]>([]);
-  const [chybaSouboru, setChybaSouboru] = useState<string | null>(null);
-  const [odesilaSe, setOdesilaSe] = useState<boolean>(false);
-  const [formChyba, setFormChyba] = useState<string | null>(null);
+  const [nahravaniOtevreno, setNahravaniOtevreno] = useState<boolean>(false);
+  const nahravaniOtevrenoRef = useRef(nahravaniOtevreno);
+  nahravaniOtevrenoRef.current = nahravaniOtevreno;
+  const nahravani = useNahravaniAlba(expeditionId);
+  const posledniNacteni = useRef(0);
+  const konecRef = useRef<HTMLDivElement>(null);
 
   const [nastavujeId, setNastavujeId] = useState<string | null>(null);
   const [nahledChyba, setNahledChyba] = useState<string | null>(null);
   /** Broken stream (onError) — visible fallback instead of a silent hole. */
   const [rozbite, setRozbite] = useState<Record<string, boolean>>({});
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  useSledovaniNovych(konecRef, fotky.length, nahravani !== null && galerieOtevrena && lightboxId === null);
 
   const nacist = useCallback(async (): Promise<void> => {
     setStav("nacitani");
@@ -145,6 +151,23 @@ export default function ExpeditionPhotos({
     void nacist();
   }, [probehla, nacist]);
 
+  // Nahrané fotky přibudou bez kostry, aby galerie neproblikla.
+  useEffect(
+    () =>
+      poNahraniFotek((albumId) => {
+        if (albumId !== expeditionId) return;
+        posledniNacteni.current += 1;
+        const poradi = posledniNacteni.current;
+        void nactiFotky(expeditionId).then((obnoveno) => {
+          // Načítá se po každé fotce, starší odpověď nesmí přepsat novější.
+          if (!obnoveno.ok || poradi !== posledniNacteni.current) return;
+          setFotky(obnoveno.data.fotky);
+          setStav("hotovo");
+        });
+      }),
+    [expeditionId],
+  );
+
   useEffect(() => {
     if (stav !== "hotovo") return;
     onZmenaNahledu?.(vyberNahledFotky(fotky)?.id ?? null);
@@ -163,7 +186,7 @@ export default function ExpeditionPhotos({
     }
 
     function naStiskKlavesy(udalost: KeyboardEvent): void {
-      if (jeFotkyLightboxOtevreny()) return;
+      if (jeFotkyLightboxOtevreny() || nahravaniOtevrenoRef.current) return;
       if (udalost.key === "Escape") {
         udalost.preventDefault();
         udalost.stopPropagation();
@@ -211,34 +234,8 @@ export default function ExpeditionPhotos({
       ? 0
       : idsFotekKeSmazani(fotky, mazani.vybrane, mazani.potvrzeni).length;
 
-  async function naPridat(): Promise<void> {
-    setChybaSouboru(null);
-    setFormChyba(null);
-    if (soubory.length === 0) {
-      setChybaSouboru("Vyber jednu nebo víc fotek.");
-      return;
-    }
-    setOdesilaSe(true);
-    const nove: ApiFotka[] = [];
-    const selhani: string[] = [];
-    for (const soubor of soubory) {
-      const vysledek = await pridejFotkuSouborem(expeditionId, soubor, "");
-      if (vysledek.ok) {
-        nove.push(vysledek.data.fotka);
-      } else {
-        const detail = vysledek.chybyPoli?.["soubor"] ?? vysledek.chyba;
-        selhani.push(`${soubor.name}: ${detail}`);
-      }
-    }
-    setOdesilaSe(false);
-    if (nove.length > 0) setFotky((prev) => [...prev, ...nove]);
-    if (selhani.length > 0) {
-      setFormChyba(selhani.join(" "));
-      setSoubory(soubory.filter((soubor) => selhani.some((radek) => radek.startsWith(`${soubor.name}:`))));
-    } else {
-      setSoubory([]);
-      if (souborRef.current !== null) souborRef.current.value = "";
-    }
+  function otevriNahravani(): void {
+    setNahravaniOtevreno(true);
   }
 
   function zavriGaleriiSPohybem(): void {
@@ -341,28 +338,39 @@ export default function ExpeditionPhotos({
                       mazani.otevriPotvrzeni("vse");
                     }}
                   />
+                  {prihlasen && !mazani.mazaciRezim ? (
+                    <button
+                      type="button"
+                      onClick={otevriNahravani}
+                      className={`${fotkyTlacitkoPrimarni} h-11`}
+                    >
+                      <Ikona nazev="upload" className="size-4" />
+                      Nahrát
+                    </button>
+                  ) : null}
                   {!mazani.mazaciRezim ? (
                     <button
                       ref={zavritRef}
                       type="button"
                       onClick={zavriGaleriiNatvrdo}
                       aria-label="Zavřít galerii"
-                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-full border border-linka bg-papir px-3 text-sm font-bold text-inkoust`}
+                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgLinka} ${fotkyHoverOpacity} rounded-xl border border-linka bg-povrch text-sm font-semibold text-inkoust sm:px-3.5`}
                     >
-                      Zavřít
+                      <Ikona nazev="x" className="size-[17px] text-mech sm:hidden" />
+                      <span className="hidden sm:inline">Zavřít</span>
                     </button>
                   ) : null}
                 </div>
               </div>
 
               <div className="p-3">
-                {fotky.length === 0 ? (
+                {fotky.length === 0 && nahravani !== null ? null : fotky.length === 0 ? (
                   <p
                     role="status"
                     className="rounded-2xl border border-dashed border-inkoust/25 bg-papir p-4 text-center text-sm text-inkoust/70"
                   >
                     {prihlasen
-                      ? "Zatím tu není žádná fotka — přidej ji níže."
+                      ? "Zatím tu není žádná fotka — přidej ji tlačítkem Nahrát."
                       : "Zatím tu není žádná fotka."}
                   </p>
                 ) : (
@@ -443,6 +451,13 @@ export default function ExpeditionPhotos({
                   />
                 )}
 
+                {/* Panel průběhu leží dole přes galerii, nové fotky zůstanou nad ním. */}
+                <div
+                  ref={konecRef}
+                  aria-hidden="true"
+                  className={`scroll-mb-3 ${nahravani !== null ? "h-[calc(min(52vh,20rem)+4.5rem)] min-[90rem]:h-[min(52vh,20rem)]" : ""}`}
+                />
+
                 {nahledChyba !== null && (
                   <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
                     {nahledChyba}
@@ -453,66 +468,6 @@ export default function ExpeditionPhotos({
                     {mazani.mazatChyba}
                   </p>
                 )}
-
-                {prihlasen && (
-                  <form
-                    className="mt-3 rounded-2xl border border-inkoust/15 bg-papir p-3"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void naPridat();
-                    }}
-                  >
-                    <p className="text-sm font-semibold text-mech">
-                      Přidat fotku
-                    </p>
-                    <label htmlFor={souborPoleId} className="sr-only">
-                      Fotky
-                    </label>
-                    <input
-                      id={souborPoleId}
-                      ref={souborRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      onChange={(e) => {
-                        setSoubory(Array.from(e.currentTarget.files ?? []));
-                      }}
-                      aria-invalid={chybaSouboru !== null}
-                      aria-describedby={chybaSouboru !== null ? `${souborPoleId}-chyba` : undefined}
-                      className="mt-2 block min-h-[44px] w-full touch-manipulation text-base file:mr-3 file:min-h-[44px] file:rounded-xl file:border file:border-linka file:bg-papir file:px-4 file:text-sm file:font-bold"
-                    />
-                    {soubory.length > 0 && (
-                      <p className="mt-1 text-[13px] text-inkoust/70">
-                        {soubory.length === 1
-                          ? soubory[0]?.name
-                          : soubory.length < 5
-                            ? `${soubory.length} fotky`
-                            : `${soubory.length} fotek`}
-                      </p>
-                    )}
-                    {chybaSouboru !== null && (
-                      <p
-                        id={`${souborPoleId}-chyba`}
-                        role="alert"
-                        className="mt-1 text-[13px] font-semibold text-red-800"
-                      >
-                        {chybaSouboru}
-                      </p>
-                    )}
-                    {formChyba !== null && (
-                      <p role="alert" className="mt-2 text-sm font-semibold text-red-800">
-                        {formChyba}
-                      </p>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={odesilaSe}
-                      className={`${fotkyTlacitkoZaklad} ${fotkyHoverBgOkrPlne} mt-3 w-full rounded-full border-2 border-okr bg-okr px-5 text-sm font-bold text-inkoust disabled:opacity-60`}
-                    >
-                      {odesilaSe ? "Nahrávám…" : "Nahrát fotky"}
-                    </button>
-                  </form>
-                )}
               </div>
             </div>
           </div>,
@@ -521,6 +476,10 @@ export default function ExpeditionPhotos({
       : null;
 
   const otevriGalerii = (): void => {
+    if (fotky.length === 0 && prihlasen) {
+      otevriNahravani();
+      return;
+    }
     setNahledChyba(null);
     galerieZaviraRef.current = false;
     setGalerieZavira(false);
@@ -590,6 +549,28 @@ export default function ExpeditionPhotos({
       )}
 
       {galerie}
+      <NahravaniVAlbu albumId={expeditionId} nadDialogem={galerieOtevrena} />
+      <SpodniSheet
+        otevreno={nahravaniOtevreno}
+        titulek="Nahrát fotky"
+        podtitul="Fotky z výpravy"
+        nadDialogem
+        onZavrit={() => {
+          setNahravaniOtevreno(false);
+        }}
+      >
+        <NahravaciFormular
+          id={souborPoleId}
+          onNahrat={(soubory) => {
+            nahrajDoAlba(expeditionId, soubory);
+            setNahravaniOtevreno(false);
+            return null;
+          }}
+          onZrusit={() => {
+            setNahravaniOtevreno(false);
+          }}
+        />
+      </SpodniSheet>
       {lightboxId !== null ? (
         <FotkyLightbox
           trida={denik ? "nahled-ovladani" : undefined}

@@ -72,7 +72,7 @@ describe("Fotky master–detail layout", () => {
     expect(page).not.toContain("data-fotky-nav-zpet");
     expect(page).toContain("<HlavickaZpet zpet=\"/fotky\"");
     expect(page).toContain("fotkyTlacitkoZaklad");
-    expect(page).toContain('to="/fotky"');
+    expect(page).toContain('odkaz: "/fotky"');
     expect(page).toContain("rozbalNahravani");
     expect(page).not.toMatch(/sticky top-0[\s\S]*data-fotky-nahrat-do-alba/);
 

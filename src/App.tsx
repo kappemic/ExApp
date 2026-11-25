@@ -164,7 +164,7 @@ function AppObsah(): JSX.Element {
             <Route
               path="/vypravy/neuzavrene"
               element={
-                <RequireAuth>
+                <RequireAuth jenSpravceVyprav>
                   <OdlozenaStranka>
                     <VypravyNahledPage key="neuzavrene" druh="neuzavrene" />
                   </OdlozenaStranka>
@@ -175,7 +175,7 @@ function AppObsah(): JSX.Element {
             <Route
               path="/vypravy/nova"
               element={
-                <RequireAuth>
+                <RequireAuth jenSpravceVyprav>
                   <OdlozenaStranka>
                     <NovaVypravaPage />
                   </OdlozenaStranka>

@@ -13,7 +13,8 @@ interface FotkyNahravaciPanelProps {
   alba: readonly ApiAlbum[];
   vybraneId: string;
   onVyber: (albumId: string) => void;
-  onNahrano: () => void;
+  /** Nahrávání začalo, stránka má ukázat album s průběhem. */
+  onZacato: (albumId: string) => void;
   onVytvoreno: (album: ApiAlbum | null, nazev: string) => void;
   rozbalitSekci?: SekceNahravani | null;
   onRozbaleno?: () => void;
@@ -31,7 +32,7 @@ export default function FotkyNahravaciPanel({
   alba,
   vybraneId,
   onVyber,
-  onNahrano,
+  onZacato,
   onVytvoreno,
   rozbalitSekci = null,
   onRozbaleno,
@@ -115,7 +116,10 @@ export default function FotkyNahravaciPanel({
           alba={alba}
           vybraneId={vybraneId}
           onVyber={onVyber}
-          onNahrano={onNahrano}
+          onZacato={(albumId) => {
+            setNahravaniOtevreno(false);
+            onZacato(albumId);
+          }}
           onZrusit={() => {
             setNahravaniOtevreno(false);
           }}
