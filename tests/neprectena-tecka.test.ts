@@ -104,7 +104,7 @@ describe("3 místa synchronně — jedna mapa, jeden event", () => {
     expect(zdroj).toContain("neprecteneVypravy");
     const pocetPredani: number =
       zdroj.split("neprectene={neprecteneMapa}").length - 1;
-    expect(pocetPredani).toBe(5);
+    expect(pocetPredani).toBe(6);
     bezAny(zdroj);
   });
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { TlacitkoZpet, ZpetPocitac } from "../HlavickaZpet";
 import Ikona, { type NazevIkony } from "../Ikona";
 import type { RazeniVyprav } from "../../lib/expedice-filtr";
 
@@ -10,10 +12,11 @@ const VOLBY: Array<{ id: Zobrazeni; popisek: string; ikona: NazevIkony }> = [
   { id: "kalendar", popisek: "Kalendář", ikona: "calendar-days" },
 ];
 
-const FILTRY: Array<{ id: FiltrVypravHlavicky; popisek: string }> = [
-  { id: "vse", popisek: "Vše" },
-  { id: "nejblizsi", popisek: "Nejbližší" },
-  { id: "neuzavrene", popisek: "Neuzavřené" },
+/** Každý filtr je odkaz na vlastní stránku s tím druhem výprav. */
+const FILTRY: Array<{ id: FiltrVypravHlavicky; popisek: string; cesta: string }> = [
+  { id: "vse", popisek: "Vše", cesta: "/vypravy" },
+  { id: "nejblizsi", popisek: "Nejbližší", cesta: "/vypravy/nejblizsi" },
+  { id: "neuzavrene", popisek: "Neuzavřené", cesta: "/vypravy/neuzavrene" },
 ];
 
 const FOKUS =
@@ -34,7 +37,8 @@ export default function NahledHlavicka({
   hlaseni,
   novaVyprava,
   filtr,
-  onFiltr,
+  bezNeuzavrenych = false,
+  podstranka,
   razeni,
   onRazeni,
   kalendarOvladani,
@@ -49,7 +53,10 @@ export default function NahledHlavicka({
   /** Shown only to people who may create a trip. */
   novaVyprava?: () => void;
   filtr: FiltrVypravHlavicky;
-  onFiltr: (filtr: FiltrVypravHlavicky) => void;
+  /** Neuzavřené výpravy vidí jen ten, kdo je smí uzavřít. */
+  bezNeuzavrenych?: boolean;
+  /** Stránka jednoho druhu výprav: vlastní nadpis a návrat, bez přepínače a „Nová“. */
+  podstranka?: { nadpis: string; podtitul: string; onZpet: () => void };
   razeni: RazeniVyprav;
   onRazeni: (razeni: RazeniVyprav) => void;
   /** Navigace měsíce a legenda, v kalendáři na počítači vpravo v liště. */
@@ -102,14 +109,22 @@ export default function NahledHlavicka({
 
   return (
     <header className={`flex flex-col ${vKalendari ? "gap-5 min-[90rem]:gap-8 min-[90rem]:pt-1" : "gap-[22px] min-[90rem]:gap-[18px]"}`}>
+      {podstranka !== undefined ? <ZpetPocitac zpet="/vypravy" popisek="Všechny výpravy" className="!mb-0" /> : null}
       <div className="flex min-w-0 items-center justify-between gap-3 min-[90rem]:items-end">
+        <div className="flex min-w-0 items-center gap-3">
+        {podstranka !== undefined ? (
+          <span className="flex min-[90rem]:hidden">
+            <TlacitkoZpet popisek="Zpět na všechny výpravy" onClick={podstranka.onZpet} />
+          </span>
+        ) : null}
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="font-display text-[28px] font-bold tracking-[-0.6px] text-inkoust min-[90rem]:text-[46px] min-[90rem]:leading-[45px] min-[90rem]:tracking-[-1.4px]">
-            Výpravy
+            {podstranka?.nadpis ?? "Výpravy"}
           </h1>
           <p className="text-xs text-ink-3 first-letter:uppercase min-[90rem]:hidden">
-            {vKalendari && mesicKalendare !== undefined ? mesicKalendare : "Školní expediční klub"}
+            {podstranka?.podtitul ?? (vKalendari && mesicKalendare !== undefined ? mesicKalendare : "Školní expediční klub")}
           </p>
+        </div>
         </div>
         <div className={`flex shrink-0 items-center gap-3 ${vKalendari ? "max-[90rem]:hidden min-[90rem]:gap-2.5" : ""}`}>
               <button
@@ -141,6 +156,7 @@ export default function NahledHlavicka({
       {hledaniMobil && !vKalendari ? <div className="min-[90rem]:hidden">{pole}</div> : null}
 
       <div className={`flex min-w-0 flex-col gap-[22px] min-[90rem]:flex-row min-[90rem]:items-center min-[90rem]:justify-between ${vKalendari ? "min-[90rem]:border-b min-[90rem]:border-linka min-[90rem]:pb-4" : ""}`}>
+        {podstranka === undefined ? (
         <div
           role="group"
           aria-label="Zobrazení výprav"
@@ -177,29 +193,29 @@ export default function NahledHlavicka({
             );
           })}
         </div>
+        ) : null}
 
         {!vKalendari ? (
           <div className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
-            <div role="group" aria-label="Filtr výprav" className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
-              {FILTRY.map((volba) => {
+            <nav aria-label="Druh výprav" className="flex min-w-0 items-center gap-2 min-[90rem]:gap-3">
+              {FILTRY.filter((volba) => volba.id !== "neuzavrene" || !bezNeuzavrenych).map((volba) => {
                 const vybrano = filtr === volba.id;
                 return (
-                  <button
+                  <Link
                     key={volba.id}
-                    type="button"
-                    aria-pressed={vybrano}
-                    onClick={() => onFiltr(volba.id)}
-                    className={`nahled-press inline-flex h-8 shrink-0 touch-manipulation items-center rounded-full border px-3 text-[13px] min-[90rem]:h-auto min-[90rem]:px-[13px] min-[90rem]:py-[7px] ${FOKUS} ${
+                    to={volba.cesta}
+                    aria-current={vybrano ? "page" : undefined}
+                    className={`nahled-press relative inline-flex h-8 shrink-0 touch-manipulation items-center rounded-full border px-3 text-[13px] before:absolute before:-inset-x-1 before:-inset-y-1.5 min-[90rem]:h-auto min-[90rem]:px-[13px] min-[90rem]:py-[7px] ${FOKUS} ${
                       vybrano
                         ? "border-transparent bg-smrk font-semibold text-povrch min-[90rem]:bg-inkoust"
                         : "border-linka bg-povrch font-medium text-mech min-[90rem]:bg-transparent"
                     }`}
                   >
                     {volba.popisek}
-                  </button>
+                  </Link>
                 );
               })}
-            </div>
+            </nav>
             <button
               type="button"
               onClick={() => onRazeni(razeni === "datum" ? "nazev" : "datum")}

@@ -151,6 +151,26 @@ function AppObsah(): JSX.Element {
                 </RequireAuth>
               }
             />
+            <Route
+              path="/vypravy/nejblizsi"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <VypravyNahledPage key="nejblizsi" druh="nejblizsi" />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/vypravy/neuzavrene"
+              element={
+                <RequireAuth>
+                  <OdlozenaStranka>
+                    <VypravyNahledPage key="neuzavrene" druh="neuzavrene" />
+                  </OdlozenaStranka>
+                </RequireAuth>
+              }
+            />
             <Route path="/vypravy/nahled" element={<NahledNaVypravy />} />
             <Route
               path="/vypravy/nova"

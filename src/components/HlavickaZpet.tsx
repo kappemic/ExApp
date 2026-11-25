@@ -21,7 +21,7 @@ interface HlavickaZpetProps {
 }
 
 /** Tlačítko zpět podle návrhu ExApp.pen: čtverec 44 px s rohy 12, povrch, vlasová linka, šipka ‹. */
-function TlacitkoZpet({ popisek, onClick }: { popisek: string; onClick: () => void }): JSX.Element {
+export function TlacitkoZpet({ popisek, onClick }: { popisek: string; onClick: () => void }): JSX.Element {
   return (
     <button
       type="button"

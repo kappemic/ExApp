@@ -3,7 +3,16 @@ import type { JSX } from "react";
 const PULS = "block animate-pulse rounded-md bg-linka/70 motion-reduce:animate-none";
 
 /** Kostra seznamu Výprav: hero ve stejných rozměrech a pod ním řádky. */
-export default function KostraVyprav(): JSX.Element {
+export default function KostraVyprav({ jenRadky = false }: { jenRadky?: boolean } = {}): JSX.Element {
+  if (jenRadky) {
+    return (
+      <div role="status" aria-busy="true" aria-label="Načítám výpravy" className="space-y-3">
+        {[0, 1, 2, 3].map((radek) => (
+          <span key={radek} className={`h-16 !rounded-2xl ${PULS}`} />
+        ))}
+      </div>
+    );
+  }
   return (
     <div
       role="status"
@@ -32,7 +41,7 @@ export default function KostraVyprav(): JSX.Element {
       <span className="block min-w-0 space-y-3">
         <span className={`h-5 w-32 ${PULS}`} />
         {[0, 1, 2].map((radek) => (
-          <span key={radek} className={`h-[94px] !rounded-2xl min-[90rem]:h-[108px] ${PULS}`} />
+          <span key={radek} className={`h-16 !rounded-2xl ${PULS}`} />
         ))}
       </span>
     </div>

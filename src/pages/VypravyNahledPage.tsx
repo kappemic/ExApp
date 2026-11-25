@@ -194,11 +194,68 @@ function SeznamRadku({
   );
 }
 
-export default function VypravyNahledPage(): JSX.Element {
+/** Celý seznam jednoho druhu. Nadpisy sekcí jen tam, kde jsou sekce dvě. */
+function StrankaDruhu({
+  druh,
+  probihajici,
+  nadchazejici,
+  neuzavrene,
+  neprectene,
+  onDetail,
+}: {
+  druh: DruhVyprav;
+  probihajici: Expedition[];
+  nadchazejici: Expedition[];
+  neuzavrene: Expedition[];
+  neprectene: ReadonlyMap<string, boolean>;
+  onDetail: (expedice: Expedition) => void;
+}): JSX.Element {
+  const seznam = (polozky: Expedition[]): JSX.Element => (
+    <SeznamRadku polozky={polozky} neprectene={neprectene} onDetail={onDetail} />
+  );
+  if (druh === "neuzavrene") {
+    return neuzavrene.length > 0 ? (
+      seznam(neuzavrene)
+    ) : (
+      <NahledPrazdne nadpis="Všechno je uzavřené" text="Žádná výprava nečeká na uzavření." />
+    );
+  }
+  if (probihajici.length === 0 && nadchazejici.length === 0) {
+    return (
+      <NahledPrazdne
+        nadpis="Žádné nadcházející výpravy"
+        text="Vedoucí sem brzy připíše první záznam."
+      />
+    );
+  }
+  if (probihajici.length === 0) return seznam(nadchazejici);
+  return (
+    <div className="space-y-[22px] min-[90rem]:space-y-10">
+      <VypravaSekce nadpis="Probíhající" nadpisId="druh-probiha" pocet={probihajici.length}>
+        {seznam(probihajici)}
+      </VypravaSekce>
+      {nadchazejici.length > 0 ? (
+        <VypravaSekce nadpis="Nadcházející" nadpisId="druh-nadchazejici" pocet={nadchazejici.length}>
+          {seznam(nadchazejici)}
+        </VypravaSekce>
+      ) : null}
+    </div>
+  );
+}
+
+/** Stránky jednoho druhu výprav: `/vypravy/nejblizsi` a `/vypravy/neuzavrene`. */
+export type DruhVyprav = Exclude<FiltrVyprav, "vse">;
+
+const NADPISY_DRUHU: Record<DruhVyprav, string> = {
+  nejblizsi: "Nejbližší",
+  neuzavrene: "Neuzavřené",
+};
+
+export default function VypravyNahledPage({ druh }: { druh?: DruhVyprav } = {}): JSX.Element {
   const { muzeSpravovatVypravy } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const zobrazeni = parseZobrazeni(searchParams.get("zobrazeni"));
+  const zobrazeni: Zobrazeni = druh === undefined ? parseZobrazeni(searchParams.get("zobrazeni")) : "seznam";
   const surovyParamVyprava: string | null = searchParams.get(VYPRAVA_PARAM);
   const vypravaIdZUrl: string | null = parseVypravaId(surovyParamVyprava);
   const [nacita, setNacita] = useState<boolean>(
@@ -240,10 +297,9 @@ export default function VypravyNahledPage(): JSX.Element {
   const hledaniId: string = useId();
   const denRef = useNabeh<HTMLDivElement>(denDetail ?? "", "x");
   const [dotaz, setDotaz] = useState<string>("");
-  const [filtrVyprav, setFiltrVyprav] = useState<FiltrVyprav>("vse");
   const [okno, setOkno] = useState<KategorieOkna | null>(null);
   const [razeni, setRazeni] = useState<RazeniVyprav>("datum");
-  const obsahRef = useNabeh<HTMLDivElement>(`${zobrazeni}-${filtrVyprav}-${razeni}`);
+  const obsahRef = useNabeh<HTMLDivElement>(`${zobrazeni}-${razeni}`);
   const [debouncedDotaz, setDebouncedDotaz] = useState<string>("");
 
   useEffect(() => {
@@ -425,11 +481,13 @@ export default function VypravyNahledPage(): JSX.Element {
     () => seradVypravy(filtrujExpedicePodleJmena(probehle, debouncedDotaz), razeni),
     [probehle, debouncedDotaz, razeni],
   );
+  const pocetNejblizsich = probihajiciFiltrovane.length + nadchazejiciFiltrovane.length;
   const pocetVysledku: number =
-    neuzavreneFiltrovane.length +
-    probihajiciFiltrovane.length +
-    nadchazejiciFiltrovane.length +
-    probehleFiltrovane.length;
+    druh === "nejblizsi"
+      ? pocetNejblizsich
+      : druh === "neuzavrene"
+        ? neuzavreneFiltrovane.length
+        : neuzavreneFiltrovane.length + pocetNejblizsich + probehleFiltrovane.length;
   const { neprecteneVypravy } = useKonverzacePrehled();
   const neprecteneMapa: ReadonlyMap<string, boolean> = neprecteneVypravy;
   // Hledání v hlavičce zúží i kalendář.
@@ -736,15 +794,13 @@ export default function VypravyNahledPage(): JSX.Element {
 
   const probihajiciBezHero = bezHero(probihajiciFiltrovane);
   const nadchazejiciBezHero = bezHero(nadchazejiciFiltrovane);
-  const ukazProbiha = filtrVyprav !== "neuzavrene" && probihajiciBezHero.length > 0;
-  const ukazNadchazejici =
-    filtrVyprav !== "neuzavrene" &&
-    ((!hledaSe && heroVyprava === undefined) || nadchazejiciBezHero.length > 0);
-  const ukazNeuzavrene = filtrVyprav !== "nejblizsi" && neuzavreneFiltrovane.length > 0;
-  const ukazHistorii = filtrVyprav === "vse" && (!hledaSe || probehleFiltrovane.length > 0);
+  const ukazProbiha = probihajiciBezHero.length > 0;
+  const ukazNadchazejici = (!hledaSe && heroVyprava === undefined) || nadchazejiciBezHero.length > 0;
+  const ukazNeuzavrene = neuzavreneFiltrovane.length > 0;
+  const ukazHistorii = !hledaSe || probehleFiltrovane.length > 0;
   const ukazAgendu = !hledaSe;
-  // Filtr i hledání ukazují celý výsledek, přehled jen začátek každé kategorie.
-  const limitKategorie = filtrVyprav === "vse" && !hledaSe ? VYPRAV_V_KATEGORII : undefined;
+  // Hledání ukazuje celý výsledek, přehled jen začátek každé kategorie.
+  const limitKategorie = !hledaSe ? VYPRAV_V_KATEGORII : undefined;
   const zobrazitVse = (
     kategorie: KategorieOkna,
     pocet: number,
@@ -785,8 +841,17 @@ export default function VypravyNahledPage(): JSX.Element {
               dotaz={dotaz}
               onDotaz={setDotaz}
               hlaseni={hlaseni}
-              filtr={filtrVyprav}
-              onFiltr={setFiltrVyprav}
+              filtr={druh ?? "vse"}
+              bezNeuzavrenych={!muzeSpravovatVypravy}
+              podstranka={
+                druh === undefined
+                  ? undefined
+                  : {
+                      nadpis: NADPISY_DRUHU[druh],
+                      podtitul: `${pocetVysledku} ${ceskyPocet(pocetVysledku, "výprava", "výpravy", "výprav")}`,
+                      onZpet: () => navigate("/vypravy"),
+                    }
+              }
               razeni={razeni}
               onRazeni={setRazeni}
               mesicKalendare={nazevMesice(kalendarRok, kalendarMesic)}
@@ -803,7 +868,7 @@ export default function VypravyNahledPage(): JSX.Element {
                 />
               }
               novaVyprava={
-                muzeSpravovatVypravy
+                muzeSpravovatVypravy && druh === undefined
                   ? () => navigate("/vypravy/nova")
                   : undefined
               }
@@ -812,12 +877,21 @@ export default function VypravyNahledPage(): JSX.Element {
               {zobrazeni === "seznam" ? (
                 <>
                 {nacita ? (
-                  <KostraVyprav />
+                  <KostraVyprav jenRadky={druh !== undefined} />
                 ) : hledaSe && pocetVysledku === 0 ? (
                   <NahledPrazdne
                     nadpis="Nic jsme nenašli"
                     text={`Pro „${orezanyDotaz}“ tu není žádná výprava.`}
                     akce={{ popisek: "Zrušit hledání", onClick: zrusHledani }}
+                  />
+                ) : druh !== undefined ? (
+                  <StrankaDruhu
+                    druh={druh}
+                    probihajici={probihajiciFiltrovane}
+                    nadchazejici={nadchazejiciFiltrovane}
+                    neuzavrene={neuzavreneFiltrovane}
+                    neprectene={neprecteneMapa}
+                    onDetail={otevriVypravu}
                   />
                 ) : (
                   <div className="space-y-[22px] min-[90rem]:space-y-10">
@@ -851,7 +925,7 @@ export default function VypravyNahledPage(): JSX.Element {
                             onKalendar={() => zmenZobrazeni("kalendar")}
                             datumVypravy={(id) => expedicePodleId.get(id)?.datum ?? dnesYmd}
                           />
-                          {ukazNeuzavrene && filtrVyprav !== "neuzavrene" ? (
+                          {ukazNeuzavrene ? (
                             <RailNeuzavrene
                               polozky={neuzavreneFiltrovane}
                               onDetail={otevriVypravu}
@@ -903,7 +977,7 @@ export default function VypravyNahledPage(): JSX.Element {
                           </VypravaSekce>
                         ) : null}
                         {ukazNeuzavrene ? (
-                          <div className={ukazAgendu && filtrVyprav !== "neuzavrene" ? "lg:hidden" : undefined}>
+                          <div className={ukazAgendu ? "lg:hidden" : undefined}>
                           <VypravaSekce
                             nadpis="Čeká na uzavření"
                             nadpisId="nahled-neuzavrene"
