@@ -12,8 +12,8 @@ const FOKUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk";
 
 /**
- * Nejbližší výprava podle ExApp.pen. Telefon: fotka 148 px nahoře, pod ní text
- * a olivové CTA přes celou šířku. Počítač (1440+): fotka 432 px vlevo, vpravo
+ * Nejbližší výprava podle ExApp.pen. Telefon: fotka 16 : 9 nahoře, pod ní text
+ * a olivové CTA přes celou šířku. Počítač (1440+): fotka 4 : 3 vlevo, vpravo
  * text nahoře, obsazenost a terakotové CTA + „Kdo jede“ dole.
  */
 export default function VypravaHero({
@@ -40,9 +40,9 @@ export default function VypravaHero({
   return (
     <section
       aria-labelledby={nadpisId}
-      className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-linka bg-povrch shadow-denik sm:grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] min-[90rem]:h-[340px] min-[90rem]:grid-cols-[432px_minmax(0,1fr)] min-[90rem]:border-transparent"
+      className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-linka bg-povrch shadow-denik sm:grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] min-[90rem]:min-h-[340px] min-[90rem]:grid-cols-[432px_minmax(0,1fr)] min-[90rem]:border-transparent"
     >
-      <div className="relative h-[148px] w-full shrink-0 overflow-hidden sm:h-full sm:min-h-[250px]">
+      <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden sm:aspect-auto sm:h-full sm:min-h-[250px]">
         <ZastupnySnimek id={expedice.id} datum={expedice.datum} povolit />
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 border border-black/10 min-[90rem]:border-y-0 min-[90rem]:border-l-0" />
         <p className="absolute left-3 top-3 flex h-6 items-center rounded-lg bg-akcent-100 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.4px] text-akcent min-[90rem]:hidden">

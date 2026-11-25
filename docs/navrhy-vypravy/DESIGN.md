@@ -51,7 +51,7 @@ Snímek nadcházející výpravy je fotka z jiné, už proběhlé výpravy. Nesm
 
 ### Řádek
 
-Bílý, malý poloměr, vlevo snímek, vpravo název, sraz a kapacita. Stejná fotka jako u náhledu té výpravy. Neuzavřená po termínu má za kapacitou „neuzavřeno“.
+Vlevo snímek 4 : 3, vpravo název, sraz a kapacita. V širokém řádku snímek přiléhá ke kraji karty, rozhoduje šířka řádku (`@container`), ne okna. Stejná fotka jako u náhledu té výpravy, po termínu krajina. Neuzavřená po termínu má za kapacitou „neuzavřeno“.
 
 ### Brzy
 

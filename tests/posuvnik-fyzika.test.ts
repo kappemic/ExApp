@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bezGumy, cilPrichyceni, guma, krokPruziny, sGumou } from "../src/lib/posuvnik-fyzika";
+import { bezGumy, cilPrichyceni, guma, krokPruziny, sGumou, sousedniZarazka } from "../src/lib/posuvnik-fyzika";
 
 describe("guma za krajem", () => {
   it("uvnitř mezí drží polohu 1:1 a za krajem klade rostoucí odpor", () => {
@@ -70,5 +70,22 @@ describe("krokPruziny", () => {
     const stav = krokPruziny(0, 3, 310, 5000);
     expect(Number.isFinite(stav.poloha)).toBe(true);
     expect(Math.abs(stav.poloha)).toBeLessThan(1000);
+  });
+});
+
+describe("sousední zarážka pro šipky", () => {
+  const zarazky = [0, 310, 620, 700];
+
+  it("jde o jednu kartu, i z mezipolohy nebo neceločíselné zarážky", () => {
+    expect(sousedniZarazka(0, 1, zarazky)).toBe(310);
+    expect(sousedniZarazka(309.6, 1, zarazky)).toBe(620);
+    expect(sousedniZarazka(310.4, -1, zarazky)).toBe(0);
+    expect(sousedniZarazka(450, -1, zarazky)).toBe(310);
+  });
+
+  it("na kraji zůstane a prázdný posuvník nespadne", () => {
+    expect(sousedniZarazka(700, 1, zarazky)).toBe(700);
+    expect(sousedniZarazka(0, -1, zarazky)).toBe(0);
+    expect(sousedniZarazka(0, 1, [])).toBe(0);
   });
 });

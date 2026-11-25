@@ -130,6 +130,8 @@ Všech 84 rámců vyexportováno z `ExApp.pen` a porovnáno se snímky aplikace 
 
 **Tablet** (768–1439 px, návrh ho nemá): obsah má jednotnou šířku 46rem, od 1024 px mají Výpravy, Kalendář, Žebříčky a Statistiky pravý sloupec. Spodní lišta je pilulka uprostřed, modály jsou okna uprostřed, hero výpravy je vodorovně, alba a fotky po třech. Panel „Složky“ ve Fotkách (byl jen na tabletu) je pryč.
 
+**Poměr fotek** (přání klubu, návrh má nižší pruhy): náhledy v řádcích jsou 4 : 3, karty a obaly alb 3 : 2, velké fotky na telefonu 16 : 9 (kompromis mezi velikostí a ořezem), na počítači v detailu výpravy je celá fotka uprostřed rozostřeného pruhu. Řádek výpravy začíná fotkou 4 : 3 (návrh ji nemá). Album drží původní poměr stran i na počítači: řady na celou šířku, mezery 4 px, zaoblený jen vnější obrys. Do `ExApp.pen` zatím nepřeneseno. Proběhlé výpravy se na telefonu posouvají nativně a mají šipky na bocích.
+
 **Rozhodnuto uživatelem:** registrace zůstává krátká, přepínače Discord a „Vzkaz pro vedoucího“ zůstávají vidět, i když se neukládají, týdenní kalendář a mapy v Žebříčcích a v detailu výpravy se nevracejí, okraj polí zůstává `border-pole`.
 
 ## E. Doporučené pořadí

@@ -1267,7 +1267,7 @@ export default function ExpeditionModal({
         >
           {stranka && rezim === "prehled" ? <ZpetPocitac zpet="/vypravy" popisek="Zpět" /> : null}
           {stranka && rezim === "prehled" ? (
-            <div className="relative mb-5 h-[180px] overflow-hidden rounded-2xl sm:h-[260px] min-[90rem]:hidden">
+            <div className="relative mb-5 aspect-[16/9] overflow-hidden rounded-2xl sm:aspect-[2/1] min-[90rem]:hidden">
               {fotkaVypravy}
               <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl border border-black/10" />
             </div>
@@ -1368,8 +1368,14 @@ export default function ExpeditionModal({
           ) : null}
           </div>
           {stranka && rezim === "prehled" ? (
-            <div className="relative mt-8 hidden h-[300px] overflow-hidden rounded-2xl min-[90rem]:block">
-              {fotkaVypravy}
+            <div className="relative mt-8 hidden h-[360px] overflow-hidden rounded-2xl bg-mlha min-[90rem]:block">
+              {/* Široký pruh by z fotky 4 : 3 ukázal čtvrtinu. Fotka je proto celá uprostřed, kraje vyplní její rozostřená kopie. */}
+              <div aria-hidden="true" className="absolute inset-0 scale-110 opacity-70 blur-2xl">
+                {fotkaVypravy}
+              </div>
+              <div className="absolute inset-y-0 left-1/2 aspect-[4/3] -translate-x-1/2 overflow-hidden">
+                {fotkaVypravy}
+              </div>
               <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl border border-black/[0.08]" />
             </div>
           ) : null}

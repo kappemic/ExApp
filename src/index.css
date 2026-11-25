@@ -441,35 +441,47 @@ input[type="file"]:active::-webkit-file-upload-button {
   }
 }
 
-/* Posuvník karet: karty za krajem zaplouvají do ztracena. Šířky přechodů
-   nastavuje usePosuvnikKaret podle toho, kolik je na které straně schováno. */
+/* Posuvník karet: karty za krajem zaplouvají do ztracena. Přechody leží nad
+   kartami jako pevné pruhy. Maska na rolovaném obsahu se při posunu
+   překreslovala a na telefonu sekala. */
 .posuvnik-karet {
-  --vlevo: 0px;
-  --vpravo: 0px;
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent,
-    rgb(0 0 0 / 0.35) calc(var(--vlevo) * 0.45),
-    #000 var(--vlevo),
-    #000 calc(100% - var(--vpravo)),
-    rgb(0 0 0 / 0.35) calc(100% - var(--vpravo) * 0.45),
-    transparent
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    rgb(0 0 0 / 0.35) calc(var(--vlevo) * 0.45),
-    #000 var(--vlevo),
-    #000 calc(100% - var(--vpravo)),
-    rgb(0 0 0 / 0.35) calc(100% - var(--vpravo) * 0.45),
-    transparent
-  );
+  position: relative;
+  isolation: isolate;
+}
+
+.posuvnik-karet::before,
+.posuvnik-karet::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.posuvnik-karet::before {
+  left: 0;
+  width: 44px;
+  background: linear-gradient(to right, var(--color-papir), transparent);
+}
+
+.posuvnik-karet::after {
+  right: 0;
+  width: 44px;
+  background: linear-gradient(to left, var(--color-papir), transparent);
+}
+
+.posuvnik-karet[data-vlevo]::before,
+.posuvnik-karet[data-vpravo]::after {
+  opacity: 1;
 }
 
 @media (width >= 90rem) {
-  .posuvnik-karet {
-    -webkit-mask-image: none;
-    mask-image: none;
+  .posuvnik-karet::before,
+  .posuvnik-karet::after {
+    content: none;
   }
 }
 

@@ -51,6 +51,13 @@ export function cilPrichyceni(poloha: number, rychlost: number, zarazky: readonl
   return Math.min(cil, predchozi);
 }
 
+/** Nejbližší další zarážka ve směru šipky, na kraji zůstává krajní. */
+export function sousedniZarazka(poloha: number, smer: -1 | 1, zarazky: readonly number[]): number {
+  const TOLERANCE = 4;
+  const podleSmeru = [...zarazky].sort((a, b) => (a - b) * smer);
+  return podleSmeru.find((z) => (z - poloha) * smer > TOLERANCE) ?? podleSmeru[podleSmeru.length - 1] ?? 0;
+}
+
 /** Jeden krok pružiny k cíli. Drží rychlost z prstu, proto pohyb po puštění navazuje. */
 export function krokPruziny(
   poloha: number,

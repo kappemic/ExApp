@@ -561,7 +561,7 @@ export default function ExpeditionPhotos({
               type="button"
               onClick={otevriGalerii}
               aria-label="Otevřít album výpravy"
-              className="bez-prejeti relative h-28 overflow-hidden rounded-xl bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
+              className="bez-prejeti relative aspect-[3/2] overflow-hidden rounded-xl bg-mlha focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smrk"
             >
               <PostupnaFotka
                 src={urlSouboruFotky(expeditionId, fotka.id)}

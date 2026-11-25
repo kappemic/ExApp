@@ -6,7 +6,7 @@ import { formatRozsahData, jeBezOmezeni } from "../../lib/expedition-utils";
 import KrajinaVypravy from "./KrajinaVypravy";
 
 /**
- * Proběhlá výprava (C2): fotka z alba v zaobleném výřezu, pod ní text.
+ * Proběhlá výprava (C2): fotka z alba v zaobleném výřezu 3 : 2, pod ní text.
  * Bez fotky ukáže krajinu výpravy.
  */
 export default function VypravaKarta({
@@ -30,7 +30,7 @@ export default function VypravaKarta({
       aria-label={`Detail výpravy ${expedice.nazev}`}
       className="nahled-press nahled-karta group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-linka bg-povrch text-left text-inkoust focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-smrk min-[90rem]:gap-3 min-[90rem]:overflow-visible min-[90rem]:rounded-none min-[90rem]:border-0 min-[90rem]:bg-transparent"
     >
-      <span className="nahled-karta-foto relative block h-[110px] w-full shrink-0 overflow-hidden bg-mlha min-[90rem]:h-[150px] min-[90rem]:rounded-[14px]">
+      <span className="nahled-karta-foto relative block aspect-[3/2] w-full shrink-0 overflow-hidden bg-mlha min-[90rem]:rounded-[14px]">
         {fotkaId !== null ? (
           <VypravaNahled expeditionId={expedice.id} fotkaId={fotkaId} probehla />
         ) : (

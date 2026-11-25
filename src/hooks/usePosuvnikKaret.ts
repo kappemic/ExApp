@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { snizenyPohyb } from "../lib/pohyb";
-import { bezGumy, cilPrichyceni, krokPruziny, sGumou } from "../lib/posuvnik-fyzika";
+import { bezGumy, cilPrichyceni, krokPruziny, sGumou, sousedniZarazka } from "../lib/posuvnik-fyzika";
 
 /** Od kolika px jde o tah, ne o klepnutí. */
 const PRAH_TAHU_PX = 6;
@@ -8,6 +8,8 @@ const PRAH_TAHU_PX = 6;
 const OKNO_RYCHLOSTI_MS = 90;
 /** Rychlejší švih pružinu jen zbytečně rozkmitá. */
 const MAX_RYCHLOST = 3;
+/** Po jaké pauze je plynulý posun ze šipky dokončený. */
+const KLID_POSUVU_MS = 150;
 
 interface Tah {
   id: number;
@@ -18,44 +20,81 @@ interface Tah {
   vzorky: { x: number; cas: number }[];
 }
 
+function maximum(el: HTMLElement): number {
+  return Math.max(0, el.scrollWidth - el.clientWidth);
+}
+
+/** Zarážky bere z rozložení, takže sedí na `scroll-snap` ve stylech. */
+function zarazky(el: HTMLElement): number[] {
+  const max = maximum(el);
+  const odsazeni = Number.parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0;
+  const polohy = Array.from(el.children)
+    .filter((dite): dite is HTMLElement => dite instanceof HTMLElement && dite.offsetWidth > 0)
+    .map((dite) => Math.round(Math.min(max, Math.max(0, dite.offsetLeft - odsazeni))));
+  return [...new Set(polohy)];
+}
+
 /**
- * Vodorovný posuvník karet pro prst i myš: karta jde 1:1 s prstem, za krajem
- * se pruží a po puštění se přichytí. Svislý posun stránky zůstává prohlížeči
- * (`touch-action: pan-y` na posuvníku), kolečko a klávesy taky.
+ * Vodorovný posuvník karet, `posuvnik` je rolovací seznam a jeho děti karty
+ * (děti nulové šířky se přeskakují, jsou to šipky `data-sipka`).
+ * Prst, pero, kolečko i klávesy posouvá prohlížeč sám (nativní posuv se
+ * `scroll-snap`): jede mimo hlavní vlákno a nezasekne se o šikmý tah. Skript
+ * řeší jen tažení myší a šipky.
  *
- * `obal` ořezává a nese proměnné `--vlevo` a `--vpravo` (šířka přechodu do
- * ztracena), `posuvnik` je rolovací seznam, jehož děti jsou karty.
+ * Vrací, jestli je vlevo a vpravo kam posouvat, a posun o kartu pro šipky.
  */
 export function usePosuvnikKaret(
-  obal: RefObject<HTMLElement | null>,
   posuvnik: RefObject<HTMLElement | null>,
-  prechod: { vlevo: number; vpravo: number },
   klic: string,
-): void {
+): { vlevo: boolean; vpravo: boolean; posun: (smer: -1 | 1) => void } {
   const pohyb = useRef({ poloha: 0, rychlost: 0, snimek: 0 });
-  const { vlevo, vpravo } = prechod;
-
-  const prekresliKraje = useCallback((): void => {
-    const el = posuvnik.current;
-    const ramec = obal.current;
-    if (el === null || ramec === null) return;
-    const max = Math.max(0, el.scrollWidth - el.clientWidth);
-    ramec.style.setProperty("--vlevo", `${Math.min(vlevo, Math.max(0, el.scrollLeft))}px`);
-    ramec.style.setProperty("--vpravo", `${Math.min(vpravo, Math.max(0, max - el.scrollLeft))}px`);
-  }, [obal, posuvnik, vlevo, vpravo]);
+  /** Kam jede posun ze šipky. Rychlé klepnutí navazuje na něj, ne na mezipolohu. */
+  const cilSipky = useRef<number | null>(null);
+  const [kraje, setKraje] = useState({ vlevo: false, vpravo: false });
 
   useLayoutEffect(() => {
     const el = posuvnik.current;
     if (el === null) return;
-    prekresliKraje();
-    const mereni = new ResizeObserver(prekresliKraje);
-    mereni.observe(el);
-    el.addEventListener("scroll", prekresliKraje, { passive: true });
-    return () => {
-      mereni.disconnect();
-      el.removeEventListener("scroll", prekresliKraje);
+    let casovac = 0;
+    const zmer = (): void => {
+      const vlevo = el.scrollLeft > 2;
+      const vpravo = el.scrollLeft < maximum(el) - 2;
+      setKraje((stare) => (stare.vlevo === vlevo && stare.vpravo === vpravo ? stare : { vlevo, vpravo }));
     };
-  }, [posuvnik, prekresliKraje, klic]);
+    const naPosuv = (): void => {
+      zmer();
+      window.clearTimeout(casovac);
+      casovac = window.setTimeout(() => {
+        cilSipky.current = null;
+      }, KLID_POSUVU_MS);
+    };
+    zmer();
+    const mereni = new ResizeObserver(zmer);
+    mereni.observe(el);
+    el.addEventListener("scroll", naPosuv, { passive: true });
+    return () => {
+      window.clearTimeout(casovac);
+      mereni.disconnect();
+      el.removeEventListener("scroll", naPosuv);
+    };
+  }, [posuvnik, klic]);
+
+  const posun = useCallback(
+    (smer: -1 | 1): void => {
+      const el = posuvnik.current;
+      if (el === null) return;
+      // Šipka přebírá posuv i rozjeté pružině po tažení myší.
+      cancelAnimationFrame(pohyb.current.snimek);
+      pohyb.current.snimek = 0;
+      el.style.transform = "";
+      el.style.scrollSnapType = "";
+      const cil = sousedniZarazka(cilSipky.current ?? el.scrollLeft, smer, zarazky(el));
+      // Bez pohybu nepřijde `scroll`, který by cíl zase smazal.
+      cilSipky.current = Math.abs(cil - el.scrollLeft) < 1 ? null : cil;
+      el.scrollTo({ left: cil, behavior: snizenyPohyb() ? "auto" : "smooth" });
+    },
+    [posuvnik],
+  );
 
   useEffect(() => {
     const el = posuvnik.current;
@@ -64,25 +103,13 @@ export function usePosuvnikKaret(
     let tah: Tah | null = null;
     let spolknoutKlik = false;
 
-    const maximum = (): number => Math.max(0, el.scrollWidth - el.clientWidth);
-
     function nastav(poloha: number): void {
       stav.poloha = poloha;
-      const max = maximum();
+      const max = maximum(el!);
       const vMezich = Math.min(max, Math.max(0, poloha));
       el!.scrollLeft = vMezich;
       const vysun = vMezich - poloha;
       el!.style.transform = Math.abs(vysun) < 0.1 ? "" : `translate3d(${vysun}px, 0, 0)`;
-    }
-
-    /** Zarážky bere z rozložení, takže sedí na `scroll-snap` ve stylech. */
-    function zarazky(): number[] {
-      const max = maximum();
-      const odsazeni = Number.parseFloat(getComputedStyle(el!).scrollPaddingLeft) || 0;
-      const polohy = Array.from(el!.children)
-        .filter((dite): dite is HTMLElement => dite instanceof HTMLElement && dite.offsetWidth > 0)
-        .map((dite) => Math.round(Math.min(max, Math.max(0, dite.offsetLeft - odsazeni))));
-      return [...new Set(polohy)];
     }
 
     function zastav(): void {
@@ -95,7 +122,6 @@ export function usePosuvnikKaret(
       stav.rychlost = 0;
       el!.style.transform = "";
       el!.style.scrollSnapType = "";
-      prekresliKraje();
     }
 
     function dojed(cil: number): void {
@@ -128,7 +154,14 @@ export function usePosuvnikKaret(
     }
 
     function naDolu(udalost: PointerEvent): void {
-      if (!udalost.isPrimary || udalost.button !== 0 || maximum() <= 0) return;
+      // Klepnutí na šipku navazuje na rozjetý posun, není to nový tah.
+      if (udalost.target instanceof Element && udalost.target.closest("[data-sipka]") !== null) return;
+      cilSipky.current = null;
+      if (udalost.pointerType !== "mouse") {
+        prevzit();
+        return;
+      }
+      if (!udalost.isPrimary || udalost.button !== 0 || maximum(el!) <= 0) return;
       spolknoutKlik = false;
       const bezelo = stav.snimek !== 0;
       zastav();
@@ -137,7 +170,7 @@ export function usePosuvnikKaret(
         id: udalost.pointerId,
         x: udalost.clientX,
         y: udalost.clientY,
-        start: bezGumy(stav.poloha, maximum(), el!.clientWidth),
+        start: bezGumy(stav.poloha, maximum(el!), el!.clientWidth),
         tahne: false,
         vzorky: [{ x: udalost.clientX, cas: performance.now() }],
       };
@@ -150,7 +183,7 @@ export function usePosuvnikKaret(
     function naPohyb(udalost: PointerEvent): void {
       if (tah === null || udalost.pointerId !== tah.id) return;
       // Myš puštěná mimo posuvník před začátkem tahu.
-      if (udalost.pointerType === "mouse" && udalost.buttons === 0) {
+      if (udalost.buttons === 0) {
         tah = null;
         return;
       }
@@ -168,7 +201,7 @@ export function usePosuvnikKaret(
       tah.vzorky.push({ x: udalost.clientX, cas: performance.now() });
       if (tah.vzorky.length > 24) tah.vzorky.shift();
       const prst = tah.start - dx;
-      const max = maximum();
+      const max = maximum(el!);
       nastav(snizenyPohyb() ? Math.min(max, Math.max(0, prst)) : sGumou(prst, max, el!.clientWidth));
     }
 
@@ -179,13 +212,13 @@ export function usePosuvnikKaret(
       delete el!.dataset.tazeno;
       if (!t.tahne && !spolknoutKlik) return;
       if (t.tahne) spolknoutKlik = true;
-      // Po tahu prstem klik nepřijde, pozdější klik z klávesnice nesmí zmizet.
+      // Když po tahu klik nepřijde, pozdější klik z klávesnice nesmí zmizet.
       window.setTimeout(() => {
         spolknoutKlik = false;
       }, 80);
       stav.rychlost = t.tahne && udalost.type === "pointerup" ? rychlostTahu(t) : 0;
       el!.style.scrollSnapType = "none";
-      dojed(cilPrichyceni(stav.poloha, stav.rychlost, zarazky()));
+      dojed(cilPrichyceni(stav.poloha, stav.rychlost, zarazky(el!)));
     }
 
     function naKlik(udalost: MouseEvent): void {
@@ -195,7 +228,7 @@ export function usePosuvnikKaret(
       udalost.stopPropagation();
     }
 
-    /** Kolečko nebo klávesa přebírá posuv, rozjetá pružina by se s ním přetahovala. */
+    /** Prst, kolečko nebo klávesa přebírá posuv, rozjetá pružina by se s ním přetahovala. */
     function prevzit(): void {
       if (stav.snimek !== 0 && tah === null) klid();
     }
@@ -222,5 +255,7 @@ export function usePosuvnikKaret(
       el.removeEventListener("keydown", prevzit);
       el.removeEventListener("dragstart", bezTazeniObrazku);
     };
-  }, [posuvnik, prekresliKraje]);
+  }, [posuvnik]);
+
+  return { ...kraje, posun };
 }
